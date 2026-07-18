@@ -1,0 +1,19 @@
+{
+  "@microsoft/generator-sharepoint": {
+    "plusBeta": false,
+    "isCreatingSolution": true,
+    "nodeVersion": "22.22.3",
+    "version": "1.23.2",
+    "libraryName": "better-list-spfx",
+    "libraryId": "f1622b36-0843-4eb0-aca9-df6ac57a15c4",
+    "environment": "spo",
+    "packageManager": "npm",
+    "solutionName": "Better List",
+    "solutionShortDescription": "Better List",
+    "skipFeatureDeployment": false,
+    "isDomainIsolated": false,
+    "componentType": "webpart",
+    "template": "react",
+    "useGulp": false
+  }
+}

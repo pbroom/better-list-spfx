@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Build output
+lib/
+lib-commonjs/
+temp/
+dist/
+build/
+jest-output/
+release/assets/
+release/manifests/
+release/analysis-logs/
+release/component-dependency-audit/
+sharepoint/solution/*.sppkg
+sharepoint/solution/debug/
+*.tsbuildinfo
+.heft/
+
+# Local config
+.env
+.env.local
+.DS_Store

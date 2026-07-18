@@ -1,0 +1,18 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx-build/config.2.0.schema.json",
+  "version": "2.0",
+  "bundles": {
+    "better-list": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/betterList/BetterList.js",
+          "manifest": "./src/webparts/betterList/BetterList.manifest.json"
+        }
+      ]
+    }
+  },
+  "externals": {},
+  "localizedResources": {
+    "WebPartStrings": "lib/webparts/betterList/loc/{locale}.js"
+  }
+}

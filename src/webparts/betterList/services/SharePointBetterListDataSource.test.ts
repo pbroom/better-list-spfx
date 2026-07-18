@@ -1,0 +1,109 @@
+import type { SPHttpClient, SPHttpClientResponse } from '@microsoft/sp-http';
+
+jest.mock('@microsoft/sp-http', () => ({
+  SPHttpClient: { configurations: { v1: {} } }
+}));
+
+import { SharePointBetterListDataSource, escapeODataString } from './SharePointBetterListDataSource';
+
+function response(payload: unknown, ok: boolean = true, status: number = 200): SPHttpClientResponse {
+  return {
+    ok,
+    status,
+    statusText: ok ? 'OK' : 'Bad Request',
+    text: () => Promise.resolve(JSON.stringify(payload))
+  } as unknown as SPHttpClientResponse;
+}
+
+describe('SharePointBetterListDataSource', () => {
+  it('escapes list titles and follows absolute or relative OData pagination links', async () => {
+    const urls: string[] = [];
+    const client: SPHttpClient = {
+      get: (url: string) => {
+        urls.push(url);
+        return Promise.resolve(urls.length === 1
+          ? response({ value: [{ Id: 1, Title: 'One' }], '@odata.nextLink': '/sites/example/_api/next-page' })
+          : response({ value: [{ Id: 2, Title: 'Two' }] }));
+      }
+    } as unknown as SPHttpClient;
+    const source: SharePointBetterListDataSource = new SharePointBetterListDataSource(
+      client,
+      'https://contoso.sharepoint.com/sites/example/'
+    );
+
+    const result = await source.loadItems({
+      list: { title: "Owner's Services" },
+      mappings: { title: { internalName: 'Title', kind: 'text' } }
+    });
+
+    expect(result.items.map((item) => item.title)).toEqual(['One', 'Two']);
+    expect(urls[0]).toContain("getbytitle('Owner''s Services')");
+    expect(urls[1]).toBe('https://contoso.sharepoint.com/sites/example/_api/next-page');
+  });
+
+  it('surfaces the SharePoint OData error message', async () => {
+    const client: SPHttpClient = {
+      get: () => Promise.resolve(response({ error: { message: { value: 'The list does not exist.' } } }, false, 404))
+    } as unknown as SPHttpClient;
+    const source: SharePointBetterListDataSource = new SharePointBetterListDataSource(
+      client,
+      'https://contoso.sharepoint.com/sites/example'
+    );
+
+    await expect(source.discoverLists()).rejects.toThrow('The list does not exist.');
+  });
+
+  it('selects and expands a configured column from the lookup target row', async () => {
+    const urls: string[] = [];
+    const client: SPHttpClient = {
+      get: (url: string) => {
+        urls.push(url);
+        return Promise.resolve(
+          response({
+            value: [
+              {
+                Id: 1,
+                Title: 'Acquisition Request',
+                Category: {
+                  Id: 7,
+                  Title: 'General',
+                  Description: 'General services and resources'
+                }
+              }
+            ]
+          })
+        );
+      }
+    } as unknown as SPHttpClient;
+    const source = new SharePointBetterListDataSource(
+      client,
+      'https://contoso.sharepoint.com/sites/example'
+    );
+
+    const result = await source.loadItems({
+      list: { id: 'c3fa8d8c-2270-4dc4-9f7e-1f83fef461fd' },
+      mappings: {
+        title: { internalName: 'Title', kind: 'text' },
+        metadata: [
+          {
+            key: 'Category.Description',
+            label: 'Category → Description',
+            mapping: {
+              internalName: 'Category',
+              kind: 'lookup',
+              lookupValueField: 'Description'
+            }
+          }
+        ]
+      }
+    });
+
+    expect(urls[0]).toContain('$select=Id,Title,Category/Id,Category/Title,Category/Description');
+    expect(urls[0]).toContain('$expand=Category');
+    expect(result.items[0].metadata[0].value).toBe('General services and resources');
+  });
+
+  it('doubles apostrophes for OData string literals', () => {
+    expect(escapeODataString("Director's Services")).toBe("Director''s Services");
+  });
+});

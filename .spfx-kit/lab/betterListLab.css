@@ -1,0 +1,31 @@
+.better-list-lab {
+  min-width: 0;
+}
+
+.better-list-lab[data-theme='dark'],
+.better-list-lab[data-theme='custom'] {
+  --better-list-host-heading: var(--better-list-lab-foreground);
+  --better-list-host-surface: var(--better-list-lab-surface);
+  --better-list-host-text: var(--better-list-lab-foreground);
+  --better-list-host-muted: var(--better-list-lab-muted);
+  --better-list-host-border: var(--better-list-lab-border);
+  --better-list-host-link: var(--better-list-lab-foreground);
+}
+
+.better-list-lab[data-breakpoint='mobile'] .better-list {
+  padding: 22px 16px 30px;
+}
+
+.better-list-lab[data-breakpoint='mobile'] .better-list__toolbar {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.better-list-lab[data-breakpoint='mobile'] .better-list__search {
+  width: 100%;
+}
+
+.better-list-lab[data-breakpoint='mobile'] .better-list__items {
+  grid-template-columns: minmax(0, 1fr) !important;
+  row-gap: 0;
+}
