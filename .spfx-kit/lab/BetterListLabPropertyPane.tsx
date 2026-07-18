@@ -1,17 +1,6 @@
 import * as React from 'react';
-import {
-  Button,
-  Combobox,
-  Option,
-  Switch,
-  makeStyles,
-  tokens
-} from '@fluentui/react-components';
-import {
-  ChevronDownRegular,
-  ChevronRightRegular,
-  CodeRegular
-} from '@fluentui/react-icons';
+import { Button, Combobox, Option, Switch, makeStyles, tokens } from '@fluentui/react-components';
+import { ChevronDownRegular, ChevronRightRegular, CodeRegular } from '@fluentui/react-icons';
 import type {
   LabCssEditorTarget,
   LabPropertyBag,
@@ -21,17 +10,13 @@ import type {
 
 import {
   parseItemPropertyFields,
+  betterListTemplateMaxBytes,
+  defaultBetterListHtmlTemplate,
+  validateBetterListTemplateStructure,
   serializeItemPropertyFields
 } from '../../src/shared';
-import {
-  ColumnPickerMenu,
-  ItemPropertyBuilder
-} from '../../src/webparts/betterList/components/propertyPane/ItemPropertyBuilder';
-import {
-  servicesAuthoringFields,
-  servicesListId,
-  servicesListTitle
-} from './betterListFixtures';
+import { ColumnPickerMenu, ItemPropertyBuilder } from '../../src/webparts/betterList/components/propertyPane/ItemPropertyBuilder';
+import { servicesAuthoringFields, servicesListId, servicesListTitle } from './betterListFixtures';
 
 export type BetterListLabProps = LabPropertyBag & {
   sourceListId: string;
@@ -43,6 +28,7 @@ export type BetterListLabProps = LabPropertyBag & {
   groupsCollapsible: boolean;
   tabsJson: string;
   customCss: string;
+  htmlTemplate: string;
 };
 
 const useStyles = makeStyles({
@@ -50,12 +36,6 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     color: tokens.colorNeutralForeground1
-  },
-  title: {
-    margin: '0 0 12px',
-    fontSize: '14px',
-    fontWeight: 600,
-    lineHeight: '20px'
   },
   listPicker: {
     width: '100%',
@@ -122,7 +102,8 @@ const useStyles = makeStyles({
 });
 
 export const betterListCssControl: LabPropertyControl = {
-  type: 'cssEditor',
+  type: 'sourceEditor',
+  language: 'scss',
   name: 'customCss',
   label: 'CSS/SCSS',
   description: 'Styles are scoped to this Better List preview.',
@@ -137,23 +118,39 @@ Better List CSS/SCSS targets:
   targets: createCssTargets()
 };
 
-export const BetterListLabPropertyPane: React.FunctionComponent<
-  LabPropertyPaneRenderProps<BetterListLabProps>
-> = ({ values, onChange, renderControl }) => {
+export const betterListHtmlControl: LabPropertyControl = {
+  type: 'sourceEditor',
+  language: 'html',
+  name: 'htmlTemplate',
+  label: 'HTML template',
+  description: 'Structural wrappers only. Trusted controls and list behavior remain runtime-owned.',
+  minHeight: 360,
+  maxBytes: betterListTemplateMaxBytes,
+  commitMode: 'valid',
+  snippets: [
+    { label: 'Default template', snippet: defaultBetterListHtmlTemplate },
+    { label: 'Item title token', snippet: '{{item.title}}' },
+    { label: 'Result count token', snippet: '{{results.count}}' }
+  ],
+  validate: validateBetterListTemplateStructure
+};
+
+export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneRenderProps<BetterListLabProps>> = ({
+  values,
+  onChange,
+  renderControl,
+  title: _title
+}) => {
   const classes = useStyles();
   const [listQuery, setListQuery] = React.useState<string | undefined>(undefined);
   const selectedItemProperties = React.useMemo(
     () => parseItemPropertyFields(values.itemPropertiesJson),
     [values.itemPropertiesJson]
   );
-  const groupingFields = React.useMemo(
-    () => servicesAuthoringFields.filter(isGroupingColumn),
-    []
-  );
+  const groupingFields = React.useMemo(() => servicesAuthoringFields.filter(isGroupingColumn), []);
 
   return (
     <section className={classes.root}>
-      <h2 className={classes.title}>Better List</h2>
       <Combobox
         aria-label="Choose list or enter URL"
         className={classes.listPicker}
@@ -175,9 +172,7 @@ export const BetterListLabPropertyPane: React.FunctionComponent<
         <Option value={servicesListId}>{servicesListTitle}</Option>
       </Combobox>
 
-      <DisclosureSection label="General">
-        Search enabled · Comfortable density
-      </DisclosureSection>
+      <DisclosureSection label="General">Search enabled · Comfortable density</DisclosureSection>
       <DisclosureSection
         action={
           <ColumnPickerMenu
@@ -225,14 +220,15 @@ export const BetterListLabPropertyPane: React.FunctionComponent<
         <ItemPropertyBuilder
           fields={servicesAuthoringFields}
           value={selectedItemProperties}
-          onChange={(nextValue) =>
-            onChange({ itemPropertiesJson: serializeItemPropertyFields(nextValue) })
-          }
+          onChange={(nextValue) => onChange({ itemPropertiesJson: serializeItemPropertyFields(nextValue) })}
         />
       </div>
 
       <DisclosureSection defaultExpanded icon="code" label="Advanced">
-        <div className={classes.advancedBody}>{renderControl(betterListCssControl)}</div>
+        <div className={classes.advancedBody}>
+          {renderControl(betterListCssControl)}
+          {renderControl(betterListHtmlControl)}
+        </div>
       </DisclosureSection>
     </section>
   );
@@ -250,12 +246,7 @@ const ColumnSetting: React.FunctionComponent<{
   return (
     <div className={classes.settingRow}>
       <span className={classes.settingSummary}>{getColumnSummary(fieldPath)}</span>
-      <Button
-        appearance="subtle"
-        className={classes.removeButton}
-        size="small"
-        onClick={onRemove}
-      >
+      <Button appearance="subtle" className={classes.removeButton} size="small" onClick={onRemove}>
         Remove
       </Button>
     </div>
@@ -292,13 +283,7 @@ const DisclosureSection: React.FunctionComponent<IDisclosureSectionProps> = ({
         </Button>
         {action || (
           <span className={classes.sectionIcon} aria-hidden="true">
-            {icon === 'code' ? (
-              <CodeRegular />
-            ) : expanded ? (
-              <ChevronDownRegular />
-            ) : (
-              <ChevronRightRegular />
-            )}
+            {icon === 'code' ? <CodeRegular /> : expanded ? <ChevronDownRegular /> : <ChevronRightRegular />}
           </span>
         )}
       </div>
@@ -320,15 +305,9 @@ function isGroupingColumn(field: (typeof servicesAuthoringFields)[number]): bool
 
 function getColumnSummary(fieldPath: string): string {
   const internalName = fieldPath.split('.')[0];
-  const field = servicesAuthoringFields.find(
-    (candidate) => candidate.internalName === internalName
-  );
+  const field = servicesAuthoringFields.find((candidate) => candidate.internalName === internalName);
   const nestedField = fieldPath.split('.')[1];
-  return field
-    ? nestedField
-      ? `${field.title} → ${nestedField}`
-      : field.title
-    : fieldPath;
+  return field ? (nestedField ? `${field.title} → ${nestedField}` : field.title) : fieldPath;
 }
 
 function createCssTargets(): LabCssEditorTarget[] {

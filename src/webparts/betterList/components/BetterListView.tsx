@@ -29,6 +29,14 @@ import {
   MegaphoneRegular,
   SearchRegular
 } from '@fluentui/react-icons';
+import {
+  BetterListTemplateFragmentName,
+  BetterListTemplateSlotName,
+  IBetterListTemplateElementNode,
+  IBetterListTemplateNode,
+  resolveBetterListTemplate,
+  substituteBetterListTokens
+} from '../../../shared';
 
 export type BetterListStatus = 'loading' | 'ready' | 'error';
 
@@ -93,10 +101,15 @@ export interface IBetterListViewProps {
   searchPlaceholder?: string;
   emptyMessage?: string;
   noResultsMessage?: string;
+  htmlTemplate?: string;
+  listTitle?: string;
   onTabChange?: (tabKey: string) => void;
   onSearchChange?: (value: string) => void;
   onRetry?: () => void;
 }
+
+type BetterListTemplateTokens = Readonly<Record<string, string | number | undefined>>;
+type BetterListTemplateSlotRenderer = (attributes: Record<string, unknown>, key: string) => React.ReactNode;
 
 interface IBetterListGroup {
   id: string;
@@ -312,57 +325,6 @@ const GroupIcon: React.FunctionComponent<{
   return <Icon className={className} aria-hidden="true" />;
 };
 
-const BetterListItem: React.FunctionComponent<{
-  item: IBetterListItem;
-  classes: ReturnType<typeof useStyles>;
-  density: 'compact' | 'comfortable';
-  showDescriptions: boolean;
-}> = ({ item, classes, density, showDescriptions }) => {
-  const metadata = (item.metadata ?? [item.organizationCode, item.organizationName]).filter(
-    (value): value is string => Boolean(value?.trim())
-  );
-  const elements: readonly IBetterListItemElement[] =
-    item.elements ??
-    [
-      ...metadata.map((value, index) => ({
-        key: `metadata-${index}`,
-        kind: 'metadata' as const,
-        value
-      })),
-      ...(item.description
-        ? [{ key: 'description', kind: 'description' as const, value: item.description }]
-        : [])
-    ];
-
-  return (
-    <li
-      className={mergeClasses(
-        classes.item,
-        density === 'compact' && classes.itemCompact,
-        'better-list__item',
-        density === 'compact' && 'better-list__item--compact'
-      )}
-    >
-      {item.href ? (
-        <Link className={mergeClasses(classes.itemTitle, 'better-list__item-title')} href={item.href}>
-          {item.title}
-        </Link>
-      ) : (
-        <Text
-          className={mergeClasses(
-            classes.itemTitleText,
-            'better-list__item-title',
-            'better-list__item-title--text'
-          )}
-        >
-          {item.title}
-        </Text>
-      )}
-      {renderItemElements(elements, classes, showDescriptions)}
-    </li>
-  );
-};
-
 function renderItemElements(
   elements: readonly IBetterListItemElement[],
   classes: ReturnType<typeof useStyles>,
@@ -428,11 +390,14 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   searchPlaceholder = 'Search services',
   emptyMessage = 'There are no list items to display.',
   noResultsMessage = 'No items match the selected view and search.',
+  htmlTemplate,
+  listTitle = 'Better List',
   onTabChange,
   onSearchChange,
   onRetry
 }) => {
   const classes = useStyles();
+  const compiledTemplate = React.useMemo(() => resolveBetterListTemplate(htmlTemplate), [htmlTemplate]);
   const [selectedTabKey, setSelectedTabKey] = React.useState(activeTabKey);
   const [internalSearchValue, setInternalSearchValue] = React.useState(searchValue ?? '');
   const [collapsedGroups, setCollapsedGroups] = React.useState<Record<string, boolean>>({});
@@ -467,15 +432,10 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   const visibleItems = React.useMemo(() => {
     const tabItems = selectedTab?.items ?? items;
     const selectedIds = selectedTab?.itemIds ? new Set(selectedTab.itemIds) : undefined;
-    return tabItems.filter(
-      (item) => (!selectedIds || selectedIds.has(item.id)) && itemMatchesSearch(item, normalizedSearchText)
-    );
+    return tabItems.filter((item) => (!selectedIds || selectedIds.has(item.id)) && itemMatchesSearch(item, normalizedSearchText));
   }, [items, normalizedSearchText, selectedTab]);
 
-  const groups = React.useMemo(
-    () => (grouped ? groupItems(visibleItems) : []),
-    [grouped, visibleItems]
-  );
+  const groups = React.useMemo(() => (grouped ? groupItems(visibleItems) : []), [grouped, visibleItems]);
   const hasAnyItems = items.length > 0 || tabs.some((tab) => Boolean(tab.items?.length));
 
   const handleTabSelect = (_event: SelectTabEvent, data: SelectTabData): void => {
@@ -494,6 +454,178 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
       const currentlyCollapsed = current[groupStateKey] ?? !initiallyExpanded;
       return { ...current, [groupStateKey]: !currentlyCollapsed };
     });
+  };
+
+  const classAliases: Readonly<Record<string, string>> = {
+    'better-list': classes.root,
+    'better-list__header': classes.header,
+    'better-list__toolbar': classes.toolbar,
+    'better-list__tabs': classes.tabs,
+    'better-list__tab': classes.tab,
+    'better-list__search': classes.search,
+    'better-list__content': classes.content,
+    'better-list__grid': classes.grid,
+    'better-list__group': classes.group,
+    'better-list__group-heading': classes.groupHeading,
+    'better-list__items': classes.list,
+    'better-list__item': classes.item
+  };
+
+  const renderFragment = (
+    fragmentName: BetterListTemplateFragmentName,
+    tokens: BetterListTemplateTokens,
+    slots: Partial<Record<BetterListTemplateSlotName, BetterListTemplateSlotRenderer>>,
+    rootAttributes: Record<string, unknown>
+  ): React.ReactElement =>
+    renderTemplateElement(compiledTemplate.fragments[fragmentName], tokens, slots, classAliases, rootAttributes, fragmentName);
+
+  const renderItemTemplate = (
+    item: IBetterListItem,
+    densityValue: 'compact' | 'comfortable',
+    showItemDescriptions: boolean
+  ): React.ReactElement => {
+    const metadata = (item.metadata ?? [item.organizationCode, item.organizationName]).filter((value): value is string =>
+      Boolean(value?.trim())
+    );
+    const elements: readonly IBetterListItemElement[] = item.elements ?? [
+      ...metadata.map((value, index) => ({
+        key: `metadata-${index}`,
+        kind: 'metadata' as const,
+        value
+      })),
+      ...(item.description ? [{ key: 'description', kind: 'description' as const, value: item.description }] : [])
+    ];
+    return renderFragment(
+      'item',
+      {
+        'item.id': item.id,
+        'item.title': item.title,
+        'item.description': item.description
+      },
+      {
+        title: (attributes, key) =>
+          item.href ? (
+            <Link
+              {...attributes}
+              className={mergeClasses(String(attributes.className || ''), classes.itemTitle, 'better-list__item-title')}
+              href={item.href}
+              key={key}
+            >
+              {item.title}
+            </Link>
+          ) : (
+            <Text
+              {...attributes}
+              className={mergeClasses(
+                String(attributes.className || ''),
+                classes.itemTitleText,
+                'better-list__item-title',
+                'better-list__item-title--text'
+              )}
+              key={key}
+            >
+              {item.title}
+            </Text>
+          ),
+        properties: () => renderItemElements(elements, classes, showItemDescriptions)
+      },
+      {
+        className: mergeClasses(
+          classes.item,
+          densityValue === 'compact' && classes.itemCompact,
+          'better-list__item',
+          densityValue === 'compact' && 'better-list__item--compact'
+        ),
+        key: item.id,
+        role: 'listitem'
+      }
+    );
+  };
+
+  const renderListTemplate = (
+    listItems: readonly IBetterListItem[],
+    densityValue: 'compact' | 'comfortable',
+    showItemDescriptions: boolean
+  ): React.ReactElement =>
+    renderFragment(
+      'list',
+      {},
+      {
+        items: () => listItems.map((item) => renderItemTemplate(item, densityValue, showItemDescriptions))
+      },
+      {
+        className: mergeClasses(classes.list, 'better-list__items'),
+        role: 'list'
+      }
+    );
+
+  const renderGroupTemplate = (group: IBetterListGroup): React.ReactElement => {
+    const groupStateKey = `${selectedTab?.key ?? 'default'}:${group.id}`;
+    const isExpanded = collapsible ? !(collapsedGroups[groupStateKey] ?? !initiallyExpanded) : true;
+    const safeGroupId = group.id.replace(/[^a-zA-Z0-9_-]/g, '-');
+    const headingId = `better-list-${instanceId}-${safeGroupId}-heading`;
+    const panelId = `better-list-${instanceId}-${safeGroupId}-panel`;
+    return renderFragment(
+      'group',
+      {
+        'group.title': group.title,
+        'group.count': group.items.length
+      },
+      {
+        heading: (attributes, key) => (
+          <h2
+            {...attributes}
+            className={mergeClasses(String(attributes.className || ''), classes.groupHeading, 'better-list__group-heading')}
+            key={key}
+          >
+            {collapsible ? (
+              <Button
+                appearance="transparent"
+                className={mergeClasses(classes.groupButton, 'better-list__group-button')}
+                id={headingId}
+                aria-controls={panelId}
+                aria-expanded={isExpanded}
+                onClick={() => toggleGroup(groupStateKey)}
+              >
+                <span className={mergeClasses(classes.groupButtonContent, 'better-list__group-button-content')}>
+                  <GroupIcon
+                    className={mergeClasses(classes.groupIcon, 'better-list__group-icon')}
+                    kind={group.icon}
+                    title={group.title}
+                  />
+                  <span className={classes.groupTitle}>{group.title}</span>
+                </span>
+                {isExpanded ? (
+                  <ChevronUpRegular className={mergeClasses(classes.chevron, 'better-list__chevron')} aria-hidden="true" />
+                ) : (
+                  <ChevronDownRegular className={mergeClasses(classes.chevron, 'better-list__chevron')} aria-hidden="true" />
+                )}
+              </Button>
+            ) : (
+              <span className={mergeClasses(classes.groupStaticHeading, 'better-list__group-static-heading')} id={headingId}>
+                <GroupIcon
+                  className={mergeClasses(classes.groupIcon, 'better-list__group-icon')}
+                  kind={group.icon}
+                  title={group.title}
+                />
+                <span className={classes.groupTitle}>{group.title}</span>
+              </span>
+            )}
+          </h2>
+        ),
+        body: (attributes, key) =>
+          isExpanded ? (
+            <div {...attributes} aria-labelledby={headingId} id={panelId} key={key} role="region">
+              {renderListTemplate(group.items, density, showDescriptions)}
+            </div>
+          ) : null
+      },
+      {
+        'aria-labelledby': headingId,
+        className: mergeClasses(classes.group, 'better-list__group'),
+        key: group.id
+      }
+    );
   };
 
   const renderReadyContent = (): React.ReactNode => {
@@ -521,185 +653,163 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
 
     if (!grouped) {
       return (
-        <div
-          className={mergeClasses(classes.grid, 'better-list__grid')}
-          style={gridStyle}
-          aria-live="polite"
-        >
-          <ul className={mergeClasses(classes.list, 'better-list__items')}>
-            {visibleItems.slice().sort(compareItems).map((item) => (
-              <BetterListItem
-                classes={classes}
-                density={density}
-                item={item}
-                key={item.id}
-                showDescriptions={showDescriptions}
-              />
-            ))}
-          </ul>
+        <div className={mergeClasses(classes.grid, 'better-list__grid')} style={gridStyle} aria-live="polite">
+          {renderListTemplate(visibleItems.slice().sort(compareItems), density, showDescriptions)}
         </div>
       );
     }
 
     return (
       <div className={mergeClasses(classes.grid, 'better-list__grid')} style={gridStyle} aria-live="polite">
-        {groups.map((group) => {
-          const groupStateKey = `${selectedTab?.key ?? 'default'}:${group.id}`;
-          const isExpanded = collapsible ? !(collapsedGroups[groupStateKey] ?? !initiallyExpanded) : true;
-          const safeGroupId = group.id.replace(/[^a-zA-Z0-9_-]/g, '-');
-          const headingId = `better-list-${instanceId}-${safeGroupId}-heading`;
-          const panelId = `better-list-${instanceId}-${safeGroupId}-panel`;
-
-          return (
-            <section
-              className={mergeClasses(classes.group, 'better-list__group')}
-              key={group.id}
-              aria-labelledby={grouped ? headingId : undefined}
-            >
-              {grouped ? (
-                <h2 className={mergeClasses(classes.groupHeading, 'better-list__group-heading')}>
-                  {collapsible ? (
-                    <Button
-                      appearance="transparent"
-                      className={mergeClasses(classes.groupButton, 'better-list__group-button')}
-                      id={headingId}
-                      aria-controls={panelId}
-                      aria-expanded={isExpanded}
-                      onClick={() => toggleGroup(groupStateKey)}
-                    >
-                      <span
-                        className={mergeClasses(classes.groupButtonContent, 'better-list__group-button-content')}
-                      >
-                        <GroupIcon
-                          className={mergeClasses(classes.groupIcon, 'better-list__group-icon')}
-                          kind={group.icon}
-                          title={group.title}
-                        />
-                        <span className={classes.groupTitle}>{group.title}</span>
-                      </span>
-                      {isExpanded ? (
-                        <ChevronUpRegular
-                          className={mergeClasses(classes.chevron, 'better-list__chevron')}
-                          aria-hidden="true"
-                        />
-                      ) : (
-                        <ChevronDownRegular
-                          className={mergeClasses(classes.chevron, 'better-list__chevron')}
-                          aria-hidden="true"
-                        />
-                      )}
-                    </Button>
-                  ) : (
-                    <span
-                      className={mergeClasses(classes.groupStaticHeading, 'better-list__group-static-heading')}
-                      id={headingId}
-                    >
-                      <GroupIcon
-                        className={mergeClasses(classes.groupIcon, 'better-list__group-icon')}
-                        kind={group.icon}
-                        title={group.title}
-                      />
-                      <span className={classes.groupTitle}>{group.title}</span>
-                    </span>
-                  )}
-                </h2>
-              ) : null}
-              {isExpanded ? (
-                <div
-                  id={grouped ? panelId : undefined}
-                  role={grouped ? 'region' : undefined}
-                  aria-labelledby={grouped ? headingId : undefined}
-                >
-                  <ul className={mergeClasses(classes.list, 'better-list__items')}>
-                    {group.items.map((item) => (
-                      <BetterListItem
-                        classes={classes}
-                        density={density}
-                        item={item}
-                        key={item.id}
-                        showDescriptions={showDescriptions}
-                      />
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </section>
-          );
-        })}
+        {groups.map(renderGroupTemplate)}
       </div>
     );
   };
 
-  return (
-    <section
-      className={mergeClasses(classes.root, 'better-list')}
-      aria-label="Better List"
-      data-selected-tab={selectedTab?.key}
-    >
-      <div className={mergeClasses(classes.header, 'better-list__header')}>
-        <div className={mergeClasses(classes.toolbar, 'better-list__toolbar')}>
-          {tabs.length > 1 ? (
-            <TabList
-              className={mergeClasses(classes.tabs, 'better-list__tabs')}
-              selectedValue={selectedTab?.key}
-              onTabSelect={handleTabSelect}
-              aria-label="Better List views"
-            >
-              {tabs.map((tab) => (
-                <Tab className={mergeClasses(classes.tab, 'better-list__tab')} key={tab.key} value={tab.key}>
-                  {tab.label}
-                </Tab>
-              ))}
-            </TabList>
-          ) : (
-            <span />
-          )}
-          {showSearch ? (
-            <Input
-              className={mergeClasses(classes.search, 'better-list__search')}
-              contentBefore={
-                <SearchRegular
-                  className={mergeClasses(classes.searchIcon, 'better-list__search-icon')}
-                  aria-hidden="true"
-                />
-              }
-              size="large"
-              value={internalSearchValue}
-              onChange={handleSearchChange}
-              placeholder={searchPlaceholder}
-              aria-label={searchPlaceholder}
-              type="search"
-            />
-          ) : null}
-        </div>
-      </div>
-      <div className={mergeClasses(classes.content, 'better-list__content')}>
-        {status === 'loading' ? (
-          <div className={mergeClasses(classes.state, 'better-list__state')} role="status" aria-live="polite">
-            <Spinner label="Loading list items" size="large" />
-          </div>
-        ) : status === 'error' ? (
-          <div className={mergeClasses(classes.state, 'better-list__state')} role="alert">
-            <MessageBar className={classes.messageBar} intent="error">
-              <MessageBarBody>
-                <MessageBarTitle>Unable to load the list</MessageBarTitle>
-                {errorMessage}
-              </MessageBarBody>
-              {onRetry ? (
-                <MessageBarActions>
-                  <Button appearance="transparent" icon={<ArrowClockwiseRegular />} onClick={onRetry}>
-                    Try again
-                  </Button>
-                </MessageBarActions>
-              ) : null}
-            </MessageBar>
-          </div>
+  return renderFragment(
+    'shell',
+    {
+      'list.title': listTitle,
+      'tab.label': selectedTab?.label,
+      'results.count': visibleItems.length
+    },
+    {
+      tabs: (attributes, key) =>
+        tabs.length > 1 ? (
+          <TabList
+            {...attributes}
+            className={mergeClasses(classes.tabs, 'better-list__tabs')}
+            key={key}
+            selectedValue={selectedTab?.key}
+            onTabSelect={handleTabSelect}
+            aria-label="Better List views"
+          >
+            {tabs.map((tab) => (
+              <Tab className={mergeClasses(classes.tab, 'better-list__tab')} key={tab.key} value={tab.key}>
+                {tab.label}
+              </Tab>
+            ))}
+          </TabList>
         ) : (
-          renderReadyContent()
-        )}
-      </div>
-    </section>
+          <span {...attributes} key={key} />
+        ),
+      search: (attributes, key) =>
+        showSearch ? (
+          <Input
+            {...attributes}
+            className={mergeClasses(String(attributes.className || ''), classes.search, 'better-list__search')}
+            contentBefore={
+              <SearchRegular className={mergeClasses(classes.searchIcon, 'better-list__search-icon')} aria-hidden="true" />
+            }
+            size="large"
+            key={key}
+            value={internalSearchValue}
+            onChange={handleSearchChange}
+            placeholder={searchPlaceholder}
+            aria-label={searchPlaceholder}
+            type="search"
+          />
+        ) : null,
+      content: (attributes, key) => (
+        <div
+          {...attributes}
+          className={mergeClasses(String(attributes.className || ''), classes.content, 'better-list__content')}
+          key={key}
+        >
+          {status === 'loading' ? (
+            <div className={mergeClasses(classes.state, 'better-list__state')} role="status" aria-live="polite">
+              <Spinner label="Loading list items" size="large" />
+            </div>
+          ) : status === 'error' ? (
+            <div className={mergeClasses(classes.state, 'better-list__state')} role="alert">
+              <MessageBar className={classes.messageBar} intent="error">
+                <MessageBarBody>
+                  <MessageBarTitle>Unable to load the list</MessageBarTitle>
+                  {errorMessage}
+                </MessageBarBody>
+                {onRetry ? (
+                  <MessageBarActions>
+                    <Button appearance="transparent" icon={<ArrowClockwiseRegular />} onClick={onRetry}>
+                      Try again
+                    </Button>
+                  </MessageBarActions>
+                ) : null}
+              </MessageBar>
+            </div>
+          ) : (
+            renderReadyContent()
+          )}
+        </div>
+      )
+    },
+    {
+      'aria-label': 'Better List',
+      'data-selected-tab': selectedTab?.key,
+      className: mergeClasses(classes.root, 'better-list')
+    }
   );
 };
+
+function renderTemplateElement(
+  node: IBetterListTemplateElementNode,
+  tokens: BetterListTemplateTokens,
+  slots: Partial<Record<BetterListTemplateSlotName, BetterListTemplateSlotRenderer>>,
+  classAliases: Readonly<Record<string, string>>,
+  rootAttributes: Record<string, unknown>,
+  keyPath: string
+): React.ReactElement {
+  const authoredAttributes = resolveTemplateAttributes(node, tokens, classAliases);
+  const attributes = {
+    ...authoredAttributes,
+    ...rootAttributes,
+    className: mergeClasses(String(authoredAttributes.className || ''), String(rootAttributes.className || ''))
+  };
+  const children = node.children.map((child, index) =>
+    renderTemplateNode(child, tokens, slots, classAliases, `${keyPath}:${index}`)
+  );
+  return React.createElement(node.tagName, attributes, children);
+}
+
+function renderTemplateNode(
+  node: IBetterListTemplateNode,
+  tokens: BetterListTemplateTokens,
+  slots: Partial<Record<BetterListTemplateSlotName, BetterListTemplateSlotRenderer>>,
+  classAliases: Readonly<Record<string, string>>,
+  keyPath: string
+): React.ReactNode {
+  if (node.type === 'text') {
+    return substituteBetterListTokens(node.value, tokens);
+  }
+  const attributes = resolveTemplateAttributes(node, tokens, classAliases);
+  if (node.slot) {
+    const renderSlot = slots[node.slot];
+    return renderSlot ? renderSlot(attributes, keyPath) : null;
+  }
+  const children = node.children.map((child, index) =>
+    renderTemplateNode(child, tokens, slots, classAliases, `${keyPath}:${index}`)
+  );
+  return React.createElement(node.tagName, { ...attributes, key: keyPath }, children);
+}
+
+function resolveTemplateAttributes(
+  node: IBetterListTemplateElementNode,
+  tokens: BetterListTemplateTokens,
+  classAliases: Readonly<Record<string, string>>
+): Record<string, unknown> {
+  const attributes: Record<string, unknown> = {};
+  Object.keys(node.attributes).forEach((name) => {
+    const rawValue = node.attributes[name];
+    const value = substituteBetterListTokens(rawValue, tokens);
+    attributes[name === 'class' ? 'className' : name] = value;
+  });
+  const authoredClassName = String(attributes.className || '');
+  const generatedClasses = authoredClassName
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((className) => classAliases[className])
+    .filter(Boolean);
+  attributes.className = mergeClasses(authoredClassName, ...generatedClasses);
+  return attributes;
+}
 
 export default BetterListView;

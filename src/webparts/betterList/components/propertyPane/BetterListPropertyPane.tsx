@@ -4,11 +4,14 @@ import * as React from 'react';
 import {
   createBetterListFieldMapping,
   createDefaultTabs,
+  defaultBetterListHtmlTemplate,
+  betterListTemplateMaxBytes,
   IBetterListFieldDescriptor,
   IBetterListFieldMappings,
-  IBetterListTabConfig
+  IBetterListTabConfig,
+  validateBetterListTemplateStructure
 } from '../../../../shared';
-import { CssEditorField, ICssEditorTarget } from './CssEditorField';
+import { ISourceEditorTarget, SourceEditorField } from '../../../../vendor/source-editor/SourceEditorField';
 import { ColumnPickerMenu, ItemPropertyBuilder } from './ItemPropertyBuilder';
 
 export interface IBetterListAuthoringState {
@@ -21,6 +24,7 @@ export interface IBetterListAuthoringState {
   groupsCollapsible: boolean;
   tabs: IBetterListTabConfig[];
   customCss: string;
+  htmlTemplate: string;
 }
 
 export interface ISharePointListOption {
@@ -44,15 +48,23 @@ export interface IBetterListPropertyPaneProps {
   onChange: (value: IBetterListAuthoringState) => void;
 }
 
-const cssTargets: readonly ICssEditorTarget[] = [
+const cssTargets: readonly ISourceEditorTarget[] = [
   { label: 'Web part', selector: '.better-list', snippet: '.better-list {\n  /* layout and theme overrides */\n}' },
   { label: 'Header', selector: '.better-list__header', snippet: '.better-list__header {\n  /* title and search area */\n}' },
   { label: 'Tabs', selector: '.better-list__tabs', snippet: '.better-list__tabs {\n  /* tab row */\n}' },
   { label: 'Group', selector: '.better-list__group', snippet: '.better-list__group {\n  /* grouped section */\n}' },
-  { label: 'Group heading', selector: '.better-list__group-heading', snippet: '.better-list__group-heading {\n  /* group icon and title */\n}' },
+  {
+    label: 'Group heading',
+    selector: '.better-list__group-heading',
+    snippet: '.better-list__group-heading {\n  /* group icon and title */\n}'
+  },
   { label: 'Item', selector: '.better-list__item', snippet: '.better-list__item {\n  /* list item */\n}' },
   { label: 'Item title', selector: '.better-list__item-title', snippet: '.better-list__item-title {\n  /* item link */\n}' },
-  { label: 'Description', selector: '.better-list__item-description', snippet: '.better-list__item-description {\n  /* item description */\n}' },
+  {
+    label: 'Description',
+    selector: '.better-list__item-description',
+    snippet: '.better-list__item-description {\n  /* item description */\n}'
+  },
   { label: 'Metadata', selector: '.better-list__metadata', snippet: '.better-list__metadata {\n  /* optional metadata */\n}' }
 ];
 
@@ -160,18 +172,11 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
         const field = fields.find((candidate) => candidate.internalName === fieldPath.split('.')[0]);
         return field ? { field, fieldPath } : undefined;
       })
-      .filter(
-        (entry): entry is { field: ISharePointFieldOption; fieldPath: string } =>
-          Boolean(entry)
-      )
+      .filter((entry): entry is { field: ISharePointFieldOption; fieldPath: string } => Boolean(entry))
       .map((field) => ({
         key: field.fieldPath,
         label: getFieldPathLabel(field.field, field.fieldPath),
-        mapping: createBetterListFieldMapping(
-          field.field,
-          undefined,
-          field.fieldPath.split('.')[1]
-        )
+        mapping: createBetterListFieldMapping(field.field, undefined, field.fieldPath.split('.')[1])
       }));
     patchValue({
       itemProperties,
@@ -209,11 +214,17 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
           >
             <option value="">{loadingLists ? 'Loading lists…' : 'Select a SharePoint list'}</option>
             {lists.map((list) => (
-              <option key={list.id} value={list.id}>{list.title}</option>
+              <option key={list.id} value={list.id}>
+                {list.title}
+              </option>
             ))}
           </select>
         </label>
-        {error && <div className="bl-pane__error" role="alert">{error}</div>}
+        {error && (
+          <div className="bl-pane__error" role="alert">
+            {error}
+          </div>
+        )}
       </section>
 
       <section className="bl-pane__section">
@@ -263,15 +274,37 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
       </section>
 
       <section className="bl-pane__section">
-        <ItemPropertyBuilder
-          fields={fields}
-          value={props.value.itemProperties}
-          onChange={updateItemProperties}
-        />
+        <ItemPropertyBuilder fields={fields} value={props.value.itemProperties} onChange={updateItemProperties} />
       </section>
 
       <section className="bl-pane__section">
-        <CssEditorField label="Custom CSS/SCSS" targets={cssTargets} value={props.value.customCss} onChange={(customCss) => patchValue({ customCss })} />
+        <h3>Advanced</h3>
+        <SourceEditorField
+          description="Styles are scoped to this web part. Insert a supported target, then override only the declarations you need."
+          label="Custom CSS/SCSS"
+          language="scss"
+          targets={cssTargets}
+          value={props.value.customCss}
+          onChange={(customCss) => patchValue({ customCss })}
+        />
+        <div className="bl-pane__template-editor">
+          <SourceEditorField
+            commitMode="valid"
+            description="Customize structural wrappers around trusted tabs, search, groups, items, links, and properties. Invalid drafts stay local until corrected."
+            height={360}
+            label="HTML template"
+            language="html"
+            maxBytes={betterListTemplateMaxBytes}
+            snippets={[
+              { label: 'Default template', snippet: defaultBetterListHtmlTemplate },
+              { label: 'Item title token', snippet: '{{item.title}}' },
+              { label: 'Result count token', snippet: '{{results.count}}' }
+            ]}
+            validate={validateBetterListTemplateStructure}
+            value={props.value.htmlTemplate}
+            onChange={(htmlTemplate) => patchValue({ htmlTemplate })}
+          />
+        </div>
       </section>
     </div>
   );
@@ -282,9 +315,7 @@ function getFieldPathLabel(field: ISharePointFieldOption, fieldPath: string): st
   if (!targetInternalName) {
     return field.title;
   }
-  const targetField = field.lookupFields?.find(
-    (candidate) => candidate.internalName === targetInternalName
-  );
+  const targetField = field.lookupFields?.find((candidate) => candidate.internalName === targetInternalName);
   return `${field.title} → ${targetField?.title || targetInternalName}`;
 }
 
@@ -301,7 +332,9 @@ const AxisColumnSummary: React.FunctionComponent<{
   return (
     <div className="bl-pane__axis-summary">
       <span>{field ? getFieldPathLabel(field, fieldPath) : fieldPath}</span>
-      <button type="button" onClick={onRemove}>Remove</button>
+      <button type="button" onClick={onRemove}>
+        Remove
+      </button>
     </div>
   );
 };
@@ -346,8 +379,5 @@ const propertyPaneCss = `
 .bl-pane__axis-summary { align-items: center; display: flex; font-size: 12px; justify-content: space-between; gap: 8px; }
 .bl-pane__check { align-items: center; display: flex; font-size: 12px; gap: 8px; margin-top: 10px; }
 .bl-pane__check input { min-height: auto; width: auto; }
-.bl-css-editor__targets { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
-.bl-css-editor__targets button { font-family: Consolas, monospace; font-size: 10px; min-height: 24px; padding: 2px 5px; }
-.bl-css-editor__monaco, .bl-css-editor__fallback { border: 1px solid #d1d1d1; height: 260px; width: 100%; }
-.bl-css-editor__fallback { font-family: Consolas, monospace !important; font-size: 12px !important; resize: vertical; }
+.bl-pane__template-editor { border-top: 1px solid #e0e0e0; margin-top: 16px; padding-top: 16px; }
 `;
