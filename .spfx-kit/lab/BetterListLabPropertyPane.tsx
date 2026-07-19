@@ -139,7 +139,6 @@ export const betterListSourceWorkspaceControl: LabPropertyControl = {
   type: 'sourceWorkspace',
   name: 'sourceWorkspace',
   label: 'Styles & template',
-  description: 'Edit scoped SCSS and the sanitized HTML template together.',
   documents: [betterListCssControl, betterListHtmlControl]
 };
 
