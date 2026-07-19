@@ -30,8 +30,7 @@ import { FixtureBetterListDataSource } from '../../src/webparts/betterList/servi
 import {
   BetterListLabPropertyPane,
   BetterListLabProps,
-  betterListCssControl,
-  betterListHtmlControl
+  betterListSourceWorkspaceControl
 } from './BetterListLabPropertyPane';
 import {
   createFixtureIdentity,
@@ -160,7 +159,7 @@ const webPart: LabWebPart<BetterListLabProps> = {
   title: 'Better List',
   description: 'Display SharePoint list content as searchable, grouped, configurable list items.',
   defaultProps,
-  controls: [betterListCssControl, betterListHtmlControl],
+  controls: [betterListSourceWorkspaceControl],
   propertyPane: BetterListLabPropertyPane,
   supportedBreakpoints: ['one-column', 'two-third', 'one-half', 'one-third', 'mobile'],
   fixtures: {

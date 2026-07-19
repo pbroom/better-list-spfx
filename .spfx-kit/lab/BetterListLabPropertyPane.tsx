@@ -135,6 +135,14 @@ export const betterListHtmlControl: LabPropertyControl = {
   validate: validateBetterListTemplateStructure
 };
 
+export const betterListSourceWorkspaceControl: LabPropertyControl = {
+  type: 'sourceWorkspace',
+  name: 'sourceWorkspace',
+  label: 'Styles & template',
+  description: 'Edit scoped SCSS and the sanitized HTML template together.',
+  documents: [betterListCssControl, betterListHtmlControl]
+};
+
 export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneRenderProps<BetterListLabProps>> = ({
   values,
   onChange,
@@ -226,8 +234,7 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
 
       <DisclosureSection defaultExpanded icon="code" label="Advanced">
         <div className={classes.advancedBody}>
-          {renderControl(betterListCssControl)}
-          {renderControl(betterListHtmlControl)}
+          {renderControl(betterListSourceWorkspaceControl)}
         </div>
       </DisclosureSection>
     </section>
