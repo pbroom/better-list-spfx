@@ -30,6 +30,8 @@ import {
   SearchRegular
 } from '@fluentui/react-icons';
 import {
+  BetterListItemLayoutRows,
+  BetterListTabIcon,
   BetterListTemplateFragmentName,
   BetterListTemplateSlotName,
   IBetterListTemplateElementNode,
@@ -54,6 +56,10 @@ export interface IBetterListTabLayout {
 export interface IBetterListTab {
   key: string;
   label: string;
+  icon?: BetterListTabIcon;
+  itemCount?: number;
+  maxItems?: number;
+  showItemCount?: boolean;
   /** True when the item projection is intentionally grouped. */
   grouped?: boolean;
   /** Omit itemIds for a tab that includes every item. */
@@ -76,7 +82,7 @@ export interface IBetterListItem {
   organizationName?: string;
   /** Optional display-ready metadata overrides the organization fields. */
   metadata?: readonly string[];
-  /** Ordered visible elements after the required title. */
+  /** Ordered visible non-title elements. */
   elements?: readonly IBetterListItemElement[];
   groupId: string;
   groupTitle: string;
@@ -102,6 +108,8 @@ export interface IBetterListViewProps {
   emptyMessage?: string;
   noResultsMessage?: string;
   htmlTemplate?: string;
+  itemPropertyFields?: readonly string[];
+  itemLayoutRows?: BetterListItemLayoutRows;
   listTitle?: string;
   onTabChange?: (tabKey: string) => void;
   onSearchChange?: (value: string) => void;
@@ -196,6 +204,23 @@ const useStyles = makeStyles({
     }
   },
   item: {},
+  itemRow: {
+    display: 'flex',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    columnGap: '12px',
+    rowGap: '6px',
+    minWidth: 0,
+    '& .better-list__metadata': {
+      marginTop: 0
+    },
+    '& .better-list__item-description': {
+      marginTop: 0
+    }
+  },
+  subsequentItemRow: {
+    marginTop: '8px'
+  },
   itemCompact: {},
   itemTitle: {
     textDecorationLine: 'none'
@@ -239,6 +264,13 @@ const useStyles = makeStyles({
 
 const GROUP_ICON_BY_KIND: Record<BetterListGroupIcon, FluentIcon> = {
   general: AppsListDetailRegular,
+  communications: MegaphoneRegular,
+  policy: DocumentTextRegular,
+  support: HeadsetRegular
+};
+
+const TAB_ICON_BY_KIND: Record<BetterListTabIcon, FluentIcon> = {
+  list: AppsListDetailRegular,
   communications: MegaphoneRegular,
   policy: DocumentTextRegular,
   support: HeadsetRegular
@@ -380,6 +412,93 @@ function renderItemElements(
   return rendered;
 }
 
+function renderItemLayoutRow(
+  fieldPaths: readonly string[],
+  rowIndex: number,
+  elements: readonly IBetterListItemElement[],
+  classes: ReturnType<typeof useStyles>,
+  showDescriptions: boolean,
+  renderTitle?: () => React.ReactNode
+): React.ReactElement {
+  const elementsByKey = new Map(elements.map((element) => [element.key, element]));
+  const rendered: React.ReactNode[] = [];
+  let metadataRun: IBetterListItemElement[] = [];
+
+  const flushMetadata = (): void => {
+    if (metadataRun.length === 0) {
+      return;
+    }
+    const run = metadataRun;
+    metadataRun = [];
+    rendered.push(
+      <div
+        className={mergeClasses(classes.metadata, 'better-list__metadata')}
+        data-item-element-kind="metadata"
+        key={`metadata-${rowIndex}-${run.map((element) => element.key).join('-')}`}
+      >
+        {run.map((element) => (
+          <span
+            className={mergeClasses(classes.metadataPart, 'better-list__metadata-part')}
+            data-item-element={element.key}
+            key={element.key}
+          >
+            {element.value}
+          </span>
+        ))}
+      </div>
+    );
+  };
+
+  fieldPaths.forEach((fieldPath) => {
+    if (fieldPath === 'Title') {
+      flushMetadata();
+      if (renderTitle) {
+        rendered.push(renderTitle());
+      }
+      return;
+    }
+    if (fieldPath === 'URL') {
+      return;
+    }
+    const element = elementsByKey.get(fieldPath);
+    if (!element) {
+      return;
+    }
+    if (element.kind === 'metadata') {
+      metadataRun.push(element);
+      return;
+    }
+    flushMetadata();
+    if (showDescriptions) {
+      rendered.push(
+        <Text
+          className={mergeClasses(classes.description, 'better-list__item-description')}
+          data-item-element={element.key}
+          key={element.key}
+        >
+          {element.value}
+        </Text>
+      );
+    }
+  });
+  flushMetadata();
+
+  return (
+    <div
+      className={mergeClasses(
+        classes.itemRow,
+        rowIndex > 0 && classes.subsequentItemRow,
+        'better-list__item-row',
+        `better-list-row-${rowIndex + 1}`
+      )}
+      data-item-row={rowIndex + 1}
+      key={`item-row-${rowIndex + 1}`}
+    >
+      {rendered}
+    </div>
+  );
+}
+
 export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   tabs,
   activeTabKey,
@@ -391,6 +510,8 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   emptyMessage = 'There are no list items to display.',
   noResultsMessage = 'No items match the selected view and search.',
   htmlTemplate,
+  itemPropertyFields = ['Title'],
+  itemLayoutRows = [],
   listTitle = 'Better List',
   onTabChange,
   onSearchChange,
@@ -435,7 +556,11 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
     return tabItems.filter((item) => (!selectedIds || selectedIds.has(item.id)) && itemMatchesSearch(item, normalizedSearchText));
   }, [items, normalizedSearchText, selectedTab]);
 
-  const groups = React.useMemo(() => (grouped ? groupItems(visibleItems) : []), [grouped, visibleItems]);
+  const displayedItems = React.useMemo(() => {
+    const orderedItems = grouped ? visibleItems : visibleItems.slice().sort(compareItems);
+    return selectedTab?.maxItems ? orderedItems.slice(0, selectedTab.maxItems) : orderedItems;
+  }, [grouped, selectedTab?.maxItems, visibleItems]);
+  const groups = React.useMemo(() => (grouped ? groupItems(displayedItems) : []), [displayedItems, grouped]);
   const hasAnyItems = items.length > 0 || tabs.some((tab) => Boolean(tab.items?.length));
 
   const handleTabSelect = (_event: SelectTabEvent, data: SelectTabData): void => {
@@ -496,6 +621,30 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
       })),
       ...(item.description ? [{ key: 'description', kind: 'description' as const, value: item.description }] : [])
     ];
+    const renderTitle = (attributes: Record<string, unknown>, key: string): React.ReactNode =>
+      item.href ? (
+        <Link
+          {...attributes}
+          className={mergeClasses(String(attributes.className || ''), classes.itemTitle, 'better-list__item-title')}
+          href={item.href}
+          key={key}
+        >
+          {item.title}
+        </Link>
+      ) : (
+        <Text
+          {...attributes}
+          className={mergeClasses(
+            String(attributes.className || ''),
+            classes.itemTitleText,
+            'better-list__item-title',
+            'better-list__item-title--text'
+          )}
+          key={key}
+        >
+          {item.title}
+        </Text>
+      );
     return renderFragment(
       'item',
       {
@@ -505,30 +654,24 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
       },
       {
         title: (attributes, key) =>
-          item.href ? (
-            <Link
-              {...attributes}
-              className={mergeClasses(String(attributes.className || ''), classes.itemTitle, 'better-list__item-title')}
-              href={item.href}
-              key={key}
-            >
-              {item.title}
-            </Link>
-          ) : (
-            <Text
-              {...attributes}
-              className={mergeClasses(
-                String(attributes.className || ''),
-                classes.itemTitleText,
-                'better-list__item-title',
-                'better-list__item-title--text'
-              )}
-              key={key}
-            >
-              {item.title}
-            </Text>
-          ),
-        properties: () => renderItemElements(elements, classes, showItemDescriptions)
+          itemLayoutRows.length > 0
+            ? itemLayoutRows.map((row, index) =>
+                renderItemLayoutRow(
+                  row,
+                  index,
+                  elements,
+                  classes,
+                  showItemDescriptions,
+                  () => renderTitle(attributes, `${key}-title`)
+                )
+              )
+            : itemPropertyFields.indexOf('Title') >= 0
+              ? renderTitle(attributes, key)
+              : null,
+        properties: () =>
+          itemLayoutRows.length > 0
+            ? null
+            : renderItemElements(elements, classes, showItemDescriptions)
       },
       {
         ...slotAttributes,
@@ -658,7 +801,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
     if (!grouped) {
       return (
         <div className={mergeClasses(classes.grid, 'better-list__grid')} style={gridStyle} aria-live="polite">
-          {renderListTemplate(visibleItems.slice().sort(compareItems), density, showDescriptions)}
+          {renderListTemplate(displayedItems, density, showDescriptions)}
         </div>
       );
     }
@@ -689,8 +832,13 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
             aria-label="Better List views"
           >
             {tabs.map((tab) => (
-              <Tab className={mergeClasses(classes.tab, 'better-list__tab')} key={tab.key} value={tab.key}>
-                {tab.label}
+              <Tab
+                className={mergeClasses(classes.tab, 'better-list__tab')}
+                icon={tab.icon ? React.createElement(TAB_ICON_BY_KIND[tab.icon], { 'aria-hidden': true }) : undefined}
+                key={tab.key}
+                value={tab.key}
+              >
+                {tab.showItemCount ? `${tab.label} (${tab.itemCount ?? 0})` : tab.label}
               </Tab>
             ))}
           </TabList>

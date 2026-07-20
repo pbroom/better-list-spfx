@@ -103,6 +103,36 @@ describe('SharePointBetterListDataSource', () => {
     expect(result.items[0].metadata[0].value).toBe('General services and resources');
   });
 
+  it('queries an authored active column and omits items that are not active', async () => {
+    const urls: string[] = [];
+    const client: SPHttpClient = {
+      get: (url: string) => {
+        urls.push(url);
+        return Promise.resolve(response({
+          value: [
+            { Id: 1, Title: 'Published', Published: true },
+            { Id: 2, Title: 'Draft', Published: false }
+          ]
+        }));
+      }
+    } as unknown as SPHttpClient;
+    const source = new SharePointBetterListDataSource(
+      client,
+      'https://contoso.sharepoint.com/sites/example'
+    );
+
+    const result = await source.loadItems({
+      list: { title: 'Services' },
+      mappings: {
+        title: { internalName: 'Title', kind: 'text' },
+        active: { internalName: 'Published', kind: 'boolean' }
+      }
+    });
+
+    expect(urls[0]).toContain('$select=Id,Title,Published');
+    expect(result.items.map((item) => item.title)).toEqual(['Published']);
+  });
+
   it('doubles apostrophes for OData string literals', () => {
     expect(escapeODataString("Director's Services")).toBe("Director''s Services");
   });

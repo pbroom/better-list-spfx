@@ -114,6 +114,24 @@ Edit these rules in the web part's Monaco field to restyle this instance.
   padding: 12px 0;
 }
 
+.better-list__item-row {
+  align-items: center;
+  column-gap: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+  row-gap: 6px;
+}
+
+.better-list__item-row + .better-list__item-row {
+  margin-top: 8px;
+}
+
+.better-list__item-row .better-list__metadata,
+.better-list__item-row .better-list__item-description {
+  margin-top: 0;
+}
+
 .better-list__item-title {
   color: var(--better-list-link);
   font-size: 1rem;

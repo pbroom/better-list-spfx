@@ -89,6 +89,7 @@ function allMappings(mappings: IBetterListFieldMappings): readonly BetterListFie
   ];
   return fixed
     .filter((mapping: BetterListFieldMapping | undefined): mapping is BetterListFieldMapping => !!mapping)
+    .concat(mappings.filterFields || [])
     .concat((mappings.metadata || []).map((entry) => entry.mapping));
 }
 

@@ -37,6 +37,35 @@ describe('BetterListView', () => {
     expect(html).toContain('Service title');
   });
 
+  it('renders optional tab icons and counts', () => {
+    const tabs: readonly IBetterListTab[] = [
+      { key: 'featured', label: 'Featured', icon: 'communications', itemCount: 4, showItemCount: true, items: [item] },
+      { key: 'all', label: 'All items', itemCount: 12, items: [item] }
+    ];
+
+    const html = renderToStaticMarkup(<BetterListView activeTabKey="featured" items={[item]} tabs={tabs} />);
+
+    expect(html).toContain('Featured (4)');
+    expect(html).toContain('<svg');
+    expect(html).toContain('All items');
+    expect(html).not.toContain('All items (12)');
+  });
+
+  it('applies a tab item maximum after filtering while retaining the full item count', () => {
+    const first = { ...item, id: 'first', title: 'A service' };
+    const second = { ...item, id: 'second', title: 'B service' };
+    const tabs: readonly IBetterListTab[] = [
+      { key: 'limited', label: 'Limited', itemCount: 2, maxItems: 1, showItemCount: true, items: [first, second] },
+      { key: 'all', label: 'All', items: [first, second] }
+    ];
+
+    const html = renderToStaticMarkup(<BetterListView activeTabKey="limited" items={[first, second]} tabs={tabs} />);
+
+    expect(html).toContain('Limited (2)');
+    expect(html).toContain('A service');
+    expect(html).not.toContain('B service');
+  });
+
   it('renders configured item elements in their authored order', () => {
     const tabs: readonly IBetterListTab[] = [
       {
@@ -52,6 +81,74 @@ describe('BetterListView', () => {
 
     expect(html.indexOf('Service title')).toBeLessThan(html.indexOf('Service description'));
     expect(html.indexOf('Service description')).toBeLessThan(html.indexOf('Organization'));
+    expect(html).not.toContain('better-list-row-1');
+  });
+
+  it('renders configured flex rows in authored order, including a moved Title, and keeps empty rows addressable', () => {
+    const tabs: readonly IBetterListTab[] = [
+      {
+        key: 'all',
+        label: 'All items',
+        grouped: false,
+        layout: { showSearch: false },
+        items: [item]
+      }
+    ];
+
+    const html = renderToStaticMarkup(
+      <BetterListView
+        activeTabKey="all"
+        itemLayoutRows={[
+          ['Organization'],
+          ['Description', 'Title'],
+          []
+        ]}
+        items={[item]}
+        tabs={tabs}
+      />
+    );
+
+    expect(html).toContain('better-list-row-1');
+    expect(html).toContain('better-list-row-2');
+    expect(html).toContain('better-list-row-3');
+    expect(html).toContain('data-item-row="3"');
+    expect(html.indexOf('Organization')).toBeLessThan(html.indexOf('Service description'));
+    expect(html.indexOf('Service description')).toBeLessThan(html.indexOf('Service title'));
+  });
+
+  it('omits Title when it is removed and keeps the remaining row layout', () => {
+    const tabs: readonly IBetterListTab[] = [
+      {
+        key: 'all',
+        label: 'All items',
+        grouped: false,
+        layout: { showSearch: false },
+        items: [item]
+      }
+    ];
+
+    const rowHtml = renderToStaticMarkup(
+      <BetterListView
+        activeTabKey="all"
+        itemLayoutRows={[['Organization'], []]}
+        itemPropertyFields={['Organization']}
+        items={[item]}
+        tabs={tabs}
+      />
+    );
+    const emptyHtml = renderToStaticMarkup(
+      <BetterListView
+        activeTabKey="all"
+        itemPropertyFields={[]}
+        items={[{ ...item, elements: [] }]}
+        tabs={tabs}
+      />
+    );
+
+    expect(rowHtml).not.toContain('Service title');
+    expect(rowHtml).toContain('Organization');
+    expect(rowHtml).toContain('better-list-row-2');
+    expect(emptyHtml).not.toContain('Service title');
   });
 
   it('renders custom shell, list, and item wrappers with escaped display tokens', () => {

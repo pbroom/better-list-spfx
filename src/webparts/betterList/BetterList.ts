@@ -6,8 +6,8 @@ import { BaseClientSideWebPart } from '@microsoft/sp-webpart-base';
 import * as strings from 'WebPartStrings';
 
 import {
+  addTabFilterMappings,
   BetterListFieldValue,
-  BetterListComparableValue,
   betterListStylePresetVersion,
   createDefaultTabs,
   defaultBetterListScss,
@@ -20,10 +20,12 @@ import {
   IBetterListGroupResult,
   IBetterListItem as ICoreBetterListItem,
   IBetterListTabConfig,
+  parseItemLayoutRows,
   parseItemPropertyFields,
   parseTabConfiguration,
   processItems,
   scopeBetterListStyles,
+  serializeItemLayoutRows,
   serializeItemPropertyFields,
   serializeTabConfiguration
 } from '../../shared';
@@ -41,6 +43,7 @@ export interface IBetterListWebPartProps {
   sourceListTitle: string;
   fieldMappingsJson: string;
   itemPropertiesJson: string;
+  itemLayoutJson: string;
   tabsColumn: string;
   groupsColumn: string;
   groupsCollapsible: boolean;
@@ -76,6 +79,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       this._activeTabKey = firstTab?.key || '';
     }
     const wrapperClassName = `better-list-instance-${this._getInstanceSeed()}`;
+    const itemPropertyFields = parseItemPropertyFields(this.properties.itemPropertiesJson);
     const view = React.createElement(BetterListView, {
       tabs: presentationTabs,
       activeTabKey: this._activeTabKey,
@@ -86,6 +90,11 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
         ? 'There are no active list items to display.'
         : 'Choose a source list and map its Title field in the web part settings.',
       htmlTemplate: this.properties.htmlTemplate,
+      itemPropertyFields,
+      itemLayoutRows: parseItemLayoutRows(
+        this.properties.itemLayoutJson,
+        itemPropertyFields
+      ),
       listTitle: this.properties.sourceListTitle,
       onTabChange: (tabKey: string): void => {
         this._activeTabKey = tabKey;
@@ -113,6 +122,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     this.properties.sourceListTitle = this.properties.sourceListTitle || '';
     this.properties.fieldMappingsJson = this.properties.fieldMappingsJson || '{}';
     this.properties.itemPropertiesJson = this.properties.itemPropertiesJson || serializeItemPropertyFields(['Title']);
+    this.properties.itemLayoutJson = this.properties.itemLayoutJson || '[]';
     this.properties.tabsColumn = this.properties.tabsColumn || '';
     this.properties.groupsColumn = this.properties.groupsColumn || '';
     this.properties.groupsCollapsible = this.properties.groupsCollapsible !== false;
@@ -216,6 +226,10 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       sourceListTitle: this.properties.sourceListTitle,
       fieldMappings: this._readMappings(),
       itemProperties: parseItemPropertyFields(this.properties.itemPropertiesJson),
+      itemLayoutRows: parseItemLayoutRows(
+        this.properties.itemLayoutJson,
+        parseItemPropertyFields(this.properties.itemPropertiesJson)
+      ),
       tabsColumn: this.properties.tabsColumn,
       groupsColumn: this.properties.groupsColumn,
       groupsCollapsible: this.properties.groupsCollapsible,
@@ -234,6 +248,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       sourceListTitle: value.sourceListTitle,
       fieldMappingsJson: JSON.stringify(value.fieldMappings),
       itemPropertiesJson: serializeItemPropertyFields(value.itemProperties),
+      itemLayoutJson: serializeItemLayoutRows(value.itemLayoutRows, value.itemProperties),
       tabsColumn: value.tabsColumn,
       groupsColumn: value.groupsColumn,
       groupsCollapsible: value.groupsCollapsible,
@@ -283,7 +298,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     try {
       const result = await this._dataSource.loadItems({
         list: { id: this.properties.sourceListId, title: this.properties.sourceListTitle },
-        mappings: this._readMappings() as IBetterListFieldMappings
+        mappings: addTabFilterMappings(this._readMappings() as IBetterListFieldMappings, this._readTabs())
       });
       this._items = result.items;
       this._status = 'ready';
@@ -311,6 +326,10 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     return {
       key: tab.id,
       label: tab.label,
+      icon: tab.tabIcon,
+      itemCount: items.length,
+      maxItems: tab.maxItems,
+      showItemCount: tab.showItemCount,
       grouped: Boolean(tab.group),
       items,
       layout: tab.layout
@@ -326,8 +345,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     selectedItemProperties: ReadonlySet<string>
   ): IBetterListItem {
     const elements = itemProperties
-      .slice(1)
-      .filter((fieldPath) => fieldPath !== 'URL')
+      .filter((fieldPath) => fieldPath !== 'Title' && fieldPath !== 'URL')
       .map((fieldPath) => {
         const value = formatItemPropertyValue(item.source, fieldPath);
         return value
@@ -374,53 +392,18 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
 
   private _createEffectiveTabs(): readonly IBetterListTabConfig[] {
     const configuredTabs = this._readTabs();
-    const configuredLayout = configuredTabs[0]?.layout;
     const group = this.properties.groupsColumn
       ? { field: 'group' as const, direction: 'ascending' as const, ungroupedLabel: 'Other' }
       : undefined;
-    const layout = {
-      ...configuredLayout,
-      columns: configuredLayout?.columns ?? (2 as const),
-      collapsible: group ? this.properties.groupsCollapsible : false
-    };
-    const baseTab: IBetterListTabConfig = {
-      id: 'column-all-items',
-      label: 'All items',
-      filter: { kind: 'all' },
+    return configuredTabs.map((tab) => ({
+      ...tab,
       group,
-      sort: configuredTabs[0]?.sort,
-      icon: { mode: 'none' },
-      layout
-    };
-    if (!this.properties.tabsColumn) {
-      return [baseTab];
-    }
-
-    const uniqueValues = new Map<string, BetterListComparableValue>();
-    this._items.forEach((item) => {
-      const value = item.values.tab;
-      if (value !== null && typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') {
-        return;
+      layout: {
+        ...tab.layout,
+        columns: tab.layout?.columns ?? (2 as const),
+        collapsible: group ? this.properties.groupsCollapsible : false
       }
-      const label = formatColumnLabel(value);
-      if (label && !uniqueValues.has(label)) {
-        uniqueValues.set(label, value);
-      }
-    });
-    if (uniqueValues.size === 0) {
-      return [baseTab];
-    }
-    return [
-      ...Array.from(uniqueValues.entries()).map(([label, value], index): IBetterListTabConfig => ({
-        id: `column-${slugify(label)}-${index}`,
-        label,
-        filter: { kind: 'equals', field: 'tab', value },
-        group,
-        icon: { mode: 'none' },
-        layout
-      })),
-      { ...baseTab, label: 'All items' }
-    ];
+    }));
   }
 
   private _hasCompleteConfiguration(): boolean {
@@ -464,10 +447,10 @@ function coerceTabFilterValues(
   mappings: Partial<IBetterListFieldMappings>
 ): readonly IBetterListTabConfig[] {
   return tabs.map((tab) => {
-    if (tab.filter.kind !== 'equals') {
+    if (tab.filter.kind === 'all' || tab.filter.kind === 'query') {
       return tab;
     }
-    const mapping = mappings[tab.filter.field];
+    const mapping = tab.filter.kind === 'sourceEquals' ? tab.filter.mapping : mappings[tab.filter.field];
     const rawValue = tab.filter.value;
     let value = rawValue;
     if (mapping?.kind === 'boolean' && typeof rawValue === 'string') {
@@ -498,21 +481,4 @@ function toDisplayString(value: BetterListFieldValue | undefined): string {
     return value.filter((entry) => entry !== null).join(', ');
   }
   return value === undefined || value === null ? '' : String(value);
-}
-
-function stripSortPrefix(value: string): string {
-  return value.trim().replace(/^\d+(?:\.\d+)?\s*\|\s*/, '');
-}
-
-function formatColumnLabel(value: BetterListFieldValue | undefined): string {
-  return typeof value === 'boolean' ? (value ? 'Yes' : 'No') : stripSortPrefix(toDisplayString(value));
-}
-
-function slugify(value: string): string {
-  return (
-    value
-      .toLocaleLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '') || 'value'
-  );
 }
