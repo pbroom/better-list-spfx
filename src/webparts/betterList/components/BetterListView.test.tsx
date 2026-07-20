@@ -90,6 +90,29 @@ describe('BetterListView', () => {
     expect(html).toContain('better-list__item');
   });
 
+  it('forwards authored items-slot attributes to each rendered item root', () => {
+    const tabs: readonly IBetterListTab[] = [
+      {
+        key: 'all',
+        label: 'All items',
+        grouped: false,
+        layout: { showSearch: false },
+        items: [item]
+      }
+    ];
+    const template = customTemplate.replace(
+      '<li data-bl-slot="items"></li>',
+      '<li class="slot-item" data-template-item="true" data-bl-slot="items"></li>'
+    );
+
+    const html = renderToStaticMarkup(
+      <BetterListView activeTabKey="all" htmlTemplate={template} items={[item]} tabs={tabs} />
+    );
+
+    expect(html).toContain('class="custom-item slot-item');
+    expect(html).toContain('data-template-item="true"');
+  });
+
   it('renders grouped wrappers and group tokens while preserving trusted collapse semantics', () => {
     const tabs: readonly IBetterListTab[] = [
       {

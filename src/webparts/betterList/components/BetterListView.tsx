@@ -482,7 +482,8 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   const renderItemTemplate = (
     item: IBetterListItem,
     densityValue: 'compact' | 'comfortable',
-    showItemDescriptions: boolean
+    showItemDescriptions: boolean,
+    slotAttributes: Record<string, unknown> = {}
   ): React.ReactElement => {
     const metadata = (item.metadata ?? [item.organizationCode, item.organizationName]).filter((value): value is string =>
       Boolean(value?.trim())
@@ -530,7 +531,9 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
         properties: () => renderItemElements(elements, classes, showItemDescriptions)
       },
       {
+        ...slotAttributes,
         className: mergeClasses(
+          String(slotAttributes.className || ''),
           classes.item,
           densityValue === 'compact' && classes.itemCompact,
           'better-list__item',
@@ -551,7 +554,8 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
       'list',
       {},
       {
-        items: () => listItems.map((item) => renderItemTemplate(item, densityValue, showItemDescriptions))
+        items: (attributes) =>
+          listItems.map((item) => renderItemTemplate(item, densityValue, showItemDescriptions, attributes))
       },
       {
         className: mergeClasses(classes.list, 'better-list__items'),

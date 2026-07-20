@@ -1,4 +1,4 @@
-import { SourceEditorDiagnostic } from '../vendor/source-editor/sourceEditorCore';
+import { measureSourceBytes, SourceEditorDiagnostic } from '../vendor/source-editor/sourceEditorCore';
 
 export const betterListTemplateMaxBytes = 32 * 1024;
 
@@ -93,7 +93,22 @@ const reservedDataAttributeNames = new Set([
   'data-theme'
 ]);
 
-const tokenPattern = /\{\{\s*([a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*)+)\s*\}\}/gi;
+const voidElementTags = new Set([
+  'area',
+  'base',
+  'br',
+  'col',
+  'embed',
+  'hr',
+  'img',
+  'input',
+  'link',
+  'meta',
+  'param',
+  'source',
+  'track',
+  'wbr'
+]);
 
 export const defaultBetterListHtmlTemplate = `<template data-bl-fragment="shell">
   <section>
@@ -137,7 +152,7 @@ export function validateBetterListTemplateStructure(source: string): SourceEdito
 
 export function parseBetterListTemplate(source: string, enforceByteLimit = true): IBetterListTemplateParseResult {
   const diagnostics: SourceEditorDiagnostic[] = [];
-  if (enforceByteLimit && measureUtf8Bytes(source) > betterListTemplateMaxBytes) {
+  if (enforceByteLimit && measureSourceBytes(source) > betterListTemplateMaxBytes) {
     diagnostics.push(error('Source is larger than the 32 KB limit.'));
   }
   if (!source.trim()) {
@@ -230,7 +245,7 @@ export function resolveBetterListTemplate(source: string | undefined): IBetterLi
 }
 
 export function substituteBetterListTokens(value: string, tokens: Readonly<Record<string, string | number | undefined>>): string {
-  return value.replace(tokenPattern, (_match, tokenName: string) => {
+  return value.replace(createTokenPattern(), (_match, tokenName: string) => {
     const tokenValue = tokens[tokenName.toLocaleLowerCase()];
     return tokenValue === undefined ? '' : String(tokenValue);
   });
@@ -327,9 +342,9 @@ function validateTokens(
   diagnostics: SourceEditorDiagnostic[]
 ): void {
   const allowedTokens = tokensByFragment[fragmentName];
+  const tokenPattern = createTokenPattern();
   let residue = value;
   let match: RegExpExecArray | null;
-  tokenPattern.lastIndex = 0;
   while ((match = tokenPattern.exec(value))) {
     const token = match[1].toLocaleLowerCase();
     residue = residue.replace(match[0], '');
@@ -383,7 +398,7 @@ function findMalformedMarkup(source: string): string | undefined {
       if (open !== tag) {
         return `Malformed HTML: expected </${open || 'none'}> before </${tag}>.`;
       }
-    } else if (!/\/\s*>$/.test(raw)) {
+    } else if (!voidElementTags.has(tag) && !/\/\s*>$/.test(raw)) {
       stack.push(tag);
     }
     cursor = tagEnd + 1;
@@ -427,27 +442,8 @@ function error(message: string): SourceEditorDiagnostic {
   return { level: 'error', message };
 }
 
-function measureUtf8Bytes(value: string): number {
-  let bytes = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    const code = value.charCodeAt(index);
-    if (code < 0x80) {
-      bytes += 1;
-    } else if (code < 0x800) {
-      bytes += 2;
-    } else if (code >= 0xd800 && code <= 0xdbff && index + 1 < value.length) {
-      const next = value.charCodeAt(index + 1);
-      if (next >= 0xdc00 && next <= 0xdfff) {
-        bytes += 4;
-        index += 1;
-      } else {
-        bytes += 3;
-      }
-    } else {
-      bytes += 3;
-    }
-  }
-  return bytes;
+function createTokenPattern(): RegExp {
+  return /\{\{\s*([a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*)+)\s*\}\}/gi;
 }
 
 function createEmergencyBetterListTemplate(): IBetterListCompiledTemplate {

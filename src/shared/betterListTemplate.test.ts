@@ -95,6 +95,15 @@ describe('Better List HTML templates', () => {
     ).toContain('32 KB');
   });
 
+  it('reports forbidden void elements through the element allowlist', () => {
+    const source = defaultBetterListHtmlTemplate.replace(
+      '<span data-bl-slot="title"></span>',
+      '<br><span data-bl-slot="title"></span>'
+    );
+
+    expect(messages(source)).toContain('Element <br> is not allowed in Better List templates.');
+  });
+
   it('accepts greater-than signs in text and quoted attributes', () => {
     const source = defaultBetterListHtmlTemplate.replace(
       '<li>',
@@ -116,6 +125,13 @@ describe('Better List HTML templates', () => {
         'item.id': 7
       })
     ).toBe('<em>unsafe</em> / 7');
+  });
+
+  it('substitutes every token independently across repeated calls', () => {
+    const tokens = { 'item.title': 'Title', 'item.id': 7 };
+
+    expect(substituteBetterListTokens('{{item.title}} / {{item.id}}', tokens)).toBe('Title / 7');
+    expect(substituteBetterListTokens('{{ITEM.ID}} / {{item.title}}', tokens)).toBe('7 / Title');
   });
 });
 
