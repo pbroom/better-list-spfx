@@ -25,7 +25,12 @@
   width: 100%;
 }
 
+.better-list-lab[data-breakpoint='one-half'] .better-list__items,
+.better-list-lab[data-breakpoint='one-third'] .better-list__items,
 .better-list-lab[data-breakpoint='mobile'] .better-list__items {
   grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.better-list-lab[data-breakpoint='mobile'] .better-list__items {
   row-gap: 0;
 }

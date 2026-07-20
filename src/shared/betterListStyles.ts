@@ -108,7 +108,6 @@ Edit these rules in the web part's Monaco field to restyle this instance.
 .better-list__item {
   color: var(--better-list-text);
   padding: 16px 0;
-  border-top: 1px solid var(--better-list-border);
 }
 
 .better-list__item--compact {

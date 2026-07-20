@@ -6,6 +6,7 @@ describe('Better List author styles', () => {
     expect(defaultBetterListScss).toContain('.better-list__group-button');
     expect(defaultBetterListScss).toContain('.better-list__item-description');
     expect(defaultBetterListScss).toContain('@media (max-width: 760px)');
+    expect(defaultBetterListScss.match(/\.better-list__item \{([^}]*)\}/)?.[1]).not.toContain('border');
   });
 
   it('scopes Better List selectors without rewriting similarly named hosts', () => {
