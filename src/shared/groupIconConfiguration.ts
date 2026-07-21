@@ -4,6 +4,7 @@ export interface IBetterListCatalogGroupIcon {
   kind: 'icon';
   library: BetterListGroupIconLibrary;
   name: string;
+  color?: string;
 }
 
 export interface IBetterListImageGroupIcon {
@@ -33,6 +34,7 @@ export interface IBetterListGroupIconsConfiguration {
 
 const BETTER_LIST_GROUP_ICON_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const BETTER_LIST_GROUP_ICON_NAME_MAX_LENGTH = 128;
+const BETTER_LIST_GROUP_ICON_COLOR_PATTERN = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 
 export const defaultBetterListGroupIconsConfiguration: IBetterListGroupIconsConfiguration = {
   version: 1,
@@ -70,6 +72,20 @@ export function normalizeBetterListGroupImageUrl(value: string): string | undefi
     return undefined;
   }
   return undefined;
+}
+
+export function normalizeBetterListGroupIconColor(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (!BETTER_LIST_GROUP_ICON_COLOR_PATTERN.test(trimmed)) {
+    return undefined;
+  }
+  const channels = trimmed.slice(1).toLowerCase();
+  return channels.length === 3
+    ? `#${channels[0]}${channels[0]}${channels[1]}${channels[1]}${channels[2]}${channels[2]}`
+    : `#${channels}`;
 }
 
 export function parseBetterListGroupIconsConfiguration(value: string | undefined): IBetterListGroupIconsConfiguration {
@@ -155,7 +171,8 @@ function readGroupIconOverride(value: unknown): BetterListGroupIconOverride | un
     value.name.length <= BETTER_LIST_GROUP_ICON_NAME_MAX_LENGTH &&
     BETTER_LIST_GROUP_ICON_NAME_PATTERN.test(value.name)
   ) {
-    return { kind: 'icon', library: value.library, name: value.name };
+    const color = value.library === 'fluent-color' ? undefined : normalizeBetterListGroupIconColor(value.color);
+    return { kind: 'icon', library: value.library, name: value.name, ...(color ? { color } : {}) };
   }
   return undefined;
 }
