@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-use-before-define -- Small property-pane controls are composed before their declarations. */
 import * as React from 'react';
+import { tokens } from '@fluentui/react-components';
 
 import {
   createBetterListFieldMapping,
@@ -12,6 +13,7 @@ import {
   BetterListItemElementLinks,
   IBetterListFieldDescriptor,
   IBetterListFieldMappings,
+  IBetterListGroupIconsConfiguration,
   IBetterListTabConfig,
   validateBetterListTemplateStructure
 } from '../../../../shared';
@@ -29,6 +31,7 @@ export interface IBetterListAuthoringState {
   tabsColumn: string;
   groupsColumn: string;
   groupsCollapsible: boolean;
+  groupIcons: IBetterListGroupIconsConfiguration;
   tabs: IBetterListTabConfig[];
   customCss: string;
   htmlTemplate: string;
@@ -177,6 +180,7 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
       tabsColumn: '',
       groupsColumn: '',
       groupsCollapsible: true,
+      groupIcons: { ...props.value.groupIcons, overrides: [] },
       tabs: createDefaultTabs().slice()
     });
   };
@@ -228,7 +232,11 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
     }
     patchValue({
       fieldMappings,
-      groupsColumn: fieldPath
+      groupsColumn: fieldPath,
+      groupIcons:
+        fieldPath === props.value.groupsColumn
+          ? props.value.groupIcons
+          : { ...props.value.groupIcons, overrides: [] }
     });
   };
   const groupingFields = fields.filter(isGroupingColumn);
@@ -262,7 +270,12 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
       </section>
 
       <section className="bl-pane__section">
-        <h3>{props.value.tabs.length > 1 ? `Tabs (${props.value.tabs.length})` : 'Tabs'}</h3>
+        <h3>
+          Tabs
+          {props.value.tabs.length > 1 ? (
+            <span className="bl-pane__section-count"> ({props.value.tabs.length})</span>
+          ) : null}
+        </h3>
         <TabBuilder fields={tabFilterFields} tabs={props.value.tabs} onChange={(tabs) => patchValue({ tabs: tabs.slice(), tabsColumn: '' })} />
       </section>
 
@@ -285,14 +298,44 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
           onRemove={() => updateGroupColumn('')}
         />
         {props.value.groupsColumn ? (
-          <label className="bl-pane__check">
-            <input
-              checked={props.value.groupsCollapsible}
-              type="checkbox"
-              onChange={(event) => patchValue({ groupsCollapsible: event.currentTarget.checked })}
-            />
-            <span>Allow groups to collapse</span>
-          </label>
+          <>
+            <label className="bl-pane__check">
+              <input
+                checked={props.value.groupsCollapsible}
+                type="checkbox"
+                onChange={(event) => patchValue({ groupsCollapsible: event.currentTarget.checked })}
+              />
+              <span>Allow groups to collapse</span>
+            </label>
+            <label className="bl-pane__check">
+              <input
+                checked={props.value.groupIcons.showIcons}
+                type="checkbox"
+                onChange={(event) =>
+                  patchValue({ groupIcons: { ...props.value.groupIcons, showIcons: event.currentTarget.checked } })
+                }
+              />
+              <span>Show group icons</span>
+            </label>
+            {props.value.groupIcons.overrides.length ? (
+              <div className="bl-pane__setting-row">
+                <span>{`${props.value.groupIcons.overrides.length} icon override${
+                  props.value.groupIcons.overrides.length === 1 ? '' : 's'
+                }`}</span>
+                <button
+                  className="bl-pane__text-button"
+                  type="button"
+                  onClick={() => patchValue({ groupIcons: { ...props.value.groupIcons, overrides: [] } })}
+                >
+                  Reset all
+                </button>
+              </div>
+            ) : (
+              <p className="bl-pane__hint">
+                In page edit mode, select a group icon to replace it with an icon or image.
+              </p>
+            )}
+          </>
         ) : null}
       </section>
 
@@ -422,6 +465,7 @@ const propertyPaneCss = `
 .bl-pane *, .bl-pane *::before, .bl-pane *::after { box-sizing: border-box; }
 .bl-pane__section { border: 0; border-bottom: 1px solid #e0e0e0; margin: 0; padding: 16px 12px; }
 .bl-pane__section h2, .bl-pane__section h3, .bl-pane__section legend { color: #0f2d4a; font-size: 16px; font-weight: 600; margin: 0 0 12px; padding: 0; }
+.bl-pane__section-count { color: ${tokens.colorNeutralForeground3}; font-weight: 400; margin-left: 4px; }
 .bl-pane__section legend { float: left; width: 100%; }
 .bl-pane__section legend + * { clear: both; }
 .bl-pane__field { display: flex; flex-direction: column; gap: 5px; margin: 0 0 12px; min-width: 0; }
@@ -446,5 +490,8 @@ const propertyPaneCss = `
 .bl-pane__axis-summary { align-items: center; display: flex; font-size: 12px; justify-content: space-between; gap: 8px; }
 .bl-pane__check { align-items: center; display: flex; font-size: 12px; gap: 8px; margin-top: 10px; }
 .bl-pane__check input { min-height: auto; width: auto; }
+.bl-pane__setting-row { align-items: center; color: #616161; display: flex; font-size: 12px; justify-content: space-between; gap: 8px; margin-top: 10px; }
+.bl-pane__text-button { border-color: transparent !important; min-height: 24px !important; padding: 2px 4px !important; }
+.bl-pane__hint { color: #616161; font-size: 11px; line-height: 1.4; margin: 8px 0 0; }
 .bl-pane__template-editor { border-top: 1px solid #e0e0e0; margin-top: 16px; padding-top: 16px; }
 `;

@@ -10,6 +10,7 @@ import type {
 
 import {
   createBetterListMetadataMappings,
+  parseBetterListGroupIconsConfiguration,
   parseItemLayoutConfiguration,
   parseItemPropertyFields,
   parseTabConfiguration,
@@ -18,6 +19,7 @@ import {
   defaultBetterListHtmlTemplate,
   validateBetterListTemplateStructure,
   serializeItemLayoutConfiguration,
+  serializeBetterListGroupIconsConfiguration,
   serializeItemPropertyFields,
   serializeTabConfiguration,
   IBetterListFieldMappings,
@@ -40,6 +42,7 @@ export type BetterListLabProps = LabPropertyBag & {
   tabsColumn: string;
   groupsColumn: string;
   groupsCollapsible: boolean;
+  groupIconsJson: string;
   tabsJson: string;
   customCss: string;
   htmlTemplate: string;
@@ -75,6 +78,11 @@ const useStyles = makeStyles({
     fontSize: '14px',
     fontWeight: 600,
     margin: 0
+  },
+  sectionCount: {
+    color: tokens.colorNeutralForeground3,
+    fontWeight: 400,
+    marginLeft: '4px'
   },
   sectionIcon: {
     display: 'flex',
@@ -177,6 +185,10 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
     [values.itemLayoutJson, values.itemPropertiesJson]
   );
   const tabs = React.useMemo(() => readTabs(values.tabsJson), [values.tabsJson]);
+  const groupIcons = React.useMemo(
+    () => parseBetterListGroupIconsConfiguration(values.groupIconsJson),
+    [values.groupIconsJson]
+  );
   const mappings = React.useMemo(() => readMappings(values.fieldMappingsJson), [values.fieldMappingsJson]);
   const tabFilterFields = React.useMemo(
     () => createTabFilterFields(mappings),
@@ -219,7 +231,12 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
             }
           />
         }
-        label={tabs.length > 1 ? `Tabs (${tabs.length})` : 'Tabs'}
+        label={
+          <>
+            Tabs
+            {tabs.length > 1 ? <span className={classes.sectionCount}> ({tabs.length})</span> : null}
+          </>
+        }
       >
         <TabBuilder
           fields={tabFilterFields}
@@ -235,7 +252,12 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
           <ColumnPickerMenu
             ariaLabel="Select groups column"
             fields={groupingFields}
-            onSelect={(groupsColumn) => onChange({ groupsColumn })}
+            onSelect={(groupsColumn) =>
+              onChange({
+                groupsColumn,
+                groupIconsJson: serializeBetterListGroupIconsConfiguration({ ...groupIcons, overrides: [] })
+              })
+            }
             selectedPaths={new Set(values.groupsColumn ? [values.groupsColumn] : [])}
           />
         }
@@ -246,15 +268,52 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
           fieldPath={values.groupsColumn}
           removeAriaLabel="Remove groups column"
           selectedLabel="Groups column"
-          onRemove={() => onChange({ groupsColumn: '' })}
+          onRemove={() =>
+            onChange({
+              groupsColumn: '',
+              groupIconsJson: serializeBetterListGroupIconsConfiguration({ ...groupIcons, overrides: [] })
+            })
+          }
         />
         {values.groupsColumn ? (
-          <Switch
-            checked={values.groupsCollapsible}
-            className={classes.switch}
-            label="Allow groups to collapse"
-            onChange={(_event, data) => onChange({ groupsCollapsible: data.checked })}
-          />
+          <>
+            <Switch
+              checked={values.groupsCollapsible}
+              className={classes.switch}
+              label="Allow groups to collapse"
+              onChange={(_event, data) => onChange({ groupsCollapsible: data.checked })}
+            />
+            <Switch
+              checked={groupIcons.showIcons}
+              className={classes.switch}
+              label="Show group icons"
+              onChange={(_event, data) =>
+                onChange({
+                  groupIconsJson: serializeBetterListGroupIconsConfiguration({ ...groupIcons, showIcons: data.checked })
+                })
+              }
+            />
+            {groupIcons.overrides.length ? (
+              <div className={classes.settingRow}>
+                <span className={classes.settingSummary}>{`${groupIcons.overrides.length} icon override${
+                  groupIcons.overrides.length === 1 ? '' : 's'
+                }`}</span>
+                <Button
+                  appearance="subtle"
+                  size="small"
+                  onClick={() =>
+                    onChange({
+                      groupIconsJson: serializeBetterListGroupIconsConfiguration({ ...groupIcons, overrides: [] })
+                    })
+                  }
+                >
+                  Reset all
+                </Button>
+              </div>
+            ) : (
+              <p className={classes.settingEmpty}>Select a group icon in the preview to replace it.</p>
+            )}
+          </>
         ) : null}
       </DisclosureSection>
 
@@ -334,7 +393,7 @@ interface IDisclosureSectionProps {
   children: React.ReactNode;
   defaultExpanded?: boolean;
   icon?: 'code';
-  label: string;
+  label: React.ReactNode;
 }
 
 const DisclosureSection: React.FunctionComponent<IDisclosureSectionProps> = ({

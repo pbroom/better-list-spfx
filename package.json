@@ -10,6 +10,7 @@
   "scripts": {
     "build": "heft test --clean --production && heft package-solution --production",
     "clean": "heft clean",
+    "generate:group-icons": "node scripts/generate-group-icon-catalogs.mjs",
     "test": "heft test",
     "serve": "heft start --clean",
     "start": "heft start --clean",
@@ -22,6 +23,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@fluentui/react-components": "9.74.1",
     "@fluentui/react-icons": "2.0.330",
+    "@iconify/react": "^4.1.1",
     "@microsoft/sp-component-base": "1.23.2",
     "@microsoft/sp-core-library": "1.23.2",
     "@microsoft/sp-http": "1.23.2",
@@ -35,6 +37,9 @@
     "tslib": "2.3.1"
   },
   "devDependencies": {
+    "@iconify-json/fluent": "^1.2.53",
+    "@iconify-json/fluent-color": "^1.2.21",
+    "@iconify-json/solar": "^1.2.5",
     "@microsoft/eslint-config-spfx": "1.23.2",
     "@microsoft/eslint-plugin-spfx": "1.23.2",
     "@microsoft/sp-module-interfaces": "1.23.2",

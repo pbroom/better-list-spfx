@@ -13,6 +13,7 @@ import {
   Tab,
   TabList,
   Text,
+  Tooltip,
   makeStyles,
   mergeClasses,
   shorthands
@@ -25,20 +26,33 @@ import {
   DocumentTextRegular,
   FluentIcon,
   HeadsetRegular,
+  ImageEditRegular,
   InfoRegular,
   MegaphoneRegular,
   SearchRegular
 } from '@fluentui/react-icons';
 import {
   BetterListItemLayoutRows,
+  BetterListGroupIconOverride,
   BetterListTabIcon,
   BetterListTemplateFragmentName,
   BetterListTemplateSlotName,
   IBetterListTemplateElementNode,
   IBetterListTemplateNode,
+  IBetterListGroupIconsConfiguration,
+  defaultBetterListGroupIconsConfiguration,
+  getBetterListGroupIconOverride,
   resolveBetterListTemplate,
   substituteBetterListTokens
 } from '../../../shared';
+import { BetterListGroupIconVisual } from './GroupIconCatalog';
+
+const GroupIconPickerDialog = React.lazy(async () => {
+  const module = await import(
+    /* webpackChunkName: 'better-list-group-icon-picker' */ './GroupIconPickerDialog'
+  );
+  return { default: module.GroupIconPickerDialog };
+});
 
 export type BetterListStatus = 'loading' | 'ready' | 'error';
 
@@ -111,10 +125,14 @@ export interface IBetterListViewProps {
   htmlTemplate?: string;
   itemPropertyFields?: readonly string[];
   itemLayoutRows?: BetterListItemLayoutRows;
+  groupIconScope?: string;
+  groupIcons?: IBetterListGroupIconsConfiguration;
+  isEditMode?: boolean;
   listTitle?: string;
   onTabChange?: (tabKey: string) => void;
   onSearchChange?: (value: string) => void;
   onRetry?: () => void;
+  onGroupIconOverrideChange?: (groupKey: string, override: BetterListGroupIconOverride | undefined) => void;
 }
 
 type BetterListTemplateTokens = Readonly<Record<string, string | number | undefined>>;
@@ -184,8 +202,29 @@ const useStyles = makeStyles({
     minWidth: 0,
     textAlign: 'left'
   },
+  groupEditHeading: {
+    display: 'flex',
+    alignItems: 'center',
+    minHeight: '64px',
+    width: '100%'
+  },
+  groupEditTrigger: {
+    flexShrink: 0,
+    width: '40px',
+    minWidth: '40px',
+    height: '40px'
+  },
+  groupEditCollapseButton: {
+    flexGrow: 1,
+    minWidth: 0,
+    minHeight: '64px',
+    justifyContent: 'space-between'
+  },
   groupIcon: {
-    flexShrink: 0
+    flexShrink: 0,
+    width: '28px',
+    height: '28px',
+    objectFit: 'contain'
   },
   groupTitle: {
     overflowWrap: 'anywhere'
@@ -550,16 +589,21 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   htmlTemplate,
   itemPropertyFields = ['Title'],
   itemLayoutRows = [],
+  groupIconScope = '',
+  groupIcons = defaultBetterListGroupIconsConfiguration,
+  isEditMode = false,
   listTitle = 'Better List',
   onTabChange,
   onSearchChange,
-  onRetry
+  onRetry,
+  onGroupIconOverrideChange
 }) => {
   const classes = useStyles();
   const compiledTemplate = React.useMemo(() => resolveBetterListTemplate(htmlTemplate), [htmlTemplate]);
   const [selectedTabKey, setSelectedTabKey] = React.useState(activeTabKey);
   const [internalSearchValue, setInternalSearchValue] = React.useState(searchValue ?? '');
   const [collapsedGroups, setCollapsedGroups] = React.useState<Record<string, boolean>>({});
+  const [editingGroup, setEditingGroup] = React.useState<IBetterListGroup | undefined>(undefined);
   const [instanceId] = React.useState(() => {
     betterListInstanceCount += 1;
     return betterListInstanceCount;
@@ -617,6 +661,39 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
       const currentlyCollapsed = current[groupStateKey] ?? !initiallyExpanded;
       return { ...current, [groupStateKey]: !currentlyCollapsed };
     });
+  };
+
+  const renderGroupIcon = (group: IBetterListGroup): React.ReactElement | null => {
+    if (!groupIcons.showIcons) {
+      return null;
+    }
+    const className = mergeClasses(classes.groupIcon, 'better-list__group-icon');
+    const automatic = <GroupIcon className={className} kind={group.icon} title={group.title} />;
+    const override = getBetterListGroupIconOverride(groupIcons, groupIconScope, group.id);
+    return override ? (
+      <BetterListGroupIconVisual className={className} fallback={automatic} override={override} />
+    ) : (
+      automatic
+    );
+  };
+
+  const renderGroupIconEditor = (group: IBetterListGroup): React.ReactElement | null => {
+    if (!isEditMode || !groupIcons.showIcons || !onGroupIconOverrideChange) {
+      return renderGroupIcon(group);
+    }
+    const override = getBetterListGroupIconOverride(groupIcons, groupIconScope, group.id);
+    return (
+      <Tooltip content={`Change icon for ${group.title}`} relationship="label">
+        <Button
+          appearance="subtle"
+          aria-haspopup="dialog"
+          aria-label={`Change icon for ${group.title}`}
+          className={mergeClasses(classes.groupEditTrigger, 'better-list__group-icon-editor')}
+          icon={override?.kind === 'none' ? <ImageEditRegular aria-hidden="true" /> : renderGroupIcon(group)}
+          onClick={() => setEditingGroup(group)}
+        />
+      </Tooltip>
+    );
   };
 
   const classAliases: Readonly<Record<string, string>> = {
@@ -763,7 +840,25 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
             className={mergeClasses(String(attributes.className || ''), classes.groupHeading, 'better-list__group-heading')}
             key={key}
           >
-            {collapsible ? (
+            {collapsible && isEditMode && onGroupIconOverrideChange ? (
+              <span className={mergeClasses(classes.groupEditHeading, 'better-list__group-edit-heading')} id={headingId}>
+                {renderGroupIconEditor(group)}
+                <Button
+                  appearance="transparent"
+                  className={mergeClasses(classes.groupEditCollapseButton, 'better-list__group-button')}
+                  aria-controls={panelId}
+                  aria-expanded={isExpanded}
+                  onClick={() => toggleGroup(groupStateKey)}
+                >
+                  <span className={classes.groupTitle}>{group.title}</span>
+                  {isExpanded ? (
+                    <ChevronUpRegular className={mergeClasses(classes.chevron, 'better-list__chevron')} aria-hidden="true" />
+                  ) : (
+                    <ChevronDownRegular className={mergeClasses(classes.chevron, 'better-list__chevron')} aria-hidden="true" />
+                  )}
+                </Button>
+              </span>
+            ) : collapsible ? (
               <Button
                 appearance="transparent"
                 className={mergeClasses(classes.groupButton, 'better-list__group-button')}
@@ -773,11 +868,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
                 onClick={() => toggleGroup(groupStateKey)}
               >
                 <span className={mergeClasses(classes.groupButtonContent, 'better-list__group-button-content')}>
-                  <GroupIcon
-                    className={mergeClasses(classes.groupIcon, 'better-list__group-icon')}
-                    kind={group.icon}
-                    title={group.title}
-                  />
+                  {renderGroupIcon(group)}
                   <span className={classes.groupTitle}>{group.title}</span>
                 </span>
                 {isExpanded ? (
@@ -787,12 +878,15 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
                 )}
               </Button>
             ) : (
-              <span className={mergeClasses(classes.groupStaticHeading, 'better-list__group-static-heading')} id={headingId}>
-                <GroupIcon
-                  className={mergeClasses(classes.groupIcon, 'better-list__group-icon')}
-                  kind={group.icon}
-                  title={group.title}
-                />
+              <span
+                className={mergeClasses(
+                  classes.groupStaticHeading,
+                  isEditMode && classes.groupEditHeading,
+                  'better-list__group-static-heading'
+                )}
+                id={headingId}
+              >
+                {renderGroupIconEditor(group)}
                 <span className={classes.groupTitle}>{group.title}</span>
               </span>
             )}
@@ -851,14 +945,16 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
     );
   };
 
-  return renderFragment(
-    'shell',
-    {
-      'list.title': listTitle,
-      'tab.label': selectedTab?.label,
-      'results.count': visibleItems.length
-    },
-    {
+  return (
+    <>
+      {renderFragment(
+        'shell',
+        {
+          'list.title': listTitle,
+          'tab.label': selectedTab?.label,
+          'results.count': visibleItems.length
+        },
+        {
       tabs: (attributes, key) =>
         tabs.length > 1 ? (
           <TabList
@@ -931,12 +1027,29 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
           )}
         </div>
       )
-    },
-    {
-      'aria-label': 'Better List',
-      'data-selected-tab': selectedTab?.key,
-      className: mergeClasses(classes.root, 'better-list')
-    }
+        },
+        {
+          'aria-label': 'Better List',
+          'data-selected-tab': selectedTab?.key,
+          className: mergeClasses(classes.root, 'better-list')
+        }
+      )}
+      {editingGroup && onGroupIconOverrideChange ? (
+        <React.Suspense fallback={null}>
+          <GroupIconPickerDialog
+            current={getBetterListGroupIconOverride(groupIcons, groupIconScope, editingGroup.id)}
+            groupTitle={editingGroup.title}
+            open
+            onApply={(override) => onGroupIconOverrideChange(editingGroup.id, override)}
+            onOpenChange={(open) => {
+              if (!open) {
+                setEditingGroup(undefined);
+              }
+            }}
+          />
+        </React.Suspense>
+      ) : null}
+    </>
   );
 };
 
