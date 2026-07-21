@@ -13,9 +13,11 @@ import {
   IBetterListGroupResult,
   IBetterListItem,
   IBetterListMetadataValue,
+  IBetterListQueryField,
   IBetterListSort,
   IBetterListTabConfig
 } from './betterListTypes';
+import { compileBetterListFilterQuery } from './filterQuery';
 
 const FIELD_SLOTS: readonly BetterListFieldSlot[] = [
   'title',
@@ -226,7 +228,7 @@ export function normalizeItem(
     urlLabel: asString(values.urlLabel) || derivedUrlLabel,
     featured: asBoolean(values.featured, false),
     sortOrder: asNumber(values.sortOrder),
-    active: asBoolean(values.active, true),
+    active: mappings.active ? asBoolean(values.active, false) : true,
     audience: normalizeAudiencePrincipals(audienceValue),
     metadata: (mappings.metadata || []).map((entry): IBetterListMetadataValue => ({
       key: entry.key,
@@ -249,7 +251,28 @@ function equals(value: BetterListFieldValue | undefined, expected: BetterListCom
 }
 
 export function itemMatchesFilter(item: IBetterListItem, filter: BetterListFilter): boolean {
-  return filter.kind === 'all' || equals(item.values[filter.field], filter.value);
+  return createFilterMatcher(filter)(item);
+}
+
+function queryFieldValue(item: IBetterListItem, field: IBetterListQueryField): BetterListFieldValue | undefined {
+  if (field.field) {
+    return item.values[field.field];
+  }
+  return field.mapping ? normalizeFieldValue(item.source[field.mapping.internalName], field.mapping) : undefined;
+}
+
+function createFilterMatcher(filter: BetterListFilter): (item: IBetterListItem) => boolean {
+  if (filter.kind === 'all') {
+    return () => true;
+  }
+  if (filter.kind === 'query') {
+    const query = compileBetterListFilterQuery(filter.expression, filter.fields);
+    return query ? (item) => query((field) => queryFieldValue(item, field)) : () => false;
+  }
+  if (filter.kind === 'sourceEquals') {
+    return (item) => equals(normalizeFieldValue(item.source[filter.mapping.internalName], filter.mapping), filter.value);
+  }
+  return (item) => equals(item.values[filter.field], filter.value);
 }
 
 function canonicalIdentity(value: string | undefined): string | undefined {
@@ -401,8 +424,9 @@ export function processItems(
   tab: IBetterListTabConfig,
   query: string = ''
 ): readonly IBetterListItem[] {
+  const matchesFilter = createFilterMatcher(tab.filter);
   return sortItems(
-    searchItems(items.filter((item: IBetterListItem) => item.active && itemMatchesFilter(item, tab.filter)), query),
+    searchItems(items.filter((item: IBetterListItem) => item.active && matchesFilter(item)), query),
     tab.sort
   );
 }

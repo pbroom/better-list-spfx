@@ -1,9 +1,13 @@
 import {
   BetterListFieldSlot,
+  BetterListFieldMapping,
   BetterListFilter,
+  BetterListTabIcon,
   IBetterListGroup,
+  IBetterListFieldMappings,
   IBetterListIconOverride,
   IBetterListLayoutOverride,
+  IBetterListQueryField,
   IBetterListSort,
   IBetterListTabConfig
 } from './betterListTypes';
@@ -33,6 +37,29 @@ function isFieldSlot(value: unknown): value is BetterListFieldSlot {
   return typeof value === 'string' && FIELD_SLOTS.indexOf(value as BetterListFieldSlot) >= 0;
 }
 
+function isFieldKind(value: unknown): value is IBetterListQueryField['kind'] {
+  return value === 'text' || value === 'number' || value === 'boolean' || value === 'dateTime' || value === 'url' || value === 'lookup' || value === 'person';
+}
+
+function readQueryField(value: unknown): IBetterListQueryField {
+  if (!isRecord(value) || typeof value.name !== 'string' || !value.name.trim() || !isFieldKind(value.kind)) {
+    throw new Error('Each query field must include a name and supported field type.');
+  }
+  if (isFieldSlot(value.field)) {
+    return { name: value.name.trim(), kind: value.kind, field: value.field };
+  }
+  if (typeof value.fieldPath === 'string' && value.fieldPath.trim()) {
+    const mapping = readSourceMapping(value.mapping);
+    return {
+      name: value.name.trim(),
+      kind: mapping.kind,
+      fieldPath: value.fieldPath.trim(),
+      mapping
+    };
+  }
+  throw new Error('Each query field must reference a mapped or source field.');
+}
+
 function readFilter(value: unknown): BetterListFilter {
   if (value === undefined || value === null || (isRecord(value) && value.kind === 'all')) {
     return { kind: 'all' };
@@ -51,7 +78,61 @@ function readFilter(value: unknown): BetterListFilter {
       value: value.value as string | number | boolean | null
     };
   }
-  throw new Error('A tab filter must be all items or one mapped field-equals-value condition.');
+  if (
+    value.kind === 'sourceEquals' &&
+    typeof value.fieldPath === 'string' &&
+    value.fieldPath.trim() &&
+    (value.value === null || ['string', 'number', 'boolean'].indexOf(typeof value.value) >= 0)
+  ) {
+    return {
+      kind: 'sourceEquals',
+      fieldPath: value.fieldPath.trim(),
+      mapping: readSourceMapping(value.mapping),
+      value: value.value as string | number | boolean | null
+    };
+  }
+  if (value.kind === 'query' && typeof value.expression === 'string' && value.expression.trim() && Array.isArray(value.fields)) {
+    const fields = value.fields.map(readQueryField);
+    return { kind: 'query', expression: value.expression, fields };
+  }
+  throw new Error('A tab filter must be all items or one field-equals-value condition.');
+}
+
+function readSourceMapping(value: unknown): BetterListFieldMapping {
+  if (!isRecord(value) || typeof value.internalName !== 'string' || !value.internalName.trim()) {
+    throw new Error('A source-field tab filter must include a valid field mapping.');
+  }
+  const displayName = typeof value.displayName === 'string' ? value.displayName : undefined;
+  const common = { internalName: value.internalName.trim(), displayName };
+  if (value.kind === 'text' || value.kind === 'number' || value.kind === 'boolean' || value.kind === 'dateTime') {
+    return { ...common, kind: value.kind };
+  }
+  if (value.kind === 'url') {
+    return {
+      ...common,
+      kind: 'url',
+      valueProperty: value.valueProperty === 'description' ? 'description' : 'url'
+    };
+  }
+  if (value.kind === 'lookup') {
+    return {
+      ...common,
+      kind: 'lookup',
+      valueProperty: value.valueProperty === 'id' ? 'id' : 'title',
+      lookupValueField: typeof value.lookupValueField === 'string' ? value.lookupValueField : undefined,
+      multi: value.multi === true
+    };
+  }
+  if (value.kind === 'person') {
+    const valueProperty =
+      value.valueProperty === 'id' ||
+      value.valueProperty === 'email' ||
+      value.valueProperty === 'loginName'
+        ? value.valueProperty
+        : 'title';
+    return { ...common, kind: 'person', valueProperty, multi: value.multi === true };
+  }
+  throw new Error('A source-field tab filter must use a supported field type.');
 }
 
 function readGroup(value: unknown): IBetterListGroup | undefined {
@@ -131,6 +212,26 @@ function readLayout(value: unknown): IBetterListLayoutOverride | undefined {
   };
 }
 
+function readTabIcon(value: unknown): BetterListTabIcon | undefined {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+  if (value === 'list' || value === 'communications' || value === 'policy' || value === 'support') {
+    return value;
+  }
+  throw new Error('A tab icon must use one of the supported Better List icons.');
+}
+
+function readMaxItems(value: unknown): number | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+    return value;
+  }
+  throw new Error('A tab maximum item count must be a positive integer.');
+}
+
 function readTab(value: unknown, index: number): IBetterListTabConfig {
   if (!isRecord(value)) {
     throw new Error(`Tab ${index + 1} must be an object.`);
@@ -144,6 +245,9 @@ function readTab(value: unknown, index: number): IBetterListTabConfig {
     id,
     label,
     filter: readFilter(value.filter),
+    tabIcon: readTabIcon(value.tabIcon),
+    showItemCount: value.showItemCount === true,
+    maxItems: readMaxItems(value.maxItems),
     group: readGroup(value.group),
     sort: readSort(value.sort),
     icon: readIcon(value.icon),
@@ -184,6 +288,20 @@ export function serializeTabConfiguration(tabs: readonly IBetterListTabConfig[])
   return JSON.stringify(tabs);
 }
 
+export function alignTabQueryFieldKinds(
+  tab: IBetterListTabConfig,
+  mappings: Partial<IBetterListFieldMappings>
+): IBetterListTabConfig {
+  if (tab.filter.kind !== 'query') {
+    return tab;
+  }
+  const fields = tab.filter.fields.map((field) => {
+    const currentKind = field.field ? mappings[field.field]?.kind : field.mapping?.kind;
+    return currentKind && currentKind !== field.kind ? { ...field, kind: currentKind } : field;
+  });
+  return { ...tab, filter: { ...tab.filter, fields } };
+}
+
 export function createDefaultTabs(): readonly IBetterListTabConfig[] {
   return [
     {
@@ -195,4 +313,26 @@ export function createDefaultTabs(): readonly IBetterListTabConfig[] {
       layout: { columns: 2, collapsible: false, initiallyExpanded: true, showDescriptions: true, showSearch: true }
     }
   ];
+}
+
+export function addTabFilterMappings(
+  mappings: IBetterListFieldMappings,
+  tabs: readonly IBetterListTabConfig[]
+): IBetterListFieldMappings {
+  const filterFields = tabs.reduce((collected: BetterListFieldMapping[], tab): BetterListFieldMapping[] => {
+    if (tab.filter.kind === 'sourceEquals') {
+      collected.push(tab.filter.mapping);
+    } else if (tab.filter.kind === 'query') {
+      tab.filter.fields.forEach((field) => {
+        if (field.mapping) {
+          collected.push(field.mapping);
+        }
+      });
+    }
+    return collected;
+  }, []);
+  const uniqueFilterFields = filterFields.filter(
+    (mapping, index) => filterFields.findIndex((candidate) => candidate.internalName === mapping.internalName && candidate.kind === mapping.kind) === index
+  );
+  return uniqueFilterFields.length > 0 ? { ...mappings, filterFields: uniqueFilterFields } : mappings;
 }

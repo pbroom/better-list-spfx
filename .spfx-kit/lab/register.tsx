@@ -2,7 +2,6 @@ import * as React from 'react';
 import type { LabRenderProps, LabWebPart, LabWebPartRegistry } from '@spfx-kit/spfx-lab-runtime';
 
 import {
-  BetterListComparableValue,
   BetterListFieldValue,
   defaultBetterListHtmlTemplate,
   createBetterListFieldMapping,
@@ -14,6 +13,7 @@ import {
   IBetterListGroupResult,
   IBetterListItem as ICoreBetterListItem,
   IBetterListTabConfig,
+  parseItemLayoutRows,
   parseItemPropertyFields,
   parseTabConfiguration,
   processItems,
@@ -49,6 +49,7 @@ const defaultProps: BetterListLabProps = {
   sourceListTitle: servicesListTitle,
   fieldMappingsJson: JSON.stringify(servicesFieldMappings),
   itemPropertiesJson: serializeItemPropertyFields(['Title']),
+  itemLayoutJson: '[]',
   tabsColumn: '',
   groupsColumn: '',
   groupsCollapsible: true,
@@ -61,14 +62,18 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
   const [items, setItems] = React.useState<readonly ICoreBetterListItem[]>([]);
   const [status, setStatus] = React.useState<'loading' | 'ready' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = React.useState('');
-  const [activeTabKey, setActiveTabKey] = React.useState('column-all-items');
+  const [activeTabKey, setActiveTabKey] = React.useState('');
 
   const mappings = React.useMemo(() => readMappings(props.fieldMappingsJson), [props.fieldMappingsJson]);
   const effectiveMappings = React.useMemo(
-    () => createAxisMappings(mappings, props.tabsColumn, props.groupsColumn),
-    [mappings, props.groupsColumn, props.tabsColumn]
+    () => createAxisMappings(mappings, props.groupsColumn),
+    [mappings, props.groupsColumn]
   );
   const itemProperties = React.useMemo(() => parseItemPropertyFields(props.itemPropertiesJson), [props.itemPropertiesJson]);
+  const itemLayoutRows = React.useMemo(
+    () => parseItemLayoutRows(props.itemLayoutJson, itemProperties),
+    [itemProperties, props.itemLayoutJson]
+  );
   const tabs = React.useMemo(() => readTabs(props.tabsJson), [props.tabsJson]);
   const dataSource = React.useMemo(
     () =>
@@ -108,8 +113,8 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
   }, [dataSource, effectiveMappings, props.sourceListId, props.sourceListTitle]);
 
   const effectiveTabs = React.useMemo(
-    () => createColumnDrivenTabs(items, tabs, props.tabsColumn, props.groupsColumn, props.groupsCollapsible),
-    [items, props.groupsCollapsible, props.groupsColumn, props.tabsColumn, tabs]
+    () => createEffectiveTabs(tabs, props.groupsColumn, props.groupsCollapsible),
+    [props.groupsCollapsible, props.groupsColumn, tabs]
   );
   const presentationTabs = React.useMemo(
     () => effectiveTabs.map((tab) => createPresentationTab(items, tab, props.sourceListTitle, itemProperties)),
@@ -145,6 +150,8 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
         status={status}
         errorMessage={errorMessage}
         htmlTemplate={props.htmlTemplate}
+        itemPropertyFields={itemProperties}
+        itemLayoutRows={itemLayoutRows}
         listTitle={props.sourceListTitle}
         emptyMessage="There are no active Services items to display."
         onTabChange={setActiveTabKey}
@@ -191,90 +198,31 @@ function readTabs(serialized: string): readonly IBetterListTabConfig[] {
   }
 }
 
-function createColumnDrivenTabs(
-  sourceItems: readonly ICoreBetterListItem[],
+function createEffectiveTabs(
   configuredTabs: readonly IBetterListTabConfig[],
-  tabsColumn: string,
   groupsColumn: string,
   groupsCollapsible: boolean
 ): readonly IBetterListTabConfig[] {
   const groupField = groupsColumn ? ('group' as const) : undefined;
-  const configuredLayout = configuredTabs[0]?.layout;
   const group = groupField ? { field: groupField, direction: 'ascending' as const, ungroupedLabel: 'Other' } : undefined;
-  const layout = {
-    ...configuredLayout,
-    columns: configuredLayout?.columns ?? (2 as const),
-    collapsible: groupField ? groupsCollapsible : false
-  };
-  const baseTab: IBetterListTabConfig = {
-    id: 'column-all-items',
-    label: 'All items',
-    filter: { kind: 'all' },
+  return configuredTabs.map((tab) => ({
+    ...tab,
     group,
-    sort: configuredTabs[0]?.sort,
-    icon: { mode: 'none' },
-    layout
-  };
-  const tabsField = tabsColumn ? ('tab' as const) : undefined;
-  if (!tabsField) {
-    return [baseTab];
-  }
-
-  const uniqueValues = new Map<string, BetterListComparableValue>();
-  sourceItems.forEach((item) => {
-    const value = item.values[tabsField];
-    if (value !== null && typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') {
-      return;
+    layout: {
+      ...tab.layout,
+      columns: tab.layout?.columns ?? (2 as const),
+      collapsible: groupField ? groupsCollapsible : false
     }
-    const label = formatColumnLabel(value);
-    if (label && !uniqueValues.has(label)) {
-      uniqueValues.set(label, value);
-    }
-  });
-  if (uniqueValues.size === 0) {
-    return [baseTab];
-  }
-
-  const dynamicTabs = Array.from(uniqueValues.entries()).map(([label, value], index): IBetterListTabConfig => ({
-    id: `column-${slugify(label)}-${index}`,
-    label,
-    filter: { kind: 'equals', field: tabsField, value },
-    group,
-    icon: { mode: 'none' },
-    layout
   }));
-
-  return [
-    ...dynamicTabs,
-    {
-      id: 'column-all-items',
-      label: 'All Services',
-      filter: { kind: 'all' },
-      group,
-      icon: { mode: 'none' },
-      layout
-    }
-  ];
-}
-
-function formatColumnLabel(value: BetterListFieldValue | undefined): string {
-  if (typeof value === 'boolean') {
-    return value ? 'Yes' : 'No';
-  }
-  const label = toDisplayString(value).trim();
-  return label.replace(/^\d+\s*\|\s*/, '');
 }
 
 function createAxisMappings(
   mappings: IBetterListFieldMappings,
-  tabsColumn: string,
   groupsColumn: string
 ): IBetterListFieldMappings {
-  const tab = createAxisMapping(tabsColumn);
   const group = createAxisMapping(groupsColumn);
   return {
     ...mappings,
-    tab,
     group
   };
 }
@@ -286,15 +234,6 @@ function createAxisMapping(fieldPath: string): ReturnType<typeof createBetterLis
   const [internalName, lookupValueField] = fieldPath.split('.');
   const field = servicesAuthoringFields.find((candidate) => candidate.internalName === internalName);
   return field ? createBetterListFieldMapping(field, undefined, lookupValueField) : undefined;
-}
-
-function slugify(value: string): string {
-  return (
-    value
-      .toLocaleLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '') || 'value'
-  );
 }
 
 function createPresentationTab(
@@ -313,8 +252,7 @@ function createPresentationTab(
   groups.forEach((group, groupIndex) => {
     group.items.forEach((item) => {
       const elements = itemProperties
-        .slice(1)
-        .filter((fieldPath) => fieldPath !== 'URL')
+        .filter((fieldPath) => fieldPath !== 'Title' && fieldPath !== 'URL')
         .map((fieldPath) => {
           const value = formatItemPropertyValue(item.source, fieldPath);
           return value
@@ -346,6 +284,10 @@ function createPresentationTab(
   return {
     key: tab.id,
     label: tab.label,
+    icon: tab.tabIcon,
+    itemCount: items.length,
+    maxItems: tab.maxItems,
+    showItemCount: tab.showItemCount,
     grouped: Boolean(tab.group),
     items,
     layout: tab.layout

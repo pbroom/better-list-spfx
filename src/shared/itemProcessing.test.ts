@@ -96,11 +96,26 @@ describe('Better List item processing', () => {
     expect(filterVisibleItems(items, identity).map((item: IBetterListItem) => item.title)).toEqual(['Open', 'Group', 'User']);
   });
 
+  it('uses the authored active column and treats missing mapped values as inactive', () => {
+    const activeMappings: IBetterListFieldMappings = {
+      title: { internalName: 'Title', kind: 'text' },
+      active: { internalName: 'Published', kind: 'boolean' }
+    };
+    const items = [
+      normalizeItem({ Id: 1, Title: 'Published', Published: true }, activeMappings),
+      normalizeItem({ Id: 2, Title: 'Draft', Published: false }, activeMappings),
+      normalizeItem({ Id: 3, Title: 'Unclassified' }, activeMappings)
+    ];
+
+    expect(filterVisibleItems(items, { groupIds: [] }).map((item) => item.title)).toEqual(['Published']);
+    expect(normalizeItem({ Id: 4, Title: 'Legacy' }, { title: activeMappings.title }).active).toBe(true);
+  });
+
   it('filters, searches, sorts, and groups without mutating input', () => {
     const items: readonly IBetterListItem[] = [
-      normalizeItem({ Id: 2, Title: 'Second', Description: 'beta', Category: { Title: 'Policy' }, Featured: true, OrderPriority: 2 }, mappings),
-      normalizeItem({ Id: 1, Title: 'First', Description: 'alpha', Category: { Title: 'General' }, Featured: true, OrderPriority: 1 }, mappings),
-      normalizeItem({ Id: 3, Title: 'Third', Description: 'gamma', Category: { Title: 'Policy' }, Featured: false, OrderPriority: 0 }, mappings)
+      normalizeItem({ Id: 2, Title: 'Second', Description: 'beta', Category: { Title: 'Policy' }, Featured: true, OrderPriority: 2, Active: true }, mappings),
+      normalizeItem({ Id: 1, Title: 'First', Description: 'alpha', Category: { Title: 'General' }, Featured: true, OrderPriority: 1, Active: true }, mappings),
+      normalizeItem({ Id: 3, Title: 'Third', Description: 'gamma', Category: { Title: 'Policy' }, Featured: false, OrderPriority: 0, Active: true }, mappings)
     ];
     const processed: readonly IBetterListItem[] = processItems(items, {
       id: 'featured',
@@ -116,11 +131,54 @@ describe('Better List item processing', () => {
     expect(items[0].title).toBe('Second');
   });
 
+  it('filters on an authored source field that is not assigned to a semantic slot', () => {
+    const items: readonly IBetterListItem[] = [
+      normalizeItem({ Id: 1, Title: 'North', Region: 'North', Active: true }, mappings),
+      normalizeItem({ Id: 2, Title: 'South', Region: 'South', Active: true }, mappings)
+    ];
+
+    const processed = processItems(items, {
+      id: 'north',
+      label: 'North',
+      filter: {
+        kind: 'sourceEquals',
+        fieldPath: 'Region',
+        mapping: { kind: 'text', internalName: 'Region', displayName: 'Region' },
+        value: 'north'
+      }
+    });
+
+    expect(processed.map((item) => item.title)).toEqual(['North']);
+  });
+
+  it('filters with a compound query across semantic and source fields', () => {
+    const items: readonly IBetterListItem[] = [
+      normalizeItem({ Id: 1, Title: 'North request', Region: 'North', Featured: true, Active: true }, mappings),
+      normalizeItem({ Id: 2, Title: 'South request', Region: 'South', Featured: true, Active: true }, mappings),
+      normalizeItem({ Id: 3, Title: 'North notice', Region: 'North', Featured: false, Active: true }, mappings)
+    ];
+
+    const processed = processItems(items, {
+      id: 'featured-north',
+      label: 'Featured north',
+      filter: {
+        kind: 'query',
+        expression: 'Featured = true AND Region = "North"',
+        fields: [
+          { name: 'Featured', kind: 'boolean', field: 'featured' },
+          { name: 'Region', kind: 'text', fieldPath: 'Region', mapping: { kind: 'text', internalName: 'Region' } }
+        ]
+      }
+    });
+
+    expect(processed.map((item) => item.title)).toEqual(['North request']);
+  });
+
   it('keeps explicit null ordering independent of sort direction', () => {
     const items: readonly IBetterListItem[] = [
-      normalizeItem({ Id: 1, Title: 'Missing' }, mappings),
-      normalizeItem({ Id: 2, Title: 'Ten', OrderPriority: 10 }, mappings),
-      normalizeItem({ Id: 3, Title: 'Two', OrderPriority: 2 }, mappings)
+      normalizeItem({ Id: 1, Title: 'Missing', Active: true }, mappings),
+      normalizeItem({ Id: 2, Title: 'Ten', OrderPriority: 10, Active: true }, mappings),
+      normalizeItem({ Id: 3, Title: 'Two', OrderPriority: 2, Active: true }, mappings)
     ];
 
     expect(processItems(items, {

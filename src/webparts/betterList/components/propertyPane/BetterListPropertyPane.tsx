@@ -3,9 +3,12 @@ import * as React from 'react';
 
 import {
   createBetterListFieldMapping,
+  updateBetterListFieldMapping,
   createDefaultTabs,
+  betterListSemanticSlots,
   defaultBetterListHtmlTemplate,
   betterListTemplateMaxBytes,
+  BetterListItemLayoutRows,
   IBetterListFieldDescriptor,
   IBetterListFieldMappings,
   IBetterListTabConfig,
@@ -13,12 +16,14 @@ import {
 } from '../../../../shared';
 import { ISourceEditorTarget, SourceEditorField } from '../../../../vendor/source-editor/SourceEditorField';
 import { ColumnPickerMenu, ItemPropertyBuilder } from './ItemPropertyBuilder';
+import { IBetterListTabFilterField, TabBuilder } from './TabBuilder';
 
 export interface IBetterListAuthoringState {
   sourceListId: string;
   sourceListTitle: string;
   fieldMappings: Partial<IBetterListFieldMappings>;
   itemProperties: readonly string[];
+  itemLayoutRows: BetterListItemLayoutRows;
   tabsColumn: string;
   groupsColumn: string;
   groupsCollapsible: boolean;
@@ -59,6 +64,31 @@ const cssTargets: readonly ISourceEditorTarget[] = [
     snippet: '.better-list__group-heading {\n  /* group icon and title */\n}'
   },
   { label: 'Item', selector: '.better-list__item', snippet: '.better-list__item {\n  /* list item */\n}' },
+  {
+    label: 'Item row 1',
+    selector: '.better-list-row-1',
+    snippet: '.better-list .better-list-row-1 {\n  /* first horizontal item row */\n}'
+  },
+  {
+    label: 'Item row 2',
+    selector: '.better-list-row-2',
+    snippet: '.better-list .better-list-row-2 {\n  /* second horizontal item row */\n}'
+  },
+  {
+    label: 'Item row 3',
+    selector: '.better-list-row-3',
+    snippet: '.better-list .better-list-row-3 {\n  /* third horizontal item row */\n}'
+  },
+  {
+    label: 'Item row 4',
+    selector: '.better-list-row-4',
+    snippet: '.better-list .better-list-row-4 {\n  /* fourth horizontal item row */\n}'
+  },
+  {
+    label: 'Item row 5',
+    selector: '.better-list-row-5',
+    snippet: '.better-list .better-list-row-5 {\n  /* fifth horizontal item row */\n}'
+  },
   { label: 'Item title', selector: '.better-list__item-title', snippet: '.better-list__item-title {\n  /* item link */\n}' },
   {
     label: 'Description',
@@ -73,6 +103,7 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
   const [fields, setFields] = React.useState<readonly ISharePointFieldOption[]>([]);
   const [loadingLists, setLoadingLists] = React.useState(false);
   const [error, setError] = React.useState('');
+  const activePickerRef = React.useRef<HTMLButtonElement>(null);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -140,6 +171,7 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
       sourceListTitle: selected?.title || '',
       fieldMappings: {},
       itemProperties: ['Title'],
+      itemLayoutRows: [],
       tabsColumn: '',
       groupsColumn: '',
       groupsCollapsible: true,
@@ -165,9 +197,13 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
     }
   }, [fields, props]);
 
-  const updateItemProperties = (itemProperties: readonly string[]): void => {
+  const updateItemLayout = (value: {
+    itemProperties: readonly string[];
+    rows: BetterListItemLayoutRows;
+  }): void => {
+    const { itemProperties, rows } = value;
     const metadata = itemProperties
-      .slice(1)
+      .filter((fieldPath) => fieldPath !== 'Title')
       .map((fieldPath) => {
         const field = fields.find((candidate) => candidate.internalName === fieldPath.split('.')[0]);
         return field ? { field, fieldPath } : undefined;
@@ -180,25 +216,40 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
       }));
     patchValue({
       itemProperties,
+      itemLayoutRows: rows,
       fieldMappings: { ...props.value.fieldMappings, metadata }
     });
   };
 
-  const updateAxisColumn = (axis: 'tab' | 'group', fieldPath: string): void => {
+  const updateGroupColumn = (fieldPath: string): void => {
     const [internalName, lookupValueField] = fieldPath.split('.');
     const field = fields.find((candidate) => candidate.internalName === internalName);
     const fieldMappings = { ...props.value.fieldMappings };
     if (field) {
-      fieldMappings[axis] = createBetterListFieldMapping(field, axis, lookupValueField);
+      fieldMappings.group = createBetterListFieldMapping(field, 'group', lookupValueField);
     } else {
-      delete fieldMappings[axis];
+      delete fieldMappings.group;
     }
     patchValue({
       fieldMappings,
-      ...(axis === 'tab' ? { tabsColumn: fieldPath } : { groupsColumn: fieldPath })
+      groupsColumn: fieldPath
     });
   };
   const groupingFields = fields.filter(isGroupingColumn);
+  const activeFields = fields.filter(isActiveColumn);
+  const activeFieldPath = props.value.fieldMappings.active?.internalName || '';
+  const availableActiveFields = activeFields.filter((field) => field.internalName !== activeFieldPath);
+  const updateActiveColumn = (fieldPath: string): void => {
+    const field = activeFields.find((candidate) => candidate.internalName === fieldPath);
+    patchValue({
+      fieldMappings: updateBetterListFieldMapping(props.value.fieldMappings, 'active', field)
+    });
+  };
+  const removeActiveColumn = (): void => {
+    updateActiveColumn('');
+    activePickerRef.current?.focus();
+  };
+  const tabFilterFields = createTabFilterFields(props.value.fieldMappings, fields);
 
   return (
     <div className="bl-pane">
@@ -229,20 +280,29 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
 
       <section className="bl-pane__section">
         <div className="bl-pane__section-heading">
-          <h3>Tabs</h3>
+          <h3>Active items</h3>
           <ColumnPickerMenu
-            ariaLabel="Select tabs column"
-            fields={groupingFields}
-            onSelect={(fieldPath) => updateAxisColumn('tab', fieldPath)}
-            selectedPaths={new Set(props.value.tabsColumn ? [props.value.tabsColumn] : [])}
+            ariaLabel="Select active items column"
+            buttonRef={activePickerRef}
+            disabledLabel="No Boolean columns available"
+            fields={availableActiveFields}
+            onSelect={updateActiveColumn}
+            selectedPaths={new Set(activeFieldPath ? [activeFieldPath] : [])}
           />
         </div>
         <AxisColumnSummary
-          emptyLabel="No tab column selected."
-          fieldPath={props.value.tabsColumn}
+          emptyLabel="No active items column selected. All items are shown."
+          fieldPath={activeFieldPath}
           fields={fields}
-          onRemove={() => updateAxisColumn('tab', '')}
+          removeAriaLabel="Remove active items column"
+          selectedLabel="Active items column"
+          onRemove={removeActiveColumn}
         />
+      </section>
+
+      <section className="bl-pane__section">
+        <h3>{props.value.tabs.length > 1 ? `Tabs (${props.value.tabs.length})` : 'Tabs'}</h3>
+        <TabBuilder fields={tabFilterFields} tabs={props.value.tabs} onChange={(tabs) => patchValue({ tabs: tabs.slice(), tabsColumn: '' })} />
       </section>
 
       <section className="bl-pane__section">
@@ -251,7 +311,7 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
           <ColumnPickerMenu
             ariaLabel="Select groups column"
             fields={groupingFields}
-            onSelect={(fieldPath) => updateAxisColumn('group', fieldPath)}
+            onSelect={updateGroupColumn}
             selectedPaths={new Set(props.value.groupsColumn ? [props.value.groupsColumn] : [])}
           />
         </div>
@@ -259,7 +319,9 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
           emptyLabel="No group column selected."
           fieldPath={props.value.groupsColumn}
           fields={fields}
-          onRemove={() => updateAxisColumn('group', '')}
+          removeAriaLabel="Remove groups column"
+          selectedLabel="Groups column"
+          onRemove={() => updateGroupColumn('')}
         />
         {props.value.groupsColumn ? (
           <label className="bl-pane__check">
@@ -274,7 +336,14 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
       </section>
 
       <section className="bl-pane__section">
-        <ItemPropertyBuilder fields={fields} value={props.value.itemProperties} onChange={updateItemProperties} />
+        <ItemPropertyBuilder
+          fields={fields}
+          value={{
+            itemProperties: props.value.itemProperties,
+            rows: props.value.itemLayoutRows
+          }}
+          onChange={updateItemLayout}
+        />
       </section>
 
       <section className="bl-pane__section">
@@ -319,22 +388,58 @@ function getFieldPathLabel(field: ISharePointFieldOption, fieldPath: string): st
   return `${field.title} → ${targetField?.title || targetInternalName}`;
 }
 
+function createTabFilterFields(
+  mappings: Partial<IBetterListFieldMappings>,
+  fields: readonly ISharePointFieldOption[]
+): readonly IBetterListTabFilterField[] {
+  const semanticFields = betterListSemanticSlots
+    .map((slot): IBetterListTabFilterField | undefined => {
+      const mapping = mappings[slot.key];
+      return mapping
+        ? { id: `slot:${slot.key}`, key: slot.key, kind: mapping.kind, label: mapping.displayName || slot.label }
+        : undefined;
+    })
+    .filter((field): field is IBetterListTabFilterField => Boolean(field));
+  const mappedInternalNames = new Set(semanticFields.map((field) => mappings[field.key || 'title']?.internalName));
+  const sourceFields = fields
+    .filter((field) => !mappedInternalNames.has(field.internalName))
+    .map((field): IBetterListTabFilterField => {
+      const mapping = createBetterListFieldMapping(field);
+      return {
+        id: `source:${field.internalName}`,
+        fieldPath: field.internalName,
+        kind: mapping.kind,
+        label: field.title,
+        mapping
+      };
+    });
+  return semanticFields.concat(sourceFields);
+}
+
 const AxisColumnSummary: React.FunctionComponent<{
   emptyLabel: string;
   fieldPath: string;
   fields: readonly ISharePointFieldOption[];
+  removeAriaLabel: string;
+  selectedLabel: string;
   onRemove: () => void;
-}> = ({ emptyLabel, fieldPath, fields, onRemove }) => {
-  if (!fieldPath) {
-    return <p className="bl-pane__empty">{emptyLabel}</p>;
-  }
+}> = ({ emptyLabel, fieldPath, fields, removeAriaLabel, selectedLabel, onRemove }) => {
   const field = fields.find((candidate) => candidate.internalName === fieldPath.split('.')[0]);
   return (
-    <div className="bl-pane__axis-summary">
-      <span>{field ? getFieldPathLabel(field, fieldPath) : fieldPath}</span>
-      <button type="button" onClick={onRemove}>
-        Remove
-      </button>
+    <div
+      aria-atomic="true"
+      aria-live="polite"
+      className={fieldPath ? 'bl-pane__axis-summary' : 'bl-pane__empty'}
+      role="status"
+    >
+      <span>
+        {fieldPath ? `${selectedLabel}: ${field ? getFieldPathLabel(field, fieldPath) : fieldPath}.` : emptyLabel}
+      </span>
+      {fieldPath ? (
+        <button aria-label={removeAriaLabel} type="button" onClick={onRemove}>
+          Remove
+        </button>
+      ) : null}
     </div>
   );
 };
@@ -348,6 +453,10 @@ function isGroupingColumn(field: ISharePointFieldOption): boolean {
     type.indexOf('boolean') >= 0 ||
     type.indexOf('date') >= 0
   );
+}
+
+function isActiveColumn(field: ISharePointFieldOption): boolean {
+  return field.typeAsString.toLocaleLowerCase().indexOf('boolean') >= 0;
 }
 
 const propertyPaneCss = `

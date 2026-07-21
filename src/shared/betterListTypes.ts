@@ -85,6 +85,7 @@ export interface IBetterListFieldMappings {
   icon?: BetterListFieldMapping;
   tab?: BetterListFieldMapping;
   group?: BetterListFieldMapping;
+  filterFields?: readonly BetterListFieldMapping[];
   metadata?: readonly IBetterListMetadataFieldMapping[];
 }
 
@@ -122,9 +123,28 @@ export interface IBetterListItem {
   source: Readonly<Record<string, unknown>>;
 }
 
+export interface IBetterListQueryField {
+  name: string;
+  kind: BetterListFieldKind;
+  field?: BetterListFieldSlot;
+  fieldPath?: string;
+  mapping?: BetterListFieldMapping;
+}
+
 export type BetterListFilter =
   | { kind: 'all' }
-  | { kind: 'equals'; field: BetterListFieldSlot; value: BetterListComparableValue };
+  | { kind: 'equals'; field: BetterListFieldSlot; value: BetterListComparableValue }
+  | {
+      kind: 'sourceEquals';
+      fieldPath: string;
+      mapping: BetterListFieldMapping;
+      value: BetterListComparableValue;
+    }
+  | {
+      kind: 'query';
+      expression: string;
+      fields: readonly IBetterListQueryField[];
+    };
 
 export interface IBetterListSort {
   field: BetterListFieldSlot;
@@ -140,6 +160,8 @@ export interface IBetterListGroup {
 }
 
 export type BetterListIconMode = 'none' | 'field' | 'fixed';
+
+export type BetterListTabIcon = 'list' | 'communications' | 'policy' | 'support';
 
 export interface IBetterListIconOverride {
   mode: BetterListIconMode;
@@ -160,6 +182,9 @@ export interface IBetterListTabConfig {
   id: string;
   label: string;
   filter: BetterListFilter;
+  tabIcon?: BetterListTabIcon;
+  showItemCount?: boolean;
+  maxItems?: number;
   group?: IBetterListGroup;
   sort?: readonly IBetterListSort[];
   icon?: IBetterListIconOverride;

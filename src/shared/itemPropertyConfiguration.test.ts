@@ -1,16 +1,23 @@
 import {
+  betterListMaxItemRows,
+  flattenItemLayoutRows,
   formatItemPropertyValue,
   getItemPropertyUrl,
+  parseItemLayoutRows,
   parseItemPropertyFields,
+  removeItemLayoutRow,
+  serializeItemLayoutRows,
   serializeItemPropertyFields
 } from './itemPropertyConfiguration';
 
 describe('item property configuration', () => {
-  it('always starts with one required Title field', () => {
+  it('preserves authored order, permits an empty selection, and defaults invalid legacy data to Title', () => {
     expect(parseItemPropertyFields('["Description","Title","Description"]')).toEqual([
-      'Title',
-      'Description'
+      'Description',
+      'Title'
     ]);
+    expect(parseItemPropertyFields('[]')).toEqual([]);
+    expect(parseItemPropertyFields(undefined)).toEqual(['Title']);
     expect(parseItemPropertyFields('not json')).toEqual(['Title']);
   });
 
@@ -18,6 +25,63 @@ describe('item property configuration', () => {
     expect(serializeItemPropertyFields(['Title', 'Org', 'Org', 'Active'])).toBe(
       '["Title","Org","Active"]'
     );
+  });
+
+  it('keeps legacy item properties flat until a row is explicitly added', () => {
+    const properties = ['Title', 'Description', 'Category.Title'];
+
+    expect(parseItemLayoutRows(undefined, properties)).toEqual([]);
+    expect(parseItemLayoutRows('not json', properties)).toEqual([]);
+  });
+
+  it('normalizes row membership without pinning Title, appends missing properties to row one, and caps at five rows', () => {
+    const properties = ['Title', 'Description', 'Category.Title', 'Owner'];
+    const serialized = JSON.stringify([
+      ['Description', 'Description', 'Unknown'],
+      ['Category.Title', 'Title'],
+      [],
+      ['Owner'],
+      [],
+      []
+    ]);
+
+    const rows = parseItemLayoutRows(serialized, properties);
+
+    expect(rows).toHaveLength(betterListMaxItemRows);
+    expect(rows).toEqual([
+      ['Description'],
+      ['Category.Title', 'Title'],
+      [],
+      ['Owner'],
+      []
+    ]);
+    expect(flattenItemLayoutRows(rows)).toEqual(['Description', 'Category.Title', 'Title', 'Owner']);
+    expect(serializeItemLayoutRows(rows, properties)).toBe(JSON.stringify(rows));
+  });
+
+  it('allows Title to be removed from an explicit row layout', () => {
+    expect(parseItemLayoutRows('[[],["Description"]]', ['Description'])).toEqual([
+      [],
+      ['Description']
+    ]);
+  });
+
+  it('preserves authored reading order when removing the first or a later row', () => {
+    const properties = ['Title', 'Category', 'Description', 'Owner'];
+    const rows = [['Title'], ['Category', 'Description'], ['Owner']];
+
+    expect(removeItemLayoutRow(rows, 0, properties)).toEqual([
+      ['Title', 'Category', 'Description'],
+      ['Owner']
+    ]);
+    expect(removeItemLayoutRow(rows, 1, properties)).toEqual([
+      ['Title', 'Category', 'Description'],
+      ['Owner']
+    ]);
+    expect(removeItemLayoutRow(rows, 2, properties)).toEqual([
+      ['Title'],
+      ['Category', 'Description', 'Owner']
+    ]);
   });
 
   it('formats scalar, lookup, person, and hyperlink values', () => {

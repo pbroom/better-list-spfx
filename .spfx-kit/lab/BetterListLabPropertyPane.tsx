@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Button, Combobox, Option, Switch, makeStyles, tokens } from '@fluentui/react-components';
-import { ChevronDownRegular, ChevronRightRegular, CodeRegular } from '@fluentui/react-icons';
+import { AddRegular, ChevronDownRegular, ChevronRightRegular, CodeRegular } from '@fluentui/react-icons';
 import type {
   LabCssEditorTarget,
   LabPropertyBag,
@@ -9,13 +9,26 @@ import type {
 } from '@spfx-kit/spfx-lab-runtime';
 
 import {
+  parseItemLayoutRows,
   parseItemPropertyFields,
+  parseTabConfiguration,
+  betterListSemanticSlots,
   betterListTemplateMaxBytes,
   defaultBetterListHtmlTemplate,
   validateBetterListTemplateStructure,
-  serializeItemPropertyFields
+  serializeItemLayoutRows,
+  serializeItemPropertyFields,
+  serializeTabConfiguration,
+  updateBetterListFieldMapping,
+  IBetterListFieldMappings,
+  IBetterListTabConfig
 } from '../../src/shared';
 import { ColumnPickerMenu, ItemPropertyBuilder } from '../../src/webparts/betterList/components/propertyPane/ItemPropertyBuilder';
+import {
+  appendNewTab,
+  IBetterListTabFilterField,
+  TabBuilder
+} from '../../src/webparts/betterList/components/propertyPane/TabBuilder';
 import { servicesAuthoringFields, servicesListId, servicesListTitle } from './betterListFixtures';
 
 export type BetterListLabProps = LabPropertyBag & {
@@ -23,6 +36,7 @@ export type BetterListLabProps = LabPropertyBag & {
   sourceListTitle: string;
   fieldMappingsJson: string;
   itemPropertiesJson: string;
+  itemLayoutJson: string;
   tabsColumn: string;
   groupsColumn: string;
   groupsCollapsible: boolean;
@@ -56,6 +70,11 @@ const useStyles = makeStyles({
     paddingLeft: 0,
     fontSize: '14px',
     fontWeight: 600
+  },
+  sectionLabel: {
+    fontSize: '14px',
+    fontWeight: 600,
+    margin: 0
   },
   sectionIcon: {
     display: 'flex',
@@ -150,11 +169,35 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
 }) => {
   const classes = useStyles();
   const [listQuery, setListQuery] = React.useState<string | undefined>(undefined);
+  const activePickerRef = React.useRef<HTMLButtonElement>(null);
   const selectedItemProperties = React.useMemo(
     () => parseItemPropertyFields(values.itemPropertiesJson),
     [values.itemPropertiesJson]
   );
+  const itemLayoutRows = React.useMemo(
+    () => parseItemLayoutRows(values.itemLayoutJson, selectedItemProperties),
+    [selectedItemProperties, values.itemLayoutJson]
+  );
+  const tabs = React.useMemo(() => readTabs(values.tabsJson), [values.tabsJson]);
+  const mappings = React.useMemo(() => readMappings(values.fieldMappingsJson), [values.fieldMappingsJson]);
+  const tabFilterFields = React.useMemo(
+    () => createTabFilterFields(mappings),
+    [mappings]
+  );
   const groupingFields = React.useMemo(() => servicesAuthoringFields.filter(isGroupingColumn), []);
+  const activeFields = React.useMemo(() => servicesAuthoringFields.filter(isActiveColumn), []);
+  const activeFieldPath = mappings.active?.internalName || '';
+  const availableActiveFields = activeFields.filter((field) => field.internalName !== activeFieldPath);
+  const updateActiveColumn = (fieldPath: string): void => {
+    const field = activeFields.find((candidate) => candidate.internalName === fieldPath);
+    onChange({
+      fieldMappingsJson: JSON.stringify(updateBetterListFieldMapping(mappings, 'active', field))
+    });
+  };
+  const removeActiveColumn = (): void => {
+    updateActiveColumn('');
+    activePickerRef.current?.focus();
+  };
 
   return (
     <section className={classes.root}>
@@ -179,22 +222,50 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
         <Option value={servicesListId}>{servicesListTitle}</Option>
       </Combobox>
 
-      <DisclosureSection label="General">Search enabled · Comfortable density</DisclosureSection>
+      <div className={classes.section}>
+        <div className={classes.sectionHeader}>
+          <h3 className={classes.sectionLabel}>Active items</h3>
+          <ColumnPickerMenu
+            ariaLabel="Select active items column"
+            buttonRef={activePickerRef}
+            disabledLabel="No Boolean columns available"
+            fields={availableActiveFields}
+            onSelect={updateActiveColumn}
+            selectedPaths={new Set(activeFieldPath ? [activeFieldPath] : [])}
+          />
+        </div>
+        <div className={classes.sectionBody}>
+          <ColumnSetting
+            emptyLabel="No active items column selected. All items are shown."
+            fieldPath={activeFieldPath}
+            removeAriaLabel="Remove active items column"
+            selectedLabel="Active items column"
+            onRemove={removeActiveColumn}
+          />
+        </div>
+      </div>
+
       <DisclosureSection
         action={
-          <ColumnPickerMenu
-            ariaLabel="Select tabs column"
-            fields={groupingFields}
-            onSelect={(tabsColumn) => onChange({ tabsColumn })}
-            selectedPaths={new Set(values.tabsColumn ? [values.tabsColumn] : [])}
+          <Button
+            appearance="subtle"
+            aria-label="Add tab"
+            icon={<AddRegular />}
+            size="small"
+            onClick={() =>
+              onChange({ tabsColumn: '', tabsJson: serializeTabConfiguration(appendNewTab(tabs)) })
+            }
           />
         }
-        label="Tabs"
+        label={tabs.length > 1 ? `Tabs (${tabs.length})` : 'Tabs'}
       >
-        <ColumnSetting
-          emptyLabel="No tab column selected."
-          fieldPath={values.tabsColumn}
-          onRemove={() => onChange({ tabsColumn: '' })}
+        <TabBuilder
+          fields={tabFilterFields}
+          showAddAction={false}
+          tabs={tabs}
+          onChange={(nextTabs) =>
+            onChange({ tabsColumn: '', tabsJson: serializeTabConfiguration(nextTabs) })
+          }
         />
       </DisclosureSection>
       <DisclosureSection
@@ -211,6 +282,8 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
         <ColumnSetting
           emptyLabel="No group column selected."
           fieldPath={values.groupsColumn}
+          removeAriaLabel="Remove groups column"
+          selectedLabel="Groups column"
           onRemove={() => onChange({ groupsColumn: '' })}
         />
         {values.groupsColumn ? (
@@ -226,8 +299,16 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
       <div className={classes.itemBuilder}>
         <ItemPropertyBuilder
           fields={servicesAuthoringFields}
-          value={selectedItemProperties}
-          onChange={(nextValue) => onChange({ itemPropertiesJson: serializeItemPropertyFields(nextValue) })}
+          value={{
+            itemProperties: selectedItemProperties,
+            rows: itemLayoutRows
+          }}
+          onChange={(nextValue) =>
+            onChange({
+              itemPropertiesJson: serializeItemPropertyFields(nextValue.itemProperties),
+              itemLayoutJson: serializeItemLayoutRows(nextValue.rows, nextValue.itemProperties)
+            })
+          }
         />
       </div>
 
@@ -243,18 +324,32 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
 const ColumnSetting: React.FunctionComponent<{
   emptyLabel: string;
   fieldPath: string;
+  removeAriaLabel: string;
+  selectedLabel: string;
   onRemove: () => void;
-}> = ({ emptyLabel, fieldPath, onRemove }) => {
+}> = ({ emptyLabel, fieldPath, removeAriaLabel, selectedLabel, onRemove }) => {
   const classes = useStyles();
-  if (!fieldPath) {
-    return <p className={classes.settingEmpty}>{emptyLabel}</p>;
-  }
   return (
-    <div className={classes.settingRow}>
-      <span className={classes.settingSummary}>{getColumnSummary(fieldPath)}</span>
-      <Button appearance="subtle" className={classes.removeButton} size="small" onClick={onRemove}>
-        Remove
-      </Button>
+    <div
+      aria-atomic="true"
+      aria-live="polite"
+      className={fieldPath ? classes.settingRow : classes.settingEmpty}
+      role="status"
+    >
+      <span className={fieldPath ? classes.settingSummary : undefined}>
+        {fieldPath ? `${selectedLabel}: ${getColumnSummary(fieldPath)}.` : emptyLabel}
+      </span>
+      {fieldPath ? (
+        <Button
+          appearance="subtle"
+          aria-label={removeAriaLabel}
+          className={classes.removeButton}
+          size="small"
+          onClick={onRemove}
+        >
+          Remove
+        </Button>
+      ) : null}
     </div>
   );
 };
@@ -309,11 +404,43 @@ function isGroupingColumn(field: (typeof servicesAuthoringFields)[number]): bool
   );
 }
 
+function isActiveColumn(field: (typeof servicesAuthoringFields)[number]): boolean {
+  return field.typeAsString.toLocaleLowerCase().indexOf('boolean') >= 0;
+}
+
 function getColumnSummary(fieldPath: string): string {
   const internalName = fieldPath.split('.')[0];
   const field = servicesAuthoringFields.find((candidate) => candidate.internalName === internalName);
   const nestedField = fieldPath.split('.')[1];
   return field ? (nestedField ? `${field.title} → ${nestedField}` : field.title) : fieldPath;
+}
+
+function readTabs(serialized: string): readonly IBetterListTabConfig[] {
+  try {
+    return parseTabConfiguration(serialized);
+  } catch (_error) {
+    return parseTabConfiguration(undefined);
+  }
+}
+
+function readMappings(serialized: string): Partial<IBetterListFieldMappings> {
+  try {
+    const parsed = JSON.parse(serialized) as Partial<IBetterListFieldMappings>;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (_error) {
+    return {};
+  }
+}
+
+function createTabFilterFields(mappings: Partial<IBetterListFieldMappings>): readonly IBetterListTabFilterField[] {
+  return betterListSemanticSlots
+    .map((slot): IBetterListTabFilterField | undefined => {
+      const mapping = mappings[slot.key];
+      return mapping
+        ? { id: `slot:${slot.key}`, key: slot.key, kind: mapping.kind, label: mapping.displayName || slot.label }
+        : undefined;
+    })
+    .filter((field): field is IBetterListTabFilterField => Boolean(field));
 }
 
 function createCssTargets(): LabCssEditorTarget[] {
@@ -328,6 +455,31 @@ function createCssTargets(): LabCssEditorTarget[] {
       snippet: '.better-list__group-heading {\n  /* group icon and title */\n}'
     },
     { label: 'Item', selector: '.better-list__item', snippet: '.better-list__item {\n  /* list item */\n}' },
+    {
+      label: 'Item row 1',
+      selector: '.better-list-row-1',
+      snippet: '.better-list .better-list-row-1 {\n  /* first horizontal item row */\n}'
+    },
+    {
+      label: 'Item row 2',
+      selector: '.better-list-row-2',
+      snippet: '.better-list .better-list-row-2 {\n  /* second horizontal item row */\n}'
+    },
+    {
+      label: 'Item row 3',
+      selector: '.better-list-row-3',
+      snippet: '.better-list .better-list-row-3 {\n  /* third horizontal item row */\n}'
+    },
+    {
+      label: 'Item row 4',
+      selector: '.better-list-row-4',
+      snippet: '.better-list .better-list-row-4 {\n  /* fourth horizontal item row */\n}'
+    },
+    {
+      label: 'Item row 5',
+      selector: '.better-list-row-5',
+      snippet: '.better-list .better-list-row-5 {\n  /* fifth horizontal item row */\n}'
+    },
     {
       label: 'Item title',
       selector: '.better-list__item-title',

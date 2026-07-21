@@ -1,8 +1,14 @@
 const REQUIRED_TITLE_FIELD = 'Title';
+export const betterListMaxItemRows = 5;
+
+export type BetterListItemLayoutRows = readonly (readonly string[])[];
 
 export function parseItemPropertyFields(serialized: string | undefined): readonly string[] {
+  if (!serialized) {
+    return [REQUIRED_TITLE_FIELD];
+  }
   try {
-    const parsed = JSON.parse(serialized || '[]') as unknown;
+    const parsed = JSON.parse(serialized) as unknown;
     if (Array.isArray(parsed)) {
       return normalizeItemPropertyFields(parsed);
     }
@@ -16,9 +22,98 @@ export function serializeItemPropertyFields(fields: readonly string[]): string {
   return JSON.stringify(normalizeItemPropertyFields(fields));
 }
 
+export function parseItemLayoutRows(
+  serialized: string | undefined,
+  itemProperties: readonly string[]
+): BetterListItemLayoutRows {
+  try {
+    const parsed = JSON.parse(serialized || '[]') as unknown;
+    if (Array.isArray(parsed)) {
+      return normalizeItemLayoutRows(parsed, itemProperties);
+    }
+  } catch {
+    // Fall through to the legacy flat layout.
+  }
+  return [];
+}
+
+export function serializeItemLayoutRows(
+  rows: BetterListItemLayoutRows,
+  itemProperties: readonly string[]
+): string {
+  return JSON.stringify(normalizeItemLayoutRows(rows, itemProperties));
+}
+
+export function normalizeItemLayoutRows(
+  rows: readonly unknown[],
+  itemProperties: readonly string[]
+): BetterListItemLayoutRows {
+  if (rows.length === 0) {
+    return [];
+  }
+
+  const properties = normalizeItemPropertyFields(itemProperties);
+  const selected = new Set(properties);
+  const placed = new Set<string>();
+  const normalized = rows.slice(0, betterListMaxItemRows).map((row) => {
+    if (!Array.isArray(row)) {
+      return [] as string[];
+    }
+    return row.reduce<string[]>((result, entry) => {
+      const fieldPath = typeof entry === 'string' ? entry.trim() : '';
+      if (
+        fieldPath &&
+        selected.has(fieldPath) &&
+        !placed.has(fieldPath)
+      ) {
+        placed.add(fieldPath);
+        result.push(fieldPath);
+      }
+      return result;
+    }, []);
+  });
+  properties.forEach((fieldPath) => {
+    if (!placed.has(fieldPath)) {
+      normalized[0].push(fieldPath);
+    }
+  });
+
+  return normalized;
+}
+
+export function flattenItemLayoutRows(rows: BetterListItemLayoutRows): readonly string[] {
+  return rows.reduce<string[]>((result, row) => {
+    result.push(...row);
+    return result;
+  }, []);
+}
+
+export function removeItemLayoutRow(
+  rows: BetterListItemLayoutRows,
+  rowIndex: number,
+  itemProperties: readonly string[]
+): BetterListItemLayoutRows {
+  if (rowIndex < 0 || rowIndex >= rows.length) {
+    return rows;
+  }
+  if (rows.length === 1) {
+    return [];
+  }
+
+  const removed = rows[rowIndex];
+  const nextRows = rows
+    .filter((_row, index) => index !== rowIndex)
+    .map((row) => row.slice());
+  const targetIndex = rowIndex === 0 ? 0 : rowIndex - 1;
+  nextRows[targetIndex] = rowIndex === 0
+    ? [...removed, ...nextRows[targetIndex]]
+    : [...nextRows[targetIndex], ...removed];
+  return normalizeItemLayoutRows(nextRows, itemProperties);
+}
+
 export function normalizeItemPropertyFields(fields: readonly unknown[]): readonly string[] {
-  const seen = new Set<string>([REQUIRED_TITLE_FIELD]);
-  const normalized = [REQUIRED_TITLE_FIELD];
+  const seen = new Set<string>();
+  const normalized: string[] = [];
 
   fields.forEach((field) => {
     const value = typeof field === 'string' ? field.trim() : '';
