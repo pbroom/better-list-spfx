@@ -105,4 +105,63 @@ describe('BetterListPropertyPane', () => {
     }));
     ReactDom.unmountComponentAtNode(container);
   });
+
+  it('ignores a pending URL resolution after the source input changes', async () => {
+    const container = document.createElement('div');
+    const onChange = jest.fn();
+    const listUrl = 'https://contoso.sharepoint.com/sites/example/Lists/Services/AllItems.aspx';
+    let finishResolution: ((value: { id: string; title: string; webUrl: string }) => void) | undefined;
+    const resolution = new Promise<{ id: string; title: string; webUrl: string }>((resolve) => {
+      finishResolution = resolve;
+    });
+
+    await act(async () => {
+      ReactDom.render(
+        <BetterListPropertyPane
+          pickerDataSource={{
+            loadFields: async () => [],
+            loadLists: async () => [{ id: 'services', title: 'Services' }],
+            resolveListUrl: async () => resolution
+          }}
+          value={createValue()}
+          onChange={onChange}
+        />,
+        container
+      );
+      await Promise.resolve();
+    });
+    const input = container.querySelector<HTMLInputElement>('input[aria-label="Source list"]');
+    expect(input).not.toBeNull();
+
+    await act(async () => {
+      (input as HTMLInputElement).value = listUrl;
+      Simulate.change(input as HTMLInputElement);
+      await Promise.resolve();
+    });
+    onChange.mockClear();
+    await act(async () => {
+      Simulate.keyDown(input as HTMLInputElement, { key: 'Enter' });
+      await Promise.resolve();
+    });
+    expect((input as HTMLInputElement).getAttribute('aria-busy')).toBe('true');
+    await act(async () => {
+      (input as HTMLInputElement).value = 'Different list';
+      Simulate.change(input as HTMLInputElement);
+      await Promise.resolve();
+    });
+    expect((input as HTMLInputElement).getAttribute('aria-busy')).toBe('false');
+    await act(async () => {
+      finishResolution?.({
+        id: 'late-list',
+        title: 'Late list',
+        webUrl: 'https://contoso.sharepoint.com/sites/example'
+      });
+      await resolution;
+      await Promise.resolve();
+    });
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect((input as HTMLInputElement).value).toBe('Different list');
+    ReactDom.unmountComponentAtNode(container);
+  });
 });

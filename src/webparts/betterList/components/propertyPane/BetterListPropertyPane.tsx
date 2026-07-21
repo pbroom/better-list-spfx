@@ -396,6 +396,8 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
             selectedOptions={props.value.sourceListId ? [props.value.sourceListId] : []}
             value={sourceInput}
             onChange={(event) => {
+              sourceRequest.current += 1;
+              setResolvingSource(false);
               setSourceInput((event.target as HTMLInputElement).value);
               setSourceError('');
             }}
