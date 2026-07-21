@@ -34,6 +34,8 @@ import {
   IBetterListGroupIconCatalogEntry,
   loadBetterListGroupIconPickerCatalog
 } from './GroupIconPickerCatalog';
+import type { ISharePointImageAssetProvider } from '../services';
+import { SharePointImageBrowser } from './SharePointImageBrowser';
 
 type PickerView = BetterListGroupIconLibrary | 'image';
 
@@ -41,6 +43,7 @@ export interface IGroupIconPickerDialogProps {
   current: BetterListGroupIconOverride | undefined;
   groupTitle: string;
   open: boolean;
+  imageAssetProvider?: ISharePointImageAssetProvider;
   onApply: (override: BetterListGroupIconOverride | undefined) => void;
   onOpenChange: (open: boolean) => void;
 }
@@ -146,6 +149,7 @@ export const GroupIconPickerDialog: React.FunctionComponent<IGroupIconPickerDial
   current,
   groupTitle,
   open,
+  imageAssetProvider,
   onApply,
   onOpenChange
 }) => {
@@ -263,6 +267,7 @@ export const GroupIconPickerDialog: React.FunctionComponent<IGroupIconPickerDial
                   />
                 </Field>
                 <div className={classes.imageHelp}>Use an HTTPS URL or a path beginning with / for a SharePoint-hosted image.</div>
+                <SharePointImageBrowser provider={imageAssetProvider} onSelect={setImageUrl} />
               </div>
             ) : (
               <>

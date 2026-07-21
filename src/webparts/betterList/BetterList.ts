@@ -42,7 +42,13 @@ import {
   IBetterListPickerDataSource,
   ISharePointFieldOption
 } from './components/propertyPane/BetterListPropertyPane';
-import { IBetterListDataSource, inferBetterListFieldKind, SharePointBetterListDataSource } from './services';
+import {
+  IBetterListDataSource,
+  ISharePointImageAssetProvider,
+  SharePointBetterListDataSource,
+  SharePointImageAssetProvider,
+  inferBetterListFieldKind
+} from './services';
 
 export interface IBetterListWebPartProps {
   sourceListId: string;
@@ -73,6 +79,7 @@ interface IPropertyPaneCustomFieldProps {
 export default class BetterListWebPart extends BaseClientSideWebPart<IBetterListWebPartProps> {
   private _dataSource!: IBetterListDataSource;
   private _pickerDataSource!: IBetterListPickerDataSource;
+  private _imageAssetProvider!: ISharePointImageAssetProvider;
   private _items: readonly ICoreBetterListItem[] = [];
   private _status: 'loading' | 'ready' | 'error' = 'loading';
   private _errorMessage = '';
@@ -107,6 +114,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       itemLayoutRows: itemLayout.rows,
       groupIconScope: this.properties.groupsColumn,
       groupIcons,
+      groupImageAssetProvider: this._imageAssetProvider,
       isEditMode: this.displayMode === DisplayMode.Edit,
       listTitle: this.properties.sourceListTitle,
       onTabChange: (tabKey: string): void => {
@@ -156,6 +164,10 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     }
 
     this._dataSource = new SharePointBetterListDataSource(this.context.spHttpClient, this.context.pageContext.web.absoluteUrl);
+    this._imageAssetProvider = new SharePointImageAssetProvider(
+      this.context.spHttpClient,
+      this.context.pageContext.web.absoluteUrl
+    );
     this._pickerDataSource = {
       loadLists: async () => {
         const lists = await this._dataSource.discoverLists();

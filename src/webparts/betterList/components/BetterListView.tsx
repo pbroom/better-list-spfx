@@ -46,6 +46,7 @@ import {
   substituteBetterListTokens
 } from '../../../shared';
 import { BetterListGroupIconVisual } from './GroupIconCatalog';
+import type { ISharePointImageAssetProvider } from '../services';
 
 const GroupIconPickerDialog = React.lazy(async () => {
   const module = await import(
@@ -127,6 +128,7 @@ export interface IBetterListViewProps {
   itemLayoutRows?: BetterListItemLayoutRows;
   groupIconScope?: string;
   groupIcons?: IBetterListGroupIconsConfiguration;
+  groupImageAssetProvider?: ISharePointImageAssetProvider;
   isEditMode?: boolean;
   listTitle?: string;
   onTabChange?: (tabKey: string) => void;
@@ -591,6 +593,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   itemLayoutRows = [],
   groupIconScope = '',
   groupIcons = defaultBetterListGroupIconsConfiguration,
+  groupImageAssetProvider,
   isEditMode = false,
   listTitle = 'Better List',
   onTabChange,
@@ -1039,6 +1042,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
           <GroupIconPickerDialog
             current={getBetterListGroupIconOverride(groupIcons, groupIconScope, editingGroup.id)}
             groupTitle={editingGroup.title}
+            imageAssetProvider={groupImageAssetProvider}
             open
             onApply={(override) => onGroupIconOverrideChange(editingGroup.id, override)}
             onOpenChange={(open) => {

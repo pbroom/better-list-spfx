@@ -31,6 +31,7 @@ import BetterListView, {
   IBetterListTab
 } from '../../src/webparts/betterList/components/BetterListView';
 import { FixtureBetterListDataSource } from '../../src/webparts/betterList/services/FixtureBetterListDataSource';
+import type { ISharePointImageAssetProvider } from '../../src/webparts/betterList/services';
 import {
   BetterListLabPropertyPane,
   BetterListLabProps,
@@ -94,6 +95,10 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
         fields: servicesFields
       }),
     [lab.spfxContext.pageContext.user]
+  );
+  const imageAssetProvider = React.useMemo(
+    () => createFixtureImageAssetProvider(new URL('./groupIconFixture.svg?no-inline', import.meta.url).pathname),
+    []
   );
 
   React.useEffect(() => {
@@ -171,6 +176,7 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
         itemLayoutRows={itemLayout.rows}
         groupIconScope={props.groupsColumn}
         groupIcons={groupIcons}
+        groupImageAssetProvider={imageAssetProvider}
         isEditMode={lab.displayMode === 'edit'}
         listTitle={props.sourceListTitle}
         emptyMessage="There are no active Services items to display."
@@ -186,6 +192,47 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
     </div>
   );
 };
+
+function createFixtureImageAssetProvider(imageUrl: string): ISharePointImageAssetProvider {
+  const siteAssetsRoot = '/sites/lab/SiteAssets';
+  const campaignFolder = `${siteAssetsRoot}/Campaigns`;
+  return {
+    discoverLibraries: async () => [
+      { id: 'site-assets', title: 'Site Assets', serverRelativeUrl: siteAssetsRoot },
+      { id: 'documents', title: 'Documents', serverRelativeUrl: '/sites/lab/Shared Documents' }
+    ],
+    browseFolder: async (serverRelativeUrl: string) => {
+      if (serverRelativeUrl === siteAssetsRoot) {
+        return {
+          serverRelativeUrl,
+          folders: [{ name: 'Campaigns', serverRelativeUrl: campaignFolder }],
+          images: [
+            fixtureImage('general-group-icon.svg', `${siteAssetsRoot}/general-group-icon.svg`, imageUrl),
+            fixtureImage('communications-group-icon.svg', `${siteAssetsRoot}/communications-group-icon.svg`, imageUrl)
+          ]
+        };
+      }
+      if (serverRelativeUrl === campaignFolder) {
+        return {
+          serverRelativeUrl,
+          folders: [],
+          images: [fixtureImage('campaign-icon.svg', `${campaignFolder}/campaign-icon.svg`, imageUrl)]
+        };
+      }
+      return { serverRelativeUrl, folders: [], images: [] };
+    },
+    uploadImage: async (file: File) => fixtureImage(
+      file.name,
+      `${siteAssetsRoot}/Better List/Group Icons/${encodeURIComponent(file.name)}`,
+      imageUrl,
+      file.size
+    )
+  };
+}
+
+function fixtureImage(name: string, serverRelativeUrl: string, absoluteUrl: string, size?: number) {
+  return { name, serverRelativeUrl, absoluteUrl, size };
+}
 
 const webPart: LabWebPart<BetterListLabProps> = {
   id: 'better-list-spfx:default',
