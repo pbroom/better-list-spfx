@@ -27,7 +27,8 @@ import {
   validateBetterListTemplateStructure
 } from '../../../../shared';
 import { ISourceEditorTarget, SourceEditorField } from '../../../../vendor/source-editor/SourceEditorField';
-import { ColumnPickerMenu, ItemPropertyBuilder } from './ItemPropertyBuilder';
+import { GroupIconColorField } from '../GroupIconColorField';
+import { ItemPropertyBuilder } from './ItemPropertyBuilder';
 import { PropertyPaneSection } from './PropertyPaneSection';
 import { appendNewTab, IBetterListTabFilterField, TabBuilder } from './TabBuilder';
 
@@ -250,6 +251,8 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
     });
   };
   const groupingFields = fields.filter(isGroupingColumn);
+  const groupingOptions = createGroupingColumnOptions(groupingFields);
+  const selectedGroupingOption = groupingOptions.find((option) => option.value === props.value.groupsColumn);
   const tabFilterFields = createTabFilterFields(props.value.fieldMappings, fields);
 
   return (
@@ -314,25 +317,25 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
           />
         </PropertyPaneSection>
 
-        <PropertyPaneSection
-          action={
-          <ColumnPickerMenu
-            ariaLabel="Select groups column"
-            fields={groupingFields}
-            onSelect={updateGroupColumn}
-            selectedPaths={new Set(props.value.groupsColumn ? [props.value.groupsColumn] : [])}
-          />
-          }
-          label="Groups"
-        >
-        <AxisColumnSummary
-          emptyLabel="No group column selected."
-          fieldPath={props.value.groupsColumn}
-          fields={fields}
-          removeAriaLabel="Remove groups column"
-          selectedLabel="Groups column"
-          onRemove={() => updateGroupColumn('')}
-        />
+        <PropertyPaneSection label="Groups">
+        <label className="bl-pane__field">
+          <span className="bl-pane__label">Grouping column</span>
+          <Dropdown
+            aria-label="Grouping column"
+            selectedOptions={[props.value.groupsColumn || noGroupingValue]}
+            value={selectedGroupingOption?.label || 'No grouping'}
+            onOptionSelect={(_event, data) =>
+              updateGroupColumn(data.optionValue === noGroupingValue ? '' : data.optionValue || '')
+            }
+          >
+            <Option text="No grouping" value={noGroupingValue}>No grouping</Option>
+            {groupingOptions.map((option) => (
+              <Option key={option.value} text={option.label} value={option.value}>
+                {option.label}
+              </Option>
+            ))}
+          </Dropdown>
+        </label>
         {props.value.groupsColumn ? (
           <>
             <Switch
@@ -349,6 +352,15 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
                 patchValue({ groupIcons: { ...props.value.groupIcons, showIcons: data.checked } })
               }
             />
+            {props.value.groupIcons.showIcons ? (
+              <GroupIconColorField
+                label="Default icon color"
+                value={props.value.groupIcons.defaultColor}
+                onChange={(defaultColor) =>
+                  patchValue({ groupIcons: { ...props.value.groupIcons, defaultColor } })
+                }
+              />
+            ) : null}
             {props.value.groupIcons.overrides.length ? (
               <div className="bl-pane__setting-row">
                 <span>{`${props.value.groupIcons.overrides.length} icon override${
@@ -452,33 +464,32 @@ function createTabFilterFields(
   return semanticFields.concat(sourceFields);
 }
 
-const AxisColumnSummary: React.FunctionComponent<{
-  emptyLabel: string;
-  fieldPath: string;
-  fields: readonly ISharePointFieldOption[];
-  removeAriaLabel: string;
-  selectedLabel: string;
-  onRemove: () => void;
-}> = ({ emptyLabel, fieldPath, fields, removeAriaLabel, selectedLabel, onRemove }) => {
-  const field = fields.find((candidate) => candidate.internalName === fieldPath.split('.')[0]);
-  return (
-    <div
-      aria-atomic="true"
-      aria-live="polite"
-      className={fieldPath ? 'bl-pane__axis-summary' : 'bl-pane__empty'}
-      role="status"
-    >
-      <span>
-        {fieldPath ? `${selectedLabel}: ${field ? getFieldPathLabel(field, fieldPath) : fieldPath}.` : emptyLabel}
-      </span>
-      {fieldPath ? (
-        <Button appearance="subtle" aria-label={removeAriaLabel} size="small" onClick={onRemove}>
-          Remove
-        </Button>
-      ) : null}
-    </div>
-  );
-};
+interface IGroupingColumnOption {
+  label: string;
+  value: string;
+}
+
+const noGroupingValue = '__no_grouping__';
+
+function createGroupingColumnOptions(
+  fields: readonly ISharePointFieldOption[]
+): readonly IGroupingColumnOption[] {
+  return fields.reduce<IGroupingColumnOption[]>((options, field) => {
+    const isLookup = field.typeAsString.toLocaleLowerCase().indexOf('lookup') >= 0;
+    if (!isLookup) {
+      options.push({ label: field.title, value: field.internalName });
+      return options;
+    }
+    const lookupFields = field.lookupFields?.length
+      ? field.lookupFields
+      : [{ internalName: field.lookupField || 'Title', title: field.lookupField || 'Title', typeAsString: 'Text' }];
+    lookupFields.forEach((lookupField) => {
+      const value = `${field.internalName}.${lookupField.internalName}`;
+      options.push({ label: getFieldPathLabel(field, value), value });
+    });
+    return options;
+  }, []);
+}
 
 function isGroupingColumn(field: ISharePointFieldOption): boolean {
   const type = field.typeAsString.toLocaleLowerCase();
@@ -504,7 +515,6 @@ const propertyPaneCss = `
 .bl-pane__help { color: #616161; font-size: 11px; line-height: 1.4; margin: -4px 0 12px; }
 .bl-pane__error { background: #fdf3f4; border-left: 3px solid #c50f1f; color: #8a1219; font-size: 12px; padding: 8px; }
 .bl-pane__empty { background: #f5f5f5; color: #616161; font-size: 12px; padding: 10px; }
-.bl-pane__axis-summary { align-items: center; display: flex; font-size: 12px; justify-content: space-between; gap: 8px; }
 .bl-pane__switch { margin-top: 8px; }
 .bl-pane__setting-row { align-items: center; color: #616161; display: flex; font-size: 12px; justify-content: space-between; gap: 8px; margin-top: 10px; }
 .bl-pane__text-button { border-color: transparent !important; min-height: 24px !important; padding: 2px 4px !important; }

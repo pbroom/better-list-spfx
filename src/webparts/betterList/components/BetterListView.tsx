@@ -394,9 +394,10 @@ const GroupIcon: React.FunctionComponent<{
   kind?: BetterListGroupIcon;
   title: string;
   className?: string;
-}> = ({ kind, title, className }) => {
+  style?: React.CSSProperties;
+}> = ({ kind, title, className, style }) => {
   const Icon = resolveGroupIcon(kind, title);
-  return <Icon className={className} aria-hidden="true" />;
+  return <Icon className={className} aria-hidden="true" style={style} />;
 };
 
 function renderItemElements(
@@ -671,10 +672,22 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
       return null;
     }
     const className = mergeClasses(classes.groupIcon, 'better-list__group-icon');
-    const automatic = <GroupIcon className={className} kind={group.icon} title={group.title} />;
+    const automatic = (
+      <GroupIcon
+        className={className}
+        kind={group.icon}
+        style={groupIcons.defaultColor ? { color: groupIcons.defaultColor } : undefined}
+        title={group.title}
+      />
+    );
     const override = getBetterListGroupIconOverride(groupIcons, groupIconScope, group.id);
     return override ? (
-      <BetterListGroupIconVisual className={className} fallback={automatic} override={override} />
+      <BetterListGroupIconVisual
+        className={className}
+        defaultColor={groupIcons.defaultColor}
+        fallback={automatic}
+        override={override}
+      />
     ) : (
       automatic
     );
@@ -1041,6 +1054,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
         <React.Suspense fallback={null}>
           <GroupIconPickerDialog
             current={getBetterListGroupIconOverride(groupIcons, groupIconScope, editingGroup.id)}
+            defaultColor={groupIcons.defaultColor}
             groupTitle={editingGroup.title}
             imageAssetProvider={groupImageAssetProvider}
             open

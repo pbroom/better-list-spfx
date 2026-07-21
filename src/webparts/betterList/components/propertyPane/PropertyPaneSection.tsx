@@ -5,6 +5,7 @@ import {
   AccordionItem,
   AccordionPanel,
   makeStyles,
+  mergeClasses,
   tokens
 } from '@fluentui/react-components';
 
@@ -20,6 +21,9 @@ const useStyles = makeStyles({
     alignItems: 'center',
     minHeight: '48px'
   },
+  headingWithoutAction: {
+    gridTemplateColumns: 'minmax(0, 1fr)'
+  },
   header: {
     minWidth: 0
   },
@@ -32,7 +36,18 @@ const useStyles = makeStyles({
   action: {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    width: '32px',
+    minWidth: '32px',
+    height: '32px',
+    minHeight: '32px',
+    '& > button': {
+      width: '28px',
+      minWidth: '28px',
+      height: '28px',
+      minHeight: '28px',
+      padding: 0
+    }
   },
   panel: {
     padding: '0 0 12px'
@@ -68,7 +83,10 @@ export const PropertyPaneSection: React.FunctionComponent<IPropertyPaneSectionPr
       onToggle={(_event, data) => setExpanded(data.openItems.indexOf(sectionValue) >= 0)}
     >
       <AccordionItem value={sectionValue}>
-        <div className={classes.heading} data-property-pane-section-heading>
+        <div
+          className={mergeClasses(classes.heading, !action && classes.headingWithoutAction)}
+          data-property-pane-section-heading
+        >
           <AccordionHeader
             as="h3"
             button={{ className: classes.headerButton }}

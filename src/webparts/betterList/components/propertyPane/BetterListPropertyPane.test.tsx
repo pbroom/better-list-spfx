@@ -42,6 +42,7 @@ describe('BetterListPropertyPane', () => {
     expect(html).toContain('bl-pane__source-dropdown');
     expect(html).toContain('data-property-pane-section-heading="true"');
     expect(html).toContain('aria-label="Add tab"');
+    expect(html).not.toContain('aria-label="Select groups column"');
     expect(html).not.toContain('+ Add tab');
     expect(html).not.toContain('<h2>Better List</h2>');
   });

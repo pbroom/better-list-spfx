@@ -20,6 +20,7 @@ describe('group icon configuration', () => {
     const value = parseBetterListGroupIconsConfiguration(JSON.stringify({
       version: 1,
       showIcons: true,
+      defaultColor: '#ABC',
       overrides: [
         { groupKey: 'category::general', icon: { kind: 'icon', library: 'solar-duotone', name: 'buildings', color: '#245a8d' } },
         { groupKey: 'category::policy', icon: { kind: 'image', url: '/SiteAssets/policy.png' } },
@@ -28,6 +29,21 @@ describe('group icon configuration', () => {
     }));
 
     expect(parseBetterListGroupIconsConfiguration(serializeBetterListGroupIconsConfiguration(value))).toEqual(value);
+    expect(value.defaultColor).toBe('#aabbcc');
+  });
+
+  it('drops an invalid default color without losing valid overrides', () => {
+    const value = parseBetterListGroupIconsConfiguration(JSON.stringify({
+      version: 1,
+      showIcons: true,
+      defaultColor: 'var(--brand-color)',
+      overrides: [
+        { groupKey: 'category::general', icon: { kind: 'icon', library: 'fluent', name: 'mail' } }
+      ]
+    }));
+
+    expect(value.defaultColor).toBeUndefined();
+    expect(value.overrides).toHaveLength(1);
   });
 
   it('normalizes supported icon colors and rejects arbitrary CSS values', () => {

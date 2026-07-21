@@ -161,6 +161,12 @@ const useStyles = makeStyles({
   },
   removeButton: {
     color: tokens.colorNeutralForeground3,
+    width: '28px',
+    minWidth: '28px',
+    height: '28px',
+    minHeight: '28px',
+    padding: 0,
+    flexShrink: 0,
     transitionDuration: '100ms',
     transitionProperty: 'opacity',
     transitionTimingFunction: 'ease-out',
@@ -173,13 +179,25 @@ const useStyles = makeStyles({
     }
   },
   linkButton: {
-    color: tokens.colorNeutralForeground3
+    color: tokens.colorNeutralForeground3,
+    width: '28px',
+    minWidth: '28px',
+    height: '28px',
+    minHeight: '28px',
+    padding: 0,
+    flexShrink: 0
   },
   linkButtonConfigured: {
     color: tokens.colorBrandForeground1
   },
   addButton: {
-    color: tokens.colorNeutralForeground1
+    color: tokens.colorNeutralForeground1,
+    width: '28px',
+    minWidth: '28px',
+    height: '28px',
+    minHeight: '28px',
+    padding: 0,
+    flexShrink: 0
   },
   layoutRow: {
     borderRadius: tokens.borderRadiusMedium,
