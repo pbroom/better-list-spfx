@@ -48,6 +48,7 @@ export interface IGroupIconPickerDialogProps {
   imageAssetProvider?: ISharePointImageAssetProvider;
   onApply: (override: BetterListGroupIconOverride | undefined) => void;
   onOpenChange: (open: boolean) => void;
+  showAutomaticAction?: boolean;
 }
 
 const useStyles = makeStyles({
@@ -179,7 +180,8 @@ export const GroupIconPickerDialog: React.FunctionComponent<IGroupIconPickerDial
   open,
   imageAssetProvider,
   onApply,
-  onOpenChange
+  onOpenChange,
+  showAutomaticAction = true
 }) => {
   const classes = useStyles();
   const [view, setView] = React.useState<PickerView>('solar-duotone');
@@ -407,16 +409,18 @@ export const GroupIconPickerDialog: React.FunctionComponent<IGroupIconPickerDial
             )}
           </DialogContent>
           <DialogActions fluid>
-            <Button
-              appearance="subtle"
-              className={classes.actionStart}
-              onClick={() => {
-                onApply(undefined);
-                onOpenChange(false);
-              }}
-            >
-              Use automatic icon
-            </Button>
+            {showAutomaticAction ? (
+              <Button
+                appearance="subtle"
+                className={classes.actionStart}
+                onClick={() => {
+                  onApply(undefined);
+                  onOpenChange(false);
+                }}
+              >
+                Use automatic icon
+              </Button>
+            ) : <span className={classes.actionStart} />}
             <Button
               appearance="subtle"
               onClick={() => {
@@ -434,6 +438,9 @@ export const GroupIconPickerDialog: React.FunctionComponent<IGroupIconPickerDial
     </Dialog>
   );
 };
+
+/** Group-neutral alias used by tab and group authoring surfaces. */
+export const IconPickerDialog = GroupIconPickerDialog;
 
 function toOverride(
   entry: IBetterListGroupIconCatalogEntry,

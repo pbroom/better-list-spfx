@@ -255,6 +255,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
             React.createElement(BetterListPropertyPane, {
               value: this._createAuthoringState(),
               pickerDataSource: this._pickerDataSource,
+              imageAssetProvider: this._imageAssetProvider,
               onChange: (value): void => this._applyAuthoringState(value, changeCallback)
             }),
             domElement
@@ -402,6 +403,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       key: tab.id,
       label: tab.label,
       icon: tab.tabIcon,
+      iconOverride: tab.tabIconOverride,
       itemCount: items.length,
       maxItems: tab.maxItems,
       showItemCount: tab.showItemCount,

@@ -10,7 +10,12 @@ describe('TabBuilder', () => {
       { id: 'featured', key: 'featured', kind: 'boolean', label: 'Featured' }
     ];
     const tabs: readonly IBetterListTabConfig[] = [
-      { id: 'featured', label: 'Featured', filter: { kind: 'query', expression: 'Featured = true', fields: [] } },
+      {
+        id: 'featured',
+        label: 'Featured',
+        filter: { kind: 'query', expression: 'Featured = true', fields: [] },
+        tabIconOverride: { kind: 'icon', library: 'fluent', name: 'megaphone' }
+      },
       { id: 'all-services', label: 'All Services', filter: { kind: 'all' } }
     ];
 
@@ -37,6 +42,9 @@ describe('TabBuilder', () => {
     expect(html).toContain('aria-roledescription="sortable"');
     expect(html).toContain('fui-Switch');
     expect(html).toContain('Show item count');
+    expect(html).toContain('Megaphone');
+    expect(html).toContain('bl-tabs-builder__icon-picker');
+    expect(html).not.toContain('<option value="communications">');
     expect(html).not.toContain('Move Featured up');
     expect(html).not.toContain('Move Featured down');
     expect(html).toContain('.bl-tabs-builder__card-heading { border-bottom: 0;');

@@ -39,7 +39,14 @@ describe('BetterListView', () => {
 
   it('renders optional tab icons and counts', () => {
     const tabs: readonly IBetterListTab[] = [
-      { key: 'featured', label: 'Featured', icon: 'communications', itemCount: 4, showItemCount: true, items: [item] },
+      {
+        key: 'featured',
+        label: 'Featured',
+        iconOverride: { kind: 'icon', library: 'fluent', name: 'megaphone', color: '#245a8d' },
+        itemCount: 4,
+        showItemCount: true,
+        items: [item]
+      },
       { key: 'all', label: 'All items', itemCount: 12, items: [item] }
     ];
 
@@ -47,6 +54,7 @@ describe('BetterListView', () => {
 
     expect(html).toContain('Featured (4)');
     expect(html).toContain('<svg');
+    expect(html).toContain('style="color:#245a8d"');
     expect(html).toContain('All items');
     expect(html).not.toContain('All items (12)');
   });

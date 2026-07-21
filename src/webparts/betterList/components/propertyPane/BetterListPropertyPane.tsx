@@ -32,6 +32,7 @@ import { GroupIconColorField } from '../GroupIconColorField';
 import { ItemPropertyBuilder } from './ItemPropertyBuilder';
 import { PropertyPaneSection } from './PropertyPaneSection';
 import { appendNewTab, IBetterListTabFilterField, TabBuilder } from './TabBuilder';
+import type { ISharePointImageAssetProvider } from '../../services';
 
 export interface IBetterListAuthoringState {
   sourceListId: string;
@@ -67,6 +68,7 @@ export interface IBetterListPickerDataSource {
 export interface IBetterListPropertyPaneProps {
   value: IBetterListAuthoringState;
   pickerDataSource: IBetterListPickerDataSource;
+  imageAssetProvider?: ISharePointImageAssetProvider;
   onChange: (value: IBetterListAuthoringState) => void;
 }
 
@@ -312,6 +314,7 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
         >
           <TabBuilder
             fields={tabFilterFields}
+            imageAssetProvider={props.imageAssetProvider}
             showAddAction={false}
             tabs={props.value.tabs}
             onChange={(tabs) => patchValue({ tabs: tabs.slice(), tabsColumn: '' })}

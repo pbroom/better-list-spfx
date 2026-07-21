@@ -11,6 +11,7 @@ import {
   IBetterListSort,
   IBetterListTabConfig
 } from './betterListTypes';
+import { normalizeBetterListIconOverride } from './groupIconConfiguration';
 
 const FIELD_SLOTS: readonly BetterListFieldSlot[] = [
   'title',
@@ -246,6 +247,7 @@ function readTab(value: unknown, index: number): IBetterListTabConfig {
     label,
     filter: readFilter(value.filter),
     tabIcon: readTabIcon(value.tabIcon),
+    tabIconOverride: normalizeBetterListIconOverride(value.tabIconOverride),
     showItemCount: value.showItemCount === true,
     maxItems: readMaxItems(value.maxItems),
     group: readGroup(value.group),

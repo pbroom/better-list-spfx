@@ -107,7 +107,7 @@ const fluentColorIcons: Readonly<Record<string, FluentIcon>> = {
   news: NewsColor
 };
 
-export const BetterListGroupIconVisual: React.FunctionComponent<{
+export const BetterListIconVisual: React.FunctionComponent<{
   className?: string;
   defaultColor?: string;
   fallback?: React.ReactNode;
@@ -176,6 +176,9 @@ export const BetterListGroupIconVisual: React.FunctionComponent<{
     <IconifyIcon aria-hidden="true" className={className} icon={loadedIcon} style={iconStyle} />
   ) : <>{fallback}</>;
 };
+
+/** @deprecated Prefer the group-neutral BetterListIconVisual export. */
+export const BetterListGroupIconVisual = BetterListIconVisual;
 
 function hasCuratedGroupIcon(icon: IBetterListCatalogGroupIcon): boolean {
   return icon.library === 'solar-duotone'

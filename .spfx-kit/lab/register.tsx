@@ -369,6 +369,7 @@ function createPresentationTab(
     key: tab.id,
     label: tab.label,
     icon: tab.tabIcon,
+    iconOverride: tab.tabIconOverride,
     itemCount: items.length,
     maxItems: tab.maxItems,
     showItemCount: tab.showItemCount,
