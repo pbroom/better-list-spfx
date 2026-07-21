@@ -109,15 +109,19 @@ const fluentColorIcons: Readonly<Record<string, FluentIcon>> = {
 
 export const BetterListGroupIconVisual: React.FunctionComponent<{
   className?: string;
+  defaultColor?: string;
   fallback?: React.ReactNode;
   override: BetterListGroupIconOverride;
-}> = ({ className, fallback, override }) => {
+}> = ({ className, defaultColor, fallback, override }) => {
   const [imageFailed, setImageFailed] = React.useState(false);
   const [loadedIcon, setLoadedIcon] = React.useState<IconifyIconData>();
   const library = override.kind === 'icon' ? override.library : undefined;
   const name = override.kind === 'icon' ? override.name : undefined;
-  const iconStyle = override.kind === 'icon' && override.library !== 'fluent-color' && override.color
-    ? { color: override.color }
+  const iconColor = override.kind === 'icon' && override.library !== 'fluent-color'
+    ? override.color || defaultColor
+    : undefined;
+  const iconStyle = iconColor
+    ? { color: iconColor }
     : undefined;
   const hasCuratedIcon = override.kind === 'icon' && hasCuratedGroupIcon(override);
 

@@ -1,6 +1,6 @@
 import * as React from 'react';
-import { Button, Combobox, Option, Switch, makeStyles, tokens } from '@fluentui/react-components';
-import { AddRegular, ChevronDownRegular, ChevronRightRegular, CodeRegular } from '@fluentui/react-icons';
+import { Button, Dropdown, Option, Switch, makeStyles, tokens } from '@fluentui/react-components';
+import { AddRegular } from '@fluentui/react-icons';
 import type {
   LabCssEditorTarget,
   LabPropertyBag,
@@ -25,7 +25,9 @@ import {
   IBetterListFieldMappings,
   IBetterListTabConfig
 } from '../../src/shared';
-import { ColumnPickerMenu, ItemPropertyBuilder } from '../../src/webparts/betterList/components/propertyPane/ItemPropertyBuilder';
+import { GroupIconColorField } from '../../src/webparts/betterList/components/GroupIconColorField';
+import { ItemPropertyBuilder } from '../../src/webparts/betterList/components/propertyPane/ItemPropertyBuilder';
+import { PropertyPaneSection } from '../../src/webparts/betterList/components/propertyPane/PropertyPaneSection';
 import {
   appendNewTab,
   IBetterListTabFilterField,
@@ -58,20 +60,13 @@ const useStyles = makeStyles({
     width: '100%',
     marginBottom: '12px'
   },
-  section: {
-    borderTop: `1px solid ${tokens.colorNeutralStroke2}`
-  },
-  sectionHeader: {
-    display: 'grid',
-    gridTemplateColumns: 'minmax(0, 1fr) 32px',
-    alignItems: 'center',
-    minHeight: '48px'
-  },
-  sectionButton: {
-    justifyContent: 'flex-start',
-    minWidth: 0,
-    paddingLeft: 0,
-    fontSize: '14px',
+  groupingField: {
+    display: 'flex',
+    flexDirection: 'column',
+    rowGap: '5px',
+    width: '100%',
+    marginBottom: '12px',
+    fontSize: '12px',
     fontWeight: 600
   },
   sectionLabel: {
@@ -83,19 +78,6 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground3,
     fontWeight: 400,
     marginLeft: '4px'
-  },
-  sectionIcon: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: tokens.colorNeutralForeground3,
-    fontSize: '16px'
-  },
-  sectionBody: {
-    color: tokens.colorNeutralForeground3,
-    fontSize: '12px',
-    lineHeight: '18px',
-    padding: '0 0 12px'
   },
   settingRow: {
     display: 'flex',
@@ -114,14 +96,8 @@ const useStyles = makeStyles({
     margin: 0,
     color: tokens.colorNeutralForeground3
   },
-  removeButton: {
-    flexShrink: 0
-  },
   switch: {
     marginTop: '8px'
-  },
-  itemBuilder: {
-    borderTop: `1px solid ${tokens.colorNeutralStroke2}`
   },
   advancedBody: {
     paddingTop: '2px'
@@ -176,7 +152,6 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
   title: _title
 }) => {
   const classes = useStyles();
-  const [listQuery, setListQuery] = React.useState<string | undefined>(undefined);
   const itemLayout = React.useMemo(
     () => parseItemLayoutConfiguration(
       values.itemLayoutJson,
@@ -195,19 +170,20 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
     [mappings]
   );
   const groupingFields = React.useMemo(() => servicesAuthoringFields.filter(isGroupingColumn), []);
+  const groupingOptions = React.useMemo(() => createGroupingColumnOptions(groupingFields), [groupingFields]);
+  const selectedGroupingOption = groupingOptions.find((option) => option.value === values.groupsColumn);
 
   return (
     <section className={classes.root}>
-      <Combobox
-        aria-label="Choose list or enter URL"
+      <Dropdown
+        aria-label="Source list"
         className={classes.listPicker}
-        placeholder="Choose list or enter URL…"
+        listbox={{ style: { maxHeight: 'min(320px, 70vh)', overflowY: 'auto' } }}
+        placeholder="Select a SharePoint list"
+        positioning={{ align: 'start', autoSize: 'height', position: 'below', strategy: 'fixed' }}
         selectedOptions={values.sourceListId ? [values.sourceListId] : []}
-        value={listQuery !== undefined ? listQuery : values.sourceListTitle}
-        onBlur={() => setListQuery(undefined)}
-        onChange={(event) => setListQuery(event.currentTarget.value)}
+        value={values.sourceListTitle}
         onOptionSelect={(_event, data) => {
-          setListQuery(undefined);
           if (data.optionValue === servicesListId) {
             onChange({
               sourceListId: servicesListId,
@@ -217,7 +193,7 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
         }}
       >
         <Option value={servicesListId}>{servicesListTitle}</Option>
-      </Combobox>
+      </Dropdown>
 
       <DisclosureSection
         action={
@@ -247,34 +223,29 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
           }
         />
       </DisclosureSection>
-      <DisclosureSection
-        action={
-          <ColumnPickerMenu
-            ariaLabel="Select groups column"
-            fields={groupingFields}
-            onSelect={(groupsColumn) =>
+      <DisclosureSection label="Groups">
+        <label className={classes.groupingField}>
+          <span>Grouping column</span>
+          <Dropdown
+            aria-label="Grouping column"
+            selectedOptions={[values.groupsColumn || noGroupingValue]}
+            value={selectedGroupingOption?.label || 'No grouping'}
+            onOptionSelect={(_event, data) => {
+              const groupsColumn = data.optionValue === noGroupingValue ? '' : data.optionValue || '';
               onChange({
                 groupsColumn,
                 groupIconsJson: serializeBetterListGroupIconsConfiguration({ ...groupIcons, overrides: [] })
-              })
-            }
-            selectedPaths={new Set(values.groupsColumn ? [values.groupsColumn] : [])}
-          />
-        }
-        label="Groups"
-      >
-        <ColumnSetting
-          emptyLabel="No group column selected."
-          fieldPath={values.groupsColumn}
-          removeAriaLabel="Remove groups column"
-          selectedLabel="Groups column"
-          onRemove={() =>
-            onChange({
-              groupsColumn: '',
-              groupIconsJson: serializeBetterListGroupIconsConfiguration({ ...groupIcons, overrides: [] })
-            })
-          }
-        />
+              });
+            }}
+          >
+            <Option text="No grouping" value={noGroupingValue}>No grouping</Option>
+            {groupingOptions.map((option) => (
+              <Option key={option.value} text={option.label} value={option.value}>
+                {option.label}
+              </Option>
+            ))}
+          </Dropdown>
+        </label>
         {values.groupsColumn ? (
           <>
             <Switch
@@ -293,6 +264,17 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
                 })
               }
             />
+            {groupIcons.showIcons ? (
+              <GroupIconColorField
+                label="Default icon color"
+                value={groupIcons.defaultColor}
+                onChange={(defaultColor) =>
+                  onChange({
+                    groupIconsJson: serializeBetterListGroupIconsConfiguration({ ...groupIcons, defaultColor })
+                  })
+                }
+              />
+            ) : null}
             {groupIcons.overrides.length ? (
               <div className={classes.settingRow}>
                 <span className={classes.settingSummary}>{`${groupIcons.overrides.length} icon override${
@@ -317,36 +299,34 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
         ) : null}
       </DisclosureSection>
 
-      <div className={classes.itemBuilder}>
-        <ItemPropertyBuilder
-          fields={servicesAuthoringFields}
-          value={{
-            itemProperties: itemLayout.itemProperties,
-            rows: itemLayout.rows,
-            links: itemLayout.links
-          }}
-          onChange={(nextValue) => {
-            const metadata = createBetterListMetadataMappings(
-              servicesAuthoringFields,
-              [
-                ...nextValue.itemProperties,
-                ...Object.keys(nextValue.links).map((fieldPath) => nextValue.links[fieldPath])
-              ]
-            );
-            onChange({
-              fieldMappingsJson: JSON.stringify({ ...mappings, metadata }),
-              itemPropertiesJson: serializeItemPropertyFields(nextValue.itemProperties),
-              itemLayoutJson: serializeItemLayoutConfiguration(
-                nextValue.rows,
-                nextValue.itemProperties,
-                nextValue.links
-              )
-            });
-          }}
-        />
-      </div>
+      <ItemPropertyBuilder
+        fields={servicesAuthoringFields}
+        value={{
+          itemProperties: itemLayout.itemProperties,
+          rows: itemLayout.rows,
+          links: itemLayout.links
+        }}
+        onChange={(nextValue) => {
+          const metadata = createBetterListMetadataMappings(
+            servicesAuthoringFields,
+            [
+              ...nextValue.itemProperties,
+              ...Object.keys(nextValue.links).map((fieldPath) => nextValue.links[fieldPath])
+            ]
+          );
+          onChange({
+            fieldMappingsJson: JSON.stringify({ ...mappings, metadata }),
+            itemPropertiesJson: serializeItemPropertyFields(nextValue.itemProperties),
+            itemLayoutJson: serializeItemLayoutConfiguration(
+              nextValue.rows,
+              nextValue.itemProperties,
+              nextValue.links
+            )
+          });
+        }}
+      />
 
-      <DisclosureSection defaultExpanded icon="code" label="Advanced">
+      <DisclosureSection defaultExpanded label="Advanced">
         <div className={classes.advancedBody}>
           {renderControl(betterListSourceWorkspaceControl)}
         </div>
@@ -355,44 +335,10 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
   );
 };
 
-const ColumnSetting: React.FunctionComponent<{
-  emptyLabel: string;
-  fieldPath: string;
-  removeAriaLabel: string;
-  selectedLabel: string;
-  onRemove: () => void;
-}> = ({ emptyLabel, fieldPath, removeAriaLabel, selectedLabel, onRemove }) => {
-  const classes = useStyles();
-  return (
-    <div
-      aria-atomic="true"
-      aria-live="polite"
-      className={fieldPath ? classes.settingRow : classes.settingEmpty}
-      role="status"
-    >
-      <span className={fieldPath ? classes.settingSummary : undefined}>
-        {fieldPath ? `${selectedLabel}: ${getColumnSummary(fieldPath)}.` : emptyLabel}
-      </span>
-      {fieldPath ? (
-        <Button
-          appearance="subtle"
-          aria-label={removeAriaLabel}
-          className={classes.removeButton}
-          size="small"
-          onClick={onRemove}
-        >
-          Remove
-        </Button>
-      ) : null}
-    </div>
-  );
-};
-
 interface IDisclosureSectionProps {
   action?: React.ReactNode;
   children: React.ReactNode;
   defaultExpanded?: boolean;
-  icon?: 'code';
   label: React.ReactNode;
 }
 
@@ -400,32 +346,12 @@ const DisclosureSection: React.FunctionComponent<IDisclosureSectionProps> = ({
   action,
   children,
   defaultExpanded = false,
-  icon,
   label
-}) => {
-  const classes = useStyles();
-  const [expanded, setExpanded] = React.useState(defaultExpanded);
-  return (
-    <div className={classes.section}>
-      <div className={classes.sectionHeader}>
-        <Button
-          appearance="transparent"
-          aria-expanded={expanded}
-          className={classes.sectionButton}
-          onClick={() => setExpanded((current) => !current)}
-        >
-          {label}
-        </Button>
-        {action || (
-          <span className={classes.sectionIcon} aria-hidden="true">
-            {icon === 'code' ? <CodeRegular /> : expanded ? <ChevronDownRegular /> : <ChevronRightRegular />}
-          </span>
-        )}
-      </div>
-      {expanded ? <div className={classes.sectionBody}>{children}</div> : null}
-    </div>
-  );
-};
+}) => (
+  <PropertyPaneSection action={action} defaultExpanded={defaultExpanded} label={label}>
+    {children}
+  </PropertyPaneSection>
+);
 
 function isGroupingColumn(field: (typeof servicesAuthoringFields)[number]): boolean {
   const type = field.typeAsString.toLocaleLowerCase();
@@ -438,11 +364,33 @@ function isGroupingColumn(field: (typeof servicesAuthoringFields)[number]): bool
   );
 }
 
-function getColumnSummary(fieldPath: string): string {
-  const internalName = fieldPath.split('.')[0];
-  const field = servicesAuthoringFields.find((candidate) => candidate.internalName === internalName);
-  const nestedField = fieldPath.split('.')[1];
-  return field ? (nestedField ? `${field.title} → ${nestedField}` : field.title) : fieldPath;
+interface IGroupingColumnOption {
+  label: string;
+  value: string;
+}
+
+const noGroupingValue = '__no_grouping__';
+
+function createGroupingColumnOptions(
+  fields: ReadonlyArray<(typeof servicesAuthoringFields)[number]>
+): readonly IGroupingColumnOption[] {
+  return fields.reduce<IGroupingColumnOption[]>((options, field) => {
+    const isLookup = field.typeAsString.toLocaleLowerCase().indexOf('lookup') >= 0;
+    if (!isLookup) {
+      options.push({ label: field.title, value: field.internalName });
+      return options;
+    }
+    const lookupFields = field.lookupFields?.length
+      ? field.lookupFields
+      : [{ internalName: field.lookupField || 'Title', title: field.lookupField || 'Title', typeAsString: 'Text' }];
+    lookupFields.forEach((lookupField) => {
+      options.push({
+        label: `${field.title} → ${lookupField.title}`,
+        value: `${field.internalName}.${lookupField.internalName}`
+      });
+    });
+    return options;
+  }, []);
 }
 
 function readTabs(serialized: string): readonly IBetterListTabConfig[] {

@@ -65,6 +65,7 @@ import {
   normalizeItemPropertyFields,
   removeItemLayoutRow
 } from '../../../../shared';
+import { PropertyPaneSection } from './PropertyPaneSection';
 
 export interface IItemLayoutBuilderValue {
   itemProperties: readonly string[];
@@ -102,23 +103,6 @@ function isItemLayoutRowId(id: string | number): boolean {
 }
 
 const useStyles = makeStyles({
-  root: {
-    display: 'flex',
-    flexDirection: 'column'
-  },
-  header: {
-    display: 'grid',
-    gridTemplateColumns: 'minmax(0, 1fr) 32px',
-    alignItems: 'center',
-    minHeight: '48px'
-  },
-  headingButton: {
-    justifyContent: 'flex-start',
-    minWidth: 0,
-    paddingLeft: 0,
-    fontSize: '14px',
-    fontWeight: 600
-  },
   row: {
     display: 'grid',
     gridTemplateColumns: 'minmax(0, 1fr) 28px 28px',
@@ -177,6 +161,12 @@ const useStyles = makeStyles({
   },
   removeButton: {
     color: tokens.colorNeutralForeground3,
+    width: '28px',
+    minWidth: '28px',
+    height: '28px',
+    minHeight: '28px',
+    padding: 0,
+    flexShrink: 0,
     transitionDuration: '100ms',
     transitionProperty: 'opacity',
     transitionTimingFunction: 'ease-out',
@@ -189,13 +179,25 @@ const useStyles = makeStyles({
     }
   },
   linkButton: {
-    color: tokens.colorNeutralForeground3
+    color: tokens.colorNeutralForeground3,
+    width: '28px',
+    minWidth: '28px',
+    height: '28px',
+    minHeight: '28px',
+    padding: 0,
+    flexShrink: 0
   },
   linkButtonConfigured: {
     color: tokens.colorBrandForeground1
   },
   addButton: {
-    color: tokens.colorNeutralForeground1
+    color: tokens.colorNeutralForeground1,
+    width: '28px',
+    minWidth: '28px',
+    height: '28px',
+    minHeight: '28px',
+    padding: 0,
+    flexShrink: 0
   },
   layoutRow: {
     borderRadius: tokens.borderRadiusMedium,
@@ -263,7 +265,6 @@ export const ItemPropertyBuilder: React.FunctionComponent<IItemPropertyBuilderPr
   onChange
 }) => {
   const classes = useStyles();
-  const [expanded, setExpanded] = React.useState(true);
   const [activeFieldPath, setActiveFieldPath] = React.useState<string>();
   const itemProperties = React.useMemo(
     () => normalizeItemPropertyFields(value.itemProperties),
@@ -510,16 +511,8 @@ export const ItemPropertyBuilder: React.FunctionComponent<IItemPropertyBuilderPr
   }, []);
 
   return (
-    <div className={classes.root}>
-      <div className={classes.header}>
-        <Button
-          appearance="transparent"
-          aria-expanded={expanded}
-          className={classes.headingButton}
-          onClick={() => setExpanded((current) => !current)}
-        >
-          Item layout
-        </Button>
+    <PropertyPaneSection
+      action={
         <ColumnPickerMenu
           addRowDisabled={rows.length >= betterListMaxItemRows}
           ariaLabel="Add item layout element"
@@ -529,9 +522,10 @@ export const ItemPropertyBuilder: React.FunctionComponent<IItemPropertyBuilderPr
           onAddRow={addRow}
           selectedPaths={selected}
         />
-      </div>
-      {expanded ? (
-        rows.length === 0 ? (
+      }
+      label="Item layout"
+    >
+      {rows.length === 0 ? (
           <DndContext
             collisionDetection={closestCenter}
             sensors={sensors}
@@ -593,9 +587,8 @@ export const ItemPropertyBuilder: React.FunctionComponent<IItemPropertyBuilderPr
               fieldPath={activeFieldPath}
             />
           </DndContext>
-        )
-      ) : null}
-    </div>
+        )}
+    </PropertyPaneSection>
   );
 };
 

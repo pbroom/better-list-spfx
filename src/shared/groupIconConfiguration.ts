@@ -29,6 +29,7 @@ export interface IBetterListGroupIconOverrideEntry {
 export interface IBetterListGroupIconsConfiguration {
   version: 1;
   showIcons: boolean;
+  defaultColor?: string;
   overrides: readonly IBetterListGroupIconOverrideEntry[];
 }
 
@@ -115,6 +116,9 @@ export function parseBetterListGroupIconsConfiguration(value: string | undefined
     return {
       version: 1,
       showIcons: parsed.showIcons !== false,
+      ...(normalizeBetterListGroupIconColor(parsed.defaultColor)
+        ? { defaultColor: normalizeBetterListGroupIconColor(parsed.defaultColor) }
+        : {}),
       overrides
     };
   } catch {
@@ -126,6 +130,9 @@ export function serializeBetterListGroupIconsConfiguration(value: IBetterListGro
   return JSON.stringify({
     version: 1,
     showIcons: value.showIcons,
+    ...(normalizeBetterListGroupIconColor(value.defaultColor)
+      ? { defaultColor: normalizeBetterListGroupIconColor(value.defaultColor) }
+      : {}),
     overrides: value.overrides
   });
 }

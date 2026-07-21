@@ -1,6 +1,15 @@
 /* eslint-disable @typescript-eslint/no-use-before-define -- Small property-pane controls are composed before their declarations. */
 import * as React from 'react';
-import { tokens } from '@fluentui/react-components';
+import {
+  Button,
+  Dropdown,
+  FluentProvider,
+  Option,
+  Switch,
+  tokens,
+  webLightTheme
+} from '@fluentui/react-components';
+import { AddRegular } from '@fluentui/react-icons';
 
 import {
   createBetterListFieldMapping,
@@ -18,8 +27,10 @@ import {
   validateBetterListTemplateStructure
 } from '../../../../shared';
 import { ISourceEditorTarget, SourceEditorField } from '../../../../vendor/source-editor/SourceEditorField';
-import { ColumnPickerMenu, ItemPropertyBuilder } from './ItemPropertyBuilder';
-import { IBetterListTabFilterField, TabBuilder } from './TabBuilder';
+import { GroupIconColorField } from '../GroupIconColorField';
+import { ItemPropertyBuilder } from './ItemPropertyBuilder';
+import { PropertyPaneSection } from './PropertyPaneSection';
+import { appendNewTab, IBetterListTabFilterField, TabBuilder } from './TabBuilder';
 
 export interface IBetterListAuthoringState {
   sourceListId: string;
@@ -240,95 +251,129 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
     });
   };
   const groupingFields = fields.filter(isGroupingColumn);
+  const groupingOptions = createGroupingColumnOptions(groupingFields);
+  const selectedGroupingOption = groupingOptions.find((option) => option.value === props.value.groupsColumn);
   const tabFilterFields = createTabFilterFields(props.value.fieldMappings, fields);
 
   return (
-    <div className="bl-pane">
-      <style>{propertyPaneCss}</style>
-      <section className="bl-pane__section">
-        <h2>Better List</h2>
+    <FluentProvider className="bl-pane-provider" theme={webLightTheme}>
+      <div className="bl-pane">
+        <style>{propertyPaneCss}</style>
+        <section className="bl-pane__source-section">
         <label className="bl-pane__field">
           <span className="bl-pane__label">Source list</span>
-          <select
+          <Dropdown
+            aria-label="Source list"
+            className="bl-pane__source-dropdown"
             disabled={loadingLists}
-            value={props.value.sourceListId}
-            onChange={(event) => selectList(event.currentTarget.value)}
+            listbox={{
+              className: 'bl-pane__source-listbox',
+              style: { maxHeight: 'min(320px, 70vh)', overflowY: 'auto' }
+            }}
+            placeholder={loadingLists ? 'Loading lists…' : 'Select a SharePoint list'}
+            positioning={{ align: 'start', autoSize: 'height', position: 'below', strategy: 'fixed' }}
+            selectedOptions={props.value.sourceListId ? [props.value.sourceListId] : []}
+            value={props.value.sourceListTitle}
+            onOptionSelect={(_event, data) => selectList(data.optionValue || '')}
           >
-            <option value="">{loadingLists ? 'Loading lists…' : 'Select a SharePoint list'}</option>
             {lists.map((list) => (
-              <option key={list.id} value={list.id}>
+              <Option key={list.id} text={list.title} value={list.id}>
                 {list.title}
-              </option>
+              </Option>
             ))}
-          </select>
+          </Dropdown>
         </label>
         {error && (
           <div className="bl-pane__error" role="alert">
             {error}
           </div>
         )}
-      </section>
+        </section>
 
-      <section className="bl-pane__section">
-        <h3>
-          Tabs
-          {props.value.tabs.length > 1 ? (
-            <span className="bl-pane__section-count"> ({props.value.tabs.length})</span>
-          ) : null}
-        </h3>
-        <TabBuilder fields={tabFilterFields} tabs={props.value.tabs} onChange={(tabs) => patchValue({ tabs: tabs.slice(), tabsColumn: '' })} />
-      </section>
-
-      <section className="bl-pane__section">
-        <div className="bl-pane__section-heading">
-          <h3>Groups</h3>
-          <ColumnPickerMenu
-            ariaLabel="Select groups column"
-            fields={groupingFields}
-            onSelect={updateGroupColumn}
-            selectedPaths={new Set(props.value.groupsColumn ? [props.value.groupsColumn] : [])}
+        <PropertyPaneSection
+          action={
+            <Button
+              appearance="subtle"
+              aria-label="Add tab"
+              icon={<AddRegular />}
+              size="small"
+              onClick={() => patchValue({ tabs: appendNewTab(props.value.tabs).slice(), tabsColumn: '' })}
+            />
+          }
+          label={
+            <>
+              Tabs
+              {props.value.tabs.length > 1 ? (
+                <span className="bl-pane__section-count"> ({props.value.tabs.length})</span>
+              ) : null}
+            </>
+          }
+        >
+          <TabBuilder
+            fields={tabFilterFields}
+            showAddAction={false}
+            tabs={props.value.tabs}
+            onChange={(tabs) => patchValue({ tabs: tabs.slice(), tabsColumn: '' })}
           />
-        </div>
-        <AxisColumnSummary
-          emptyLabel="No group column selected."
-          fieldPath={props.value.groupsColumn}
-          fields={fields}
-          removeAriaLabel="Remove groups column"
-          selectedLabel="Groups column"
-          onRemove={() => updateGroupColumn('')}
-        />
+        </PropertyPaneSection>
+
+        <PropertyPaneSection label="Groups">
+        <label className="bl-pane__field">
+          <span className="bl-pane__label">Grouping column</span>
+          <Dropdown
+            aria-label="Grouping column"
+            selectedOptions={[props.value.groupsColumn || noGroupingValue]}
+            value={selectedGroupingOption?.label || 'No grouping'}
+            onOptionSelect={(_event, data) =>
+              updateGroupColumn(data.optionValue === noGroupingValue ? '' : data.optionValue || '')
+            }
+          >
+            <Option text="No grouping" value={noGroupingValue}>No grouping</Option>
+            {groupingOptions.map((option) => (
+              <Option key={option.value} text={option.label} value={option.value}>
+                {option.label}
+              </Option>
+            ))}
+          </Dropdown>
+        </label>
         {props.value.groupsColumn ? (
           <>
-            <label className="bl-pane__check">
-              <input
-                checked={props.value.groupsCollapsible}
-                type="checkbox"
-                onChange={(event) => patchValue({ groupsCollapsible: event.currentTarget.checked })}
-              />
-              <span>Allow groups to collapse</span>
-            </label>
-            <label className="bl-pane__check">
-              <input
-                checked={props.value.groupIcons.showIcons}
-                type="checkbox"
-                onChange={(event) =>
-                  patchValue({ groupIcons: { ...props.value.groupIcons, showIcons: event.currentTarget.checked } })
+            <Switch
+              checked={props.value.groupsCollapsible}
+              className="bl-pane__switch"
+              label="Allow groups to collapse"
+              onChange={(_event, data) => patchValue({ groupsCollapsible: data.checked })}
+            />
+            <Switch
+              checked={props.value.groupIcons.showIcons}
+              className="bl-pane__switch"
+              label="Show group icons"
+              onChange={(_event, data) =>
+                patchValue({ groupIcons: { ...props.value.groupIcons, showIcons: data.checked } })
+              }
+            />
+            {props.value.groupIcons.showIcons ? (
+              <GroupIconColorField
+                label="Default icon color"
+                value={props.value.groupIcons.defaultColor}
+                onChange={(defaultColor) =>
+                  patchValue({ groupIcons: { ...props.value.groupIcons, defaultColor } })
                 }
               />
-              <span>Show group icons</span>
-            </label>
+            ) : null}
             {props.value.groupIcons.overrides.length ? (
               <div className="bl-pane__setting-row">
                 <span>{`${props.value.groupIcons.overrides.length} icon override${
                   props.value.groupIcons.overrides.length === 1 ? '' : 's'
                 }`}</span>
-                <button
+                <Button
+                  appearance="subtle"
                   className="bl-pane__text-button"
-                  type="button"
+                  size="small"
                   onClick={() => patchValue({ groupIcons: { ...props.value.groupIcons, overrides: [] } })}
                 >
                   Reset all
-                </button>
+                </Button>
               </div>
             ) : (
               <p className="bl-pane__hint">
@@ -337,9 +382,8 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
             )}
           </>
         ) : null}
-      </section>
+        </PropertyPaneSection>
 
-      <section className="bl-pane__section">
         <ItemPropertyBuilder
           fields={fields}
           value={{
@@ -349,10 +393,8 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
           }}
           onChange={updateItemLayout}
         />
-      </section>
 
-      <section className="bl-pane__section">
-        <h3>Advanced</h3>
+        <PropertyPaneSection defaultExpanded label="Advanced">
         <SourceEditorField
           description="Styles are scoped to this web part. Insert a supported target, then override only the declarations you need."
           label="Custom CSS/SCSS"
@@ -379,8 +421,9 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
             onChange={(htmlTemplate) => patchValue({ htmlTemplate })}
           />
         </div>
-      </section>
-    </div>
+        </PropertyPaneSection>
+      </div>
+    </FluentProvider>
   );
 };
 
@@ -421,33 +464,32 @@ function createTabFilterFields(
   return semanticFields.concat(sourceFields);
 }
 
-const AxisColumnSummary: React.FunctionComponent<{
-  emptyLabel: string;
-  fieldPath: string;
-  fields: readonly ISharePointFieldOption[];
-  removeAriaLabel: string;
-  selectedLabel: string;
-  onRemove: () => void;
-}> = ({ emptyLabel, fieldPath, fields, removeAriaLabel, selectedLabel, onRemove }) => {
-  const field = fields.find((candidate) => candidate.internalName === fieldPath.split('.')[0]);
-  return (
-    <div
-      aria-atomic="true"
-      aria-live="polite"
-      className={fieldPath ? 'bl-pane__axis-summary' : 'bl-pane__empty'}
-      role="status"
-    >
-      <span>
-        {fieldPath ? `${selectedLabel}: ${field ? getFieldPathLabel(field, fieldPath) : fieldPath}.` : emptyLabel}
-      </span>
-      {fieldPath ? (
-        <button aria-label={removeAriaLabel} type="button" onClick={onRemove}>
-          Remove
-        </button>
-      ) : null}
-    </div>
-  );
-};
+interface IGroupingColumnOption {
+  label: string;
+  value: string;
+}
+
+const noGroupingValue = '__no_grouping__';
+
+function createGroupingColumnOptions(
+  fields: readonly ISharePointFieldOption[]
+): readonly IGroupingColumnOption[] {
+  return fields.reduce<IGroupingColumnOption[]>((options, field) => {
+    const isLookup = field.typeAsString.toLocaleLowerCase().indexOf('lookup') >= 0;
+    if (!isLookup) {
+      options.push({ label: field.title, value: field.internalName });
+      return options;
+    }
+    const lookupFields = field.lookupFields?.length
+      ? field.lookupFields
+      : [{ internalName: field.lookupField || 'Title', title: field.lookupField || 'Title', typeAsString: 'Text' }];
+    lookupFields.forEach((lookupField) => {
+      const value = `${field.internalName}.${lookupField.internalName}`;
+      options.push({ label: getFieldPathLabel(field, value), value });
+    });
+    return options;
+  }, []);
+}
 
 function isGroupingColumn(field: ISharePointFieldOption): boolean {
   const type = field.typeAsString.toLocaleLowerCase();
@@ -461,35 +503,19 @@ function isGroupingColumn(field: ISharePointFieldOption): boolean {
 }
 
 const propertyPaneCss = `
-.bl-pane { color: #242424; font-family: "Segoe UI", sans-serif; margin: -8px; }
+.bl-pane-provider { background: transparent; }
+.bl-pane { color: #242424; container-type: inline-size; font-family: "Segoe UI", sans-serif; margin: -8px; }
 .bl-pane *, .bl-pane *::before, .bl-pane *::after { box-sizing: border-box; }
-.bl-pane__section { border: 0; border-bottom: 1px solid #e0e0e0; margin: 0; padding: 16px 12px; }
-.bl-pane__section h2, .bl-pane__section h3, .bl-pane__section legend { color: #0f2d4a; font-size: 16px; font-weight: 600; margin: 0 0 12px; padding: 0; }
+.bl-pane__source-section { border: 0; margin: 0; padding: 8px 0 12px; }
 .bl-pane__section-count { color: ${tokens.colorNeutralForeground3}; font-weight: 400; margin-left: 4px; }
-.bl-pane__section legend { float: left; width: 100%; }
-.bl-pane__section legend + * { clear: both; }
 .bl-pane__field { display: flex; flex-direction: column; gap: 5px; margin: 0 0 12px; min-width: 0; }
 .bl-pane__label { font-size: 12px; font-weight: 600; }
-.bl-pane input, .bl-pane select, .bl-pane textarea { background: #fff; border: 1px solid #8a8886; border-radius: 4px; color: #242424; font: inherit; min-height: 32px; padding: 5px 8px; width: 100%; }
-.bl-pane input:focus, .bl-pane select:focus, .bl-pane textarea:focus, .bl-pane button:focus-visible { outline: 2px solid #0f6cbd; outline-offset: 1px; }
-.bl-pane select[multiple] { min-height: 72px; }
+.bl-pane__source-dropdown { min-width: 0; width: 100%; }
+.bl-pane__source-listbox { font-family: "Segoe UI", sans-serif; }
 .bl-pane__help { color: #616161; font-size: 11px; line-height: 1.4; margin: -4px 0 12px; }
 .bl-pane__error { background: #fdf3f4; border-left: 3px solid #c50f1f; color: #8a1219; font-size: 12px; padding: 8px; }
-.bl-pane__section-heading, .bl-pane__tab-toolbar { align-items: center; display: flex; justify-content: space-between; gap: 8px; }
-.bl-pane__section-heading p { margin-bottom: 8px; }
-.bl-pane button { align-items: center; background: #fff; border: 1px solid #d1d1d1; border-radius: 4px; color: #0f2d4a; cursor: pointer; display: inline-flex; font: inherit; gap: 4px; justify-content: center; min-height: 30px; padding: 4px 8px; }
-.bl-pane button:hover { background: #f5f5f5; }
-.bl-pane button:disabled { cursor: default; opacity: .4; }
-.bl-pane__icon-button { white-space: nowrap; }
-.bl-pane__icon-only { border-color: transparent !important; min-width: 28px; padding: 2px !important; }
-.bl-pane__tab-card { background: #fafafa; border: 1px solid #e0e0e0; border-radius: 6px; margin: 0 0 12px; padding: 10px; }
-.bl-pane__tab-toolbar { border-bottom: 1px solid #e0e0e0; margin: -2px -2px 10px; padding: 0 0 7px; }
-.bl-pane__tab-toolbar > div { display: flex; }
-.bl-pane__grid { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .bl-pane__empty { background: #f5f5f5; color: #616161; font-size: 12px; padding: 10px; }
-.bl-pane__axis-summary { align-items: center; display: flex; font-size: 12px; justify-content: space-between; gap: 8px; }
-.bl-pane__check { align-items: center; display: flex; font-size: 12px; gap: 8px; margin-top: 10px; }
-.bl-pane__check input { min-height: auto; width: auto; }
+.bl-pane__switch { margin-top: 8px; }
 .bl-pane__setting-row { align-items: center; color: #616161; display: flex; font-size: 12px; justify-content: space-between; gap: 8px; margin-top: 10px; }
 .bl-pane__text-button { border-color: transparent !important; min-height: 24px !important; padding: 2px 4px !important; }
 .bl-pane__hint { color: #616161; font-size: 11px; line-height: 1.4; margin: 8px 0 0; }
