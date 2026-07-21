@@ -3,10 +3,12 @@ import {
   flattenItemLayoutRows,
   formatItemPropertyValue,
   getItemPropertyUrl,
+  parseItemLayoutConfiguration,
   parseItemLayoutRows,
   parseItemPropertyFields,
   removeItemLayoutRow,
   serializeItemLayoutRows,
+  serializeItemLayoutConfiguration,
   serializeItemPropertyFields
 } from './itemPropertyConfiguration';
 
@@ -66,6 +68,28 @@ describe('item property configuration', () => {
     ]);
   });
 
+  it('migrates the legacy hidden URL property to an explicit Title link', () => {
+    expect(parseItemLayoutConfiguration('[["Title","URL"]]', ['Title', 'URL'])).toEqual({
+      itemProperties: ['Title'],
+      rows: [['Title']],
+      links: { Title: 'URL' }
+    });
+  });
+
+  it('round-trips explicit links for any selected item element', () => {
+    const serialized = serializeItemLayoutConfiguration(
+      [['Description', 'Title']],
+      ['Description', 'Title'],
+      { Description: 'DetailsLink', Title: 'URL', Removed: 'URL' }
+    );
+
+    expect(parseItemLayoutConfiguration(serialized, ['Description', 'Title'])).toEqual({
+      itemProperties: ['Description', 'Title'],
+      rows: [['Description', 'Title']],
+      links: { Description: 'DetailsLink', Title: 'URL' }
+    });
+  });
+
   it('preserves authored reading order when removing the first or a later row', () => {
     const properties = ['Title', 'Category', 'Description', 'Owner'];
     const rows = [['Title'], ['Category', 'Description'], ['Owner']];
@@ -97,5 +121,16 @@ describe('item property configuration', () => {
     expect(formatItemPropertyValue(source, 'Audience')).toBe('Alex, Morgan');
     expect(formatItemPropertyValue(source, 'URL')).toBe('Open service');
     expect(getItemPropertyUrl(source, 'URL')).toBe('https://contoso.example');
+  });
+
+  it('rejects unsafe hyperlink protocols', () => {
+    expect(getItemPropertyUrl({ URL: { Url: `java${'script'}:alert(1)` } }, 'URL')).toBeUndefined();
+    expect(
+      getItemPropertyUrl({ URL: { Url: ['java', '\n', 'script:alert(1)'].join('') } }, 'URL')
+    ).toBeUndefined();
+    expect(getItemPropertyUrl({ URL: { Url: 'data:text/html,unsafe' } }, 'URL')).toBeUndefined();
+    expect(getItemPropertyUrl({ URL: { Url: 'mailto:help@contoso.example' } }, 'URL')).toBe(
+      'mailto:help@contoso.example'
+    );
   });
 });

@@ -9,14 +9,15 @@ import type {
 } from '@spfx-kit/spfx-lab-runtime';
 
 import {
-  parseItemLayoutRows,
+  createBetterListMetadataMappings,
+  parseItemLayoutConfiguration,
   parseItemPropertyFields,
   parseTabConfiguration,
   betterListSemanticSlots,
   betterListTemplateMaxBytes,
   defaultBetterListHtmlTemplate,
   validateBetterListTemplateStructure,
-  serializeItemLayoutRows,
+  serializeItemLayoutConfiguration,
   serializeItemPropertyFields,
   serializeTabConfiguration,
   IBetterListFieldMappings,
@@ -168,13 +169,12 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
 }) => {
   const classes = useStyles();
   const [listQuery, setListQuery] = React.useState<string | undefined>(undefined);
-  const selectedItemProperties = React.useMemo(
-    () => parseItemPropertyFields(values.itemPropertiesJson),
-    [values.itemPropertiesJson]
-  );
-  const itemLayoutRows = React.useMemo(
-    () => parseItemLayoutRows(values.itemLayoutJson, selectedItemProperties),
-    [selectedItemProperties, values.itemLayoutJson]
+  const itemLayout = React.useMemo(
+    () => parseItemLayoutConfiguration(
+      values.itemLayoutJson,
+      parseItemPropertyFields(values.itemPropertiesJson)
+    ),
+    [values.itemLayoutJson, values.itemPropertiesJson]
   );
   const tabs = React.useMemo(() => readTabs(values.tabsJson), [values.tabsJson]);
   const mappings = React.useMemo(() => readMappings(values.fieldMappingsJson), [values.fieldMappingsJson]);
@@ -262,15 +262,28 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
         <ItemPropertyBuilder
           fields={servicesAuthoringFields}
           value={{
-            itemProperties: selectedItemProperties,
-            rows: itemLayoutRows
+            itemProperties: itemLayout.itemProperties,
+            rows: itemLayout.rows,
+            links: itemLayout.links
           }}
-          onChange={(nextValue) =>
+          onChange={(nextValue) => {
+            const metadata = createBetterListMetadataMappings(
+              servicesAuthoringFields,
+              [
+                ...nextValue.itemProperties,
+                ...Object.keys(nextValue.links).map((fieldPath) => nextValue.links[fieldPath])
+              ]
+            );
             onChange({
+              fieldMappingsJson: JSON.stringify({ ...mappings, metadata }),
               itemPropertiesJson: serializeItemPropertyFields(nextValue.itemProperties),
-              itemLayoutJson: serializeItemLayoutRows(nextValue.rows, nextValue.itemProperties)
-            })
-          }
+              itemLayoutJson: serializeItemLayoutConfiguration(
+                nextValue.rows,
+                nextValue.itemProperties,
+                nextValue.links
+              )
+            });
+          }}
         />
       </div>
 

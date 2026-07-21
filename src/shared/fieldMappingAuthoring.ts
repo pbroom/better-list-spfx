@@ -2,7 +2,8 @@ import {
   BetterListFieldKind,
   BetterListFieldMapping,
   BetterListFieldSlot,
-  IBetterListFieldMappings
+  IBetterListFieldMappings,
+  IBetterListMetadataFieldMapping
 } from './betterListTypes';
 
 export interface IBetterListFieldDescriptor {
@@ -81,6 +82,33 @@ export function updateBetterListFieldMapping(
   const nextMappings = { ...mappings };
   delete nextMappings[slot];
   return nextMappings;
+}
+
+export function createBetterListMetadataMappings(
+  fields: readonly IBetterListFieldDescriptor[],
+  fieldPaths: readonly string[]
+): readonly IBetterListMetadataFieldMapping[] {
+  const seen = new Set<string>();
+  return fieldPaths.reduce<IBetterListMetadataFieldMapping[]>((result, fieldPath) => {
+    if (!fieldPath || fieldPath === 'Title' || seen.has(fieldPath)) {
+      return result;
+    }
+    const [internalName, lookupValueField] = fieldPath.split('.');
+    const field = fields.find((candidate) => candidate.internalName === internalName);
+    if (!field) {
+      return result;
+    }
+    const targetField = lookupValueField
+      ? field.lookupFields?.find((candidate) => candidate.internalName === lookupValueField)
+      : undefined;
+    seen.add(fieldPath);
+    result.push({
+      key: fieldPath,
+      label: lookupValueField ? `${field.title} → ${targetField?.title || lookupValueField}` : field.title,
+      mapping: createBetterListFieldMapping(field, undefined, lookupValueField)
+    });
+    return result;
+  }, []);
 }
 
 function getScalarFieldKind(

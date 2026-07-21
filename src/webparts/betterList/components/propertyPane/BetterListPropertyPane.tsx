@@ -3,11 +3,13 @@ import * as React from 'react';
 
 import {
   createBetterListFieldMapping,
+  createBetterListMetadataMappings,
   createDefaultTabs,
   betterListSemanticSlots,
   defaultBetterListHtmlTemplate,
   betterListTemplateMaxBytes,
   BetterListItemLayoutRows,
+  BetterListItemElementLinks,
   IBetterListFieldDescriptor,
   IBetterListFieldMappings,
   IBetterListTabConfig,
@@ -23,6 +25,7 @@ export interface IBetterListAuthoringState {
   fieldMappings: Partial<IBetterListFieldMappings>;
   itemProperties: readonly string[];
   itemLayoutRows: BetterListItemLayoutRows;
+  itemElementLinks: BetterListItemElementLinks;
   tabsColumn: string;
   groupsColumn: string;
   groupsCollapsible: boolean;
@@ -170,6 +173,7 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
       fieldMappings: {},
       itemProperties: ['Title'],
       itemLayoutRows: [],
+      itemElementLinks: {},
       tabsColumn: '',
       groupsColumn: '',
       groupsCollapsible: true,
@@ -198,23 +202,17 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
   const updateItemLayout = (value: {
     itemProperties: readonly string[];
     rows: BetterListItemLayoutRows;
+    links: BetterListItemElementLinks;
   }): void => {
-    const { itemProperties, rows } = value;
-    const metadata = itemProperties
-      .filter((fieldPath) => fieldPath !== 'Title')
-      .map((fieldPath) => {
-        const field = fields.find((candidate) => candidate.internalName === fieldPath.split('.')[0]);
-        return field ? { field, fieldPath } : undefined;
-      })
-      .filter((entry): entry is { field: ISharePointFieldOption; fieldPath: string } => Boolean(entry))
-      .map((field) => ({
-        key: field.fieldPath,
-        label: getFieldPathLabel(field.field, field.fieldPath),
-        mapping: createBetterListFieldMapping(field.field, undefined, field.fieldPath.split('.')[1])
-      }));
+    const { itemProperties, rows, links } = value;
+    const metadata = createBetterListMetadataMappings(
+      fields,
+      [...itemProperties, ...Object.keys(links).map((fieldPath) => links[fieldPath])]
+    );
     patchValue({
       itemProperties,
       itemLayoutRows: rows,
+      itemElementLinks: links,
       fieldMappings: { ...props.value.fieldMappings, metadata }
     });
   };
@@ -303,7 +301,8 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
           fields={fields}
           value={{
             itemProperties: props.value.itemProperties,
-            rows: props.value.itemLayoutRows
+            rows: props.value.itemLayoutRows,
+            links: props.value.itemElementLinks
           }}
           onChange={updateItemLayout}
         />

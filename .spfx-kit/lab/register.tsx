@@ -3,6 +3,7 @@ import type { LabRenderProps, LabWebPart, LabWebPartRegistry } from '@spfx-kit/s
 
 import {
   BetterListFieldValue,
+  BetterListItemElementLinks,
   defaultBetterListHtmlTemplate,
   createBetterListFieldMapping,
   defaultBetterListScss,
@@ -13,7 +14,7 @@ import {
   IBetterListGroupResult,
   IBetterListItem as ICoreBetterListItem,
   IBetterListTabConfig,
-  parseItemLayoutRows,
+  parseItemLayoutConfiguration,
   parseItemPropertyFields,
   parseTabConfiguration,
   processItems,
@@ -69,10 +70,12 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
     () => createAxisMappings(mappings, props.groupsColumn),
     [mappings, props.groupsColumn]
   );
-  const itemProperties = React.useMemo(() => parseItemPropertyFields(props.itemPropertiesJson), [props.itemPropertiesJson]);
-  const itemLayoutRows = React.useMemo(
-    () => parseItemLayoutRows(props.itemLayoutJson, itemProperties),
-    [itemProperties, props.itemLayoutJson]
+  const itemLayout = React.useMemo(
+    () => parseItemLayoutConfiguration(
+      props.itemLayoutJson,
+      parseItemPropertyFields(props.itemPropertiesJson)
+    ),
+    [props.itemLayoutJson, props.itemPropertiesJson]
   );
   const tabs = React.useMemo(() => readTabs(props.tabsJson), [props.tabsJson]);
   const dataSource = React.useMemo(
@@ -117,8 +120,14 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
     [props.groupsCollapsible, props.groupsColumn, tabs]
   );
   const presentationTabs = React.useMemo(
-    () => effectiveTabs.map((tab) => createPresentationTab(items, tab, props.sourceListTitle, itemProperties)),
-    [effectiveTabs, itemProperties, items, props.sourceListTitle]
+    () => effectiveTabs.map((tab) => createPresentationTab(
+      items,
+      tab,
+      props.sourceListTitle,
+      itemLayout.itemProperties,
+      itemLayout.links
+    )),
+    [effectiveTabs, itemLayout.itemProperties, itemLayout.links, items, props.sourceListTitle]
   );
 
   React.useEffect(() => {
@@ -150,8 +159,8 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
         status={status}
         errorMessage={errorMessage}
         htmlTemplate={props.htmlTemplate}
-        itemPropertyFields={itemProperties}
-        itemLayoutRows={itemLayoutRows}
+        itemPropertyFields={itemLayout.itemProperties}
+        itemLayoutRows={itemLayout.rows}
         listTitle={props.sourceListTitle}
         emptyMessage="There are no active Services items to display."
         onTabChange={setActiveTabKey}
@@ -240,36 +249,43 @@ function createPresentationTab(
   sourceItems: readonly ICoreBetterListItem[],
   tab: IBetterListTabConfig,
   sourceListTitle: string,
-  itemProperties: readonly string[]
+  itemProperties: readonly string[],
+  itemElementLinks: BetterListItemElementLinks
 ): IBetterListTab {
   const processed = processItems(sourceItems, tab);
   const groups: readonly IBetterListGroupResult[] = tab.group
     ? groupItems(processed, tab.group)
     : [{ key: 'all', label: sourceListTitle || 'Items', items: processed }];
   const items: IBetterListItem[] = [];
-  const selectedItemProperties = new Set(itemProperties);
-
   groups.forEach((group, groupIndex) => {
     group.items.forEach((item) => {
       const elements = itemProperties
-        .filter((fieldPath) => fieldPath !== 'Title' && fieldPath !== 'URL')
+        .filter((fieldPath) => fieldPath !== 'Title')
         .map((fieldPath) => {
           const value = formatItemPropertyValue(item.source, fieldPath);
           return value
             ? {
                 key: fieldPath,
                 kind: fieldPath === 'Description' ? ('description' as const) : ('metadata' as const),
-                value
+                value,
+                href: itemElementLinks[fieldPath]
+                  ? getItemPropertyUrl(item.source, itemElementLinks[fieldPath])
+                  : undefined
               }
             : undefined;
         })
-        .filter((element): element is { key: string; kind: 'description' | 'metadata'; value: string } => Boolean(element));
+        .filter((element): element is {
+          key: string;
+          kind: 'description' | 'metadata';
+          value: string;
+          href: string | undefined;
+        } => Boolean(element));
       const metadata = elements.filter((element) => element.kind === 'metadata').map((element) => element.value);
       items.push({
         id: String(item.id),
         title: item.title,
-        href: selectedItemProperties.has('URL') ? getItemPropertyUrl(item.source, 'URL') : undefined,
-        description: selectedItemProperties.has('Description') ? formatItemPropertyValue(item.source, 'Description') : undefined,
+        href: itemElementLinks.Title ? getItemPropertyUrl(item.source, itemElementLinks.Title) : undefined,
+        description: itemProperties.indexOf('Description') >= 0 ? formatItemPropertyValue(item.source, 'Description') : undefined,
         metadata,
         elements,
         groupId: group.key,

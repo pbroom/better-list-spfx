@@ -3,6 +3,20 @@ export const betterListMaxItemRows = 5;
 
 export type BetterListItemLayoutRows = readonly (readonly string[])[];
 
+export type BetterListItemElementLinks = Readonly<Record<string, string>>;
+
+export interface IBetterListItemLayoutConfiguration {
+  itemProperties: readonly string[];
+  rows: BetterListItemLayoutRows;
+  links: BetterListItemElementLinks;
+}
+
+interface IBetterListItemLayoutConfigurationV2 {
+  version: 2;
+  rows: BetterListItemLayoutRows;
+  links: BetterListItemElementLinks;
+}
+
 export function parseItemPropertyFields(serialized: string | undefined): readonly string[] {
   if (!serialized) {
     return [REQUIRED_TITLE_FIELD];
@@ -26,15 +40,42 @@ export function parseItemLayoutRows(
   serialized: string | undefined,
   itemProperties: readonly string[]
 ): BetterListItemLayoutRows {
+  return parseItemLayoutConfiguration(serialized, itemProperties).rows;
+}
+
+export function parseItemLayoutConfiguration(
+  serialized: string | undefined,
+  itemProperties: readonly string[]
+): IBetterListItemLayoutConfiguration {
+  const properties = normalizeItemPropertyFields(itemProperties);
   try {
     const parsed = JSON.parse(serialized || '[]') as unknown;
     if (Array.isArray(parsed)) {
-      return normalizeItemLayoutRows(parsed, itemProperties);
+      const legacyUsesUrlForTitle = properties.indexOf('URL') >= 0;
+      const visibleProperties = legacyUsesUrlForTitle
+        ? properties.filter((fieldPath) => fieldPath !== 'URL')
+        : properties;
+      const legacyRows = normalizeItemLayoutRows(parsed, properties)
+        .map((row) => row.filter((fieldPath) => fieldPath !== 'URL'));
+      return {
+        itemProperties: visibleProperties,
+        rows: normalizeItemLayoutRows(legacyRows, visibleProperties),
+        links: legacyUsesUrlForTitle && visibleProperties.indexOf(REQUIRED_TITLE_FIELD) >= 0
+          ? { [REQUIRED_TITLE_FIELD]: 'URL' }
+          : {}
+      };
+    }
+    if (isRecord(parsed) && parsed.version === 2 && Array.isArray(parsed.rows)) {
+      return {
+        itemProperties: properties,
+        rows: normalizeItemLayoutRows(parsed.rows, properties),
+        links: normalizeItemElementLinks(parsed.links, properties)
+      };
     }
   } catch {
     // Fall through to the legacy flat layout.
   }
-  return [];
+  return { itemProperties: properties, rows: [], links: {} };
 }
 
 export function serializeItemLayoutRows(
@@ -42,6 +83,37 @@ export function serializeItemLayoutRows(
   itemProperties: readonly string[]
 ): string {
   return JSON.stringify(normalizeItemLayoutRows(rows, itemProperties));
+}
+
+export function serializeItemLayoutConfiguration(
+  rows: BetterListItemLayoutRows,
+  itemProperties: readonly string[],
+  links: BetterListItemElementLinks
+): string {
+  const properties = normalizeItemPropertyFields(itemProperties);
+  const configuration: IBetterListItemLayoutConfigurationV2 = {
+    version: 2,
+    rows: normalizeItemLayoutRows(rows, properties),
+    links: normalizeItemElementLinks(links, properties)
+  };
+  return JSON.stringify(configuration);
+}
+
+export function normalizeItemElementLinks(
+  links: unknown,
+  itemProperties: readonly string[]
+): BetterListItemElementLinks {
+  if (!isRecord(links)) {
+    return {};
+  }
+  const selected = new Set(normalizeItemPropertyFields(itemProperties));
+  return Object.keys(links).reduce<Record<string, string>>((result, fieldPath) => {
+    const linkFieldPath = typeof links[fieldPath] === 'string' ? String(links[fieldPath]).trim() : '';
+    if (selected.has(fieldPath) && linkFieldPath) {
+      result[fieldPath] = linkFieldPath;
+    }
+    return result;
+  }, {});
 }
 
 export function normalizeItemLayoutRows(
@@ -140,13 +212,31 @@ export function getItemPropertyUrl(
 ): string | undefined {
   const value = readPath(source, fieldPath);
   if (typeof value === 'string') {
-    return value || undefined;
+    return normalizeSafeUrl(value);
   }
   if (isRecord(value)) {
     const url = value.Url ?? value.URL ?? value.url;
-    return typeof url === 'string' && url ? url : undefined;
+    return typeof url === 'string' ? normalizeSafeUrl(url) : undefined;
   }
   return undefined;
+}
+
+function normalizeSafeUrl(value: string): string | undefined {
+  const url = value.trim();
+  if (!url) {
+    return undefined;
+  }
+  for (let index = 0; index < url.length; index += 1) {
+    const characterCode = url.charCodeAt(index);
+    if (characterCode <= 31 || characterCode === 127) {
+      return undefined;
+    }
+  }
+  const scheme = url.match(/^([a-z][a-z0-9+.-]*):/i)?.[1]?.toLocaleLowerCase();
+  if (scheme && scheme !== 'http' && scheme !== 'https' && scheme !== 'mailto' && scheme !== 'tel') {
+    return undefined;
+  }
+  return url;
 }
 
 function readPath(source: Readonly<Record<string, unknown>>, fieldPath: string): unknown {

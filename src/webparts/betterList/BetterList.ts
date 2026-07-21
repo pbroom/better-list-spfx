@@ -9,6 +9,7 @@ import {
   addTabFilterMappings,
   alignTabQueryFieldKinds,
   BetterListFieldValue,
+  BetterListItemElementLinks,
   betterListStylePresetVersion,
   createDefaultTabs,
   defaultBetterListScss,
@@ -21,12 +22,12 @@ import {
   IBetterListGroupResult,
   IBetterListItem as ICoreBetterListItem,
   IBetterListTabConfig,
-  parseItemLayoutRows,
+  parseItemLayoutConfiguration,
   parseItemPropertyFields,
   parseTabConfiguration,
   processItems,
   scopeBetterListStyles,
-  serializeItemLayoutRows,
+  serializeItemLayoutConfiguration,
   serializeItemPropertyFields,
   serializeTabConfiguration
 } from '../../shared';
@@ -74,13 +75,18 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
 
   public render(): void {
     const tabs = this._createEffectiveTabs();
-    const presentationTabs = tabs.map((tab) => this._createPresentationTab(tab));
+    const itemLayout = parseItemLayoutConfiguration(
+      this.properties.itemLayoutJson,
+      parseItemPropertyFields(this.properties.itemPropertiesJson)
+    );
+    const presentationTabs = tabs.map((tab) =>
+      this._createPresentationTab(tab, itemLayout.itemProperties, itemLayout.links)
+    );
     const firstTab = presentationTabs[0];
     if (!this._activeTabKey || !presentationTabs.some((tab) => tab.key === this._activeTabKey)) {
       this._activeTabKey = firstTab?.key || '';
     }
     const wrapperClassName = `better-list-instance-${this._getInstanceSeed()}`;
-    const itemPropertyFields = parseItemPropertyFields(this.properties.itemPropertiesJson);
     const view = React.createElement(BetterListView, {
       tabs: presentationTabs,
       activeTabKey: this._activeTabKey,
@@ -91,11 +97,8 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
         ? 'There are no active list items to display.'
         : 'Choose a source list and map its Title field in the web part settings.',
       htmlTemplate: this.properties.htmlTemplate,
-      itemPropertyFields,
-      itemLayoutRows: parseItemLayoutRows(
-        this.properties.itemLayoutJson,
-        itemPropertyFields
-      ),
+      itemPropertyFields: itemLayout.itemProperties,
+      itemLayoutRows: itemLayout.rows,
       listTitle: this.properties.sourceListTitle,
       onTabChange: (tabKey: string): void => {
         this._activeTabKey = tabKey;
@@ -222,15 +225,17 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
   }
 
   private _createAuthoringState(): IBetterListAuthoringState {
+    const itemLayout = parseItemLayoutConfiguration(
+      this.properties.itemLayoutJson,
+      parseItemPropertyFields(this.properties.itemPropertiesJson)
+    );
     return {
       sourceListId: this.properties.sourceListId,
       sourceListTitle: this.properties.sourceListTitle,
       fieldMappings: this._readMappings(),
-      itemProperties: parseItemPropertyFields(this.properties.itemPropertiesJson),
-      itemLayoutRows: parseItemLayoutRows(
-        this.properties.itemLayoutJson,
-        parseItemPropertyFields(this.properties.itemPropertiesJson)
-      ),
+      itemProperties: itemLayout.itemProperties,
+      itemLayoutRows: itemLayout.rows,
+      itemElementLinks: itemLayout.links,
       tabsColumn: this.properties.tabsColumn,
       groupsColumn: this.properties.groupsColumn,
       groupsCollapsible: this.properties.groupsCollapsible,
@@ -249,7 +254,11 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       sourceListTitle: value.sourceListTitle,
       fieldMappingsJson: JSON.stringify(value.fieldMappings),
       itemPropertiesJson: serializeItemPropertyFields(value.itemProperties),
-      itemLayoutJson: serializeItemLayoutRows(value.itemLayoutRows, value.itemProperties),
+      itemLayoutJson: serializeItemLayoutConfiguration(
+        value.itemLayoutRows,
+        value.itemProperties,
+        value.itemElementLinks
+      ),
       tabsColumn: value.tabsColumn,
       groupsColumn: value.groupsColumn,
       groupsCollapsible: value.groupsCollapsible,
@@ -264,6 +273,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       next.sourceListTitle !== this.properties.sourceListTitle ||
       next.fieldMappingsJson !== this.properties.fieldMappingsJson ||
       next.itemPropertiesJson !== this.properties.itemPropertiesJson ||
+      next.itemLayoutJson !== this.properties.itemLayoutJson ||
       next.tabsColumn !== this.properties.tabsColumn ||
       next.groupsColumn !== this.properties.groupsColumn ||
       next.groupsCollapsible !== this.properties.groupsCollapsible ||
@@ -311,17 +321,19 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     this.render();
   }
 
-  private _createPresentationTab(tab: IBetterListTabConfig): IBetterListTab {
+  private _createPresentationTab(
+    tab: IBetterListTabConfig,
+    itemProperties: readonly string[],
+    itemElementLinks: BetterListItemElementLinks
+  ): IBetterListTab {
     const processed = processItems(this._items, tab);
     const groups: readonly IBetterListGroupResult[] = tab.group
       ? groupItems(processed, tab.group)
       : [{ key: 'all', label: this.properties.sourceListTitle || 'Items', items: processed }];
     const items: IBetterListItem[] = [];
-    const itemProperties = parseItemPropertyFields(this.properties.itemPropertiesJson);
-    const selectedItemProperties = new Set(itemProperties);
     groups.forEach((group, groupIndex) => {
       group.items.forEach((item) => {
-        items.push(this._createPresentationItem(item, group, groupIndex, tab, itemProperties, selectedItemProperties));
+        items.push(this._createPresentationItem(item, group, groupIndex, tab, itemProperties, itemElementLinks));
       });
     });
     return {
@@ -343,27 +355,35 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     groupIndex: number,
     tab: IBetterListTabConfig,
     itemProperties: readonly string[],
-    selectedItemProperties: ReadonlySet<string>
+    itemElementLinks: BetterListItemElementLinks
   ): IBetterListItem {
     const elements = itemProperties
-      .filter((fieldPath) => fieldPath !== 'Title' && fieldPath !== 'URL')
+      .filter((fieldPath) => fieldPath !== 'Title')
       .map((fieldPath) => {
         const value = formatItemPropertyValue(item.source, fieldPath);
         return value
           ? {
               key: fieldPath,
               kind: fieldPath === 'Description' ? ('description' as const) : ('metadata' as const),
-              value
+              value,
+              href: itemElementLinks[fieldPath]
+                ? getItemPropertyUrl(item.source, itemElementLinks[fieldPath])
+                : undefined
             }
           : undefined;
       })
-      .filter((element): element is { key: string; kind: 'description' | 'metadata'; value: string } => Boolean(element));
+      .filter((element): element is {
+        key: string;
+        kind: 'description' | 'metadata';
+        value: string;
+        href: string | undefined;
+      } => Boolean(element));
     const metadata = elements.filter((element) => element.kind === 'metadata').map((element) => element.value);
     return {
       id: String(item.id),
       title: item.title,
-      href: selectedItemProperties.has('URL') ? getItemPropertyUrl(item.source, 'URL') : undefined,
-      description: selectedItemProperties.has('Description') ? formatItemPropertyValue(item.source, 'Description') : undefined,
+      href: itemElementLinks.Title ? getItemPropertyUrl(item.source, itemElementLinks.Title) : undefined,
+      description: itemProperties.indexOf('Description') >= 0 ? formatItemPropertyValue(item.source, 'Description') : undefined,
       metadata,
       elements,
       groupId: group.key,

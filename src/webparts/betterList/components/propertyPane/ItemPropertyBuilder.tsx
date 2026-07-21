@@ -31,6 +31,7 @@ import {
   Menu,
   MenuDivider,
   MenuItem,
+  MenuItemRadio,
   MenuList,
   MenuPopover,
   MenuTrigger,
@@ -55,9 +56,11 @@ import {
 
 import {
   betterListMaxItemRows,
+  BetterListItemElementLinks,
   BetterListItemLayoutRows,
   flattenItemLayoutRows,
   IBetterListFieldDescriptor,
+  normalizeItemElementLinks,
   normalizeItemLayoutRows,
   normalizeItemPropertyFields,
   removeItemLayoutRow
@@ -66,6 +69,12 @@ import {
 export interface IItemLayoutBuilderValue {
   itemProperties: readonly string[];
   rows: BetterListItemLayoutRows;
+  links: BetterListItemElementLinks;
+}
+
+interface IItemLinkFieldOption {
+  fieldPath: string;
+  label: string;
 }
 
 export interface IItemPropertyBuilderProps {
@@ -86,6 +95,7 @@ export interface IColumnPickerMenuProps {
 }
 
 const itemLayoutRowIdPrefix = 'item-layout-row-';
+const noItemLinkValue = '__no_item_link__';
 
 function isItemLayoutRowId(id: string | number): boolean {
   return String(id).startsWith(itemLayoutRowIdPrefix);
@@ -111,7 +121,7 @@ const useStyles = makeStyles({
   },
   row: {
     display: 'grid',
-    gridTemplateColumns: 'minmax(0, 1fr) 28px',
+    gridTemplateColumns: 'minmax(0, 1fr) 28px 28px',
     alignItems: 'center',
     minHeight: '40px',
     columnGap: '4px',
@@ -177,6 +187,12 @@ const useStyles = makeStyles({
     '@media (prefers-reduced-motion: reduce)': {
       transitionDuration: '0ms'
     }
+  },
+  linkButton: {
+    color: tokens.colorNeutralForeground3
+  },
+  linkButtonConfigured: {
+    color: tokens.colorBrandForeground1
   },
   addButton: {
     color: tokens.colorNeutralForeground1
@@ -256,6 +272,10 @@ export const ItemPropertyBuilder: React.FunctionComponent<IItemPropertyBuilderPr
   const rows = React.useMemo(
     () => normalizeItemLayoutRows(value.rows, itemProperties),
     [itemProperties, value.rows]
+  );
+  const links = React.useMemo(
+    () => normalizeItemElementLinks(value.links, itemProperties),
+    [itemProperties, value.links]
   );
   const detectItemLayoutCollision = React.useCallback<CollisionDetection>(
     (args) => {
@@ -340,36 +360,54 @@ export const ItemPropertyBuilder: React.FunctionComponent<IItemPropertyBuilderPr
       }),
     [fields, selected]
   );
+  const linkFields = React.useMemo(() => getItemLinkFieldOptions(fields), [fields]);
 
   const addField = React.useCallback(
     (fieldPath: string, rowIndex = 0): void => {
       if (!selected.has(fieldPath)) {
         const nextItemProperties = normalizeItemPropertyFields([...itemProperties, fieldPath]);
         if (rows.length === 0) {
-          onChange({ itemProperties: nextItemProperties, rows: [] });
+          onChange({ itemProperties: nextItemProperties, rows: [], links });
           return;
         }
         const nextRows = rows.map((row) => row.slice());
         nextRows[Math.min(rowIndex, nextRows.length - 1)].push(fieldPath);
         onChange({
           itemProperties: nextItemProperties,
-          rows: normalizeItemLayoutRows(nextRows, nextItemProperties)
+          rows: normalizeItemLayoutRows(nextRows, nextItemProperties),
+          links
         });
       }
     },
-    [itemProperties, onChange, rows, selected]
+    [itemProperties, links, onChange, rows, selected]
   );
 
   const removeField = React.useCallback(
     (fieldPath: string): void => {
       const nextItemProperties = itemProperties.filter((candidate) => candidate !== fieldPath);
       const nextRows = rows.map((row) => row.filter((candidate) => candidate !== fieldPath));
+      const nextLinks = { ...links };
+      delete nextLinks[fieldPath];
       onChange({
         itemProperties: nextItemProperties,
-        rows: normalizeItemLayoutRows(nextRows, nextItemProperties)
+        rows: normalizeItemLayoutRows(nextRows, nextItemProperties),
+        links: nextLinks
       });
     },
-    [itemProperties, onChange, rows]
+    [itemProperties, links, onChange, rows]
+  );
+
+  const updateFieldLink = React.useCallback(
+    (fieldPath: string, linkFieldPath: string): void => {
+      const nextLinks = { ...links };
+      if (linkFieldPath) {
+        nextLinks[fieldPath] = linkFieldPath;
+      } else {
+        delete nextLinks[fieldPath];
+      }
+      onChange({ itemProperties, rows, links: nextLinks });
+    },
+    [itemProperties, links, onChange, rows]
   );
 
   const reorderFlatFields = React.useCallback(
@@ -386,10 +424,11 @@ export const ItemPropertyBuilder: React.FunctionComponent<IItemPropertyBuilderPr
       }
       onChange({
         itemProperties: arrayMove([...itemProperties], activeIndex, overIndex),
-        rows: []
+        rows: [],
+        links
       });
     },
-    [itemProperties, onChange]
+    [itemProperties, links, onChange]
   );
 
   const addRow = React.useCallback((): void => {
@@ -399,8 +438,8 @@ export const ItemPropertyBuilder: React.FunctionComponent<IItemPropertyBuilderPr
     const nextRows = rows.length === 0
       ? [itemProperties.slice()]
       : [...rows.map((row) => row.slice()), []];
-    onChange({ itemProperties, rows: nextRows });
-  }, [itemProperties, onChange, rows]);
+    onChange({ itemProperties, rows: nextRows, links });
+  }, [itemProperties, links, onChange, rows]);
 
   const removeRow = React.useCallback(
     (rowIndex: number): void => {
@@ -408,15 +447,16 @@ export const ItemPropertyBuilder: React.FunctionComponent<IItemPropertyBuilderPr
         return;
       }
       if (rows.length === 1) {
-        onChange({ itemProperties, rows: [] });
+        onChange({ itemProperties, rows: [], links });
         return;
       }
       onChange({
         itemProperties,
-        rows: removeItemLayoutRow(rows, rowIndex, itemProperties)
+        rows: removeItemLayoutRow(rows, rowIndex, itemProperties),
+        links
       });
     },
-    [itemProperties, onChange, rows]
+    [itemProperties, links, onChange, rows]
   );
 
   const reorderRows = React.useCallback(
@@ -456,10 +496,11 @@ export const ItemPropertyBuilder: React.FunctionComponent<IItemPropertyBuilderPr
 
       onChange({
         itemProperties: normalizeItemPropertyFields(flattenItemLayoutRows(nextRows)),
-        rows: normalizeItemLayoutRows(nextRows, flattenItemLayoutRows(nextRows))
+        rows: normalizeItemLayoutRows(nextRows, flattenItemLayoutRows(nextRows)),
+        links
       });
     },
-    [onChange, rows]
+    [links, onChange, rows]
   );
   const beginDrag = React.useCallback((event: DragStartEvent): void => {
     setActiveFieldPath(String(event.active.id));
@@ -508,7 +549,10 @@ export const ItemPropertyBuilder: React.FunctionComponent<IItemPropertyBuilderPr
                     field={findField(fields, fieldPath)}
                     fieldPath={fieldPath}
                     key={fieldPath}
+                    linkFieldPath={links[fieldPath]}
+                    linkFields={linkFields}
                     onRemove={removeField}
+                    onLinkChange={updateFieldLink}
                   />
                 ))
               ) : (
@@ -534,11 +578,14 @@ export const ItemPropertyBuilder: React.FunctionComponent<IItemPropertyBuilderPr
                 fields={fields}
                 fieldPaths={row}
                 key={`row-${rowIndex}`}
+                links={links}
+                linkFields={linkFields}
                 rowIndex={rowIndex}
                 selectedPaths={selected}
                 onAddField={addField}
                 onRemoveField={removeField}
                 onRemoveRow={removeRow}
+                onLinkChange={updateFieldLink}
               />
             ))}
             <ItemPropertyDragOverlay
@@ -578,22 +625,28 @@ interface IItemLayoutRowProps {
   availableFields: readonly IBetterListFieldDescriptor[];
   fields: readonly IBetterListFieldDescriptor[];
   fieldPaths: readonly string[];
+  links: BetterListItemElementLinks;
+  linkFields: readonly IItemLinkFieldOption[];
   rowIndex: number;
   selectedPaths: ReadonlySet<string>;
   onAddField: (fieldPath: string, rowIndex: number) => void;
   onRemoveField: (fieldPath: string) => void;
   onRemoveRow: (rowIndex: number) => void;
+  onLinkChange: (fieldPath: string, linkFieldPath: string) => void;
 }
 
 const ItemLayoutRow: React.FunctionComponent<IItemLayoutRowProps> = ({
   availableFields,
   fields,
   fieldPaths,
+  links,
+  linkFields,
   rowIndex,
   selectedPaths,
   onAddField,
   onRemoveField,
-  onRemoveRow
+  onRemoveRow,
+  onLinkChange
 }) => {
   const classes = useStyles();
   const rowId = `${itemLayoutRowIdPrefix}${rowIndex}`;
@@ -643,7 +696,10 @@ const ItemLayoutRow: React.FunctionComponent<IItemLayoutRowProps> = ({
                 field={findField(fields, fieldPath)}
                 fieldPath={fieldPath}
                 key={fieldPath}
+                linkFieldPath={links[fieldPath]}
+                linkFields={linkFields}
                 onRemove={onRemoveField}
+                onLinkChange={onLinkChange}
               />
             ))
           ) : (
@@ -658,13 +714,19 @@ const ItemLayoutRow: React.FunctionComponent<IItemLayoutRowProps> = ({
 interface ISortableItemPropertyRowProps {
   field: IBetterListFieldDescriptor | undefined;
   fieldPath: string;
+  linkFieldPath?: string;
+  linkFields: readonly IItemLinkFieldOption[];
   onRemove?: (fieldPath: string) => void;
+  onLinkChange: (fieldPath: string, linkFieldPath: string) => void;
 }
 
 const SortableItemPropertyRow: React.FunctionComponent<ISortableItemPropertyRowProps> = ({
   field,
   fieldPath,
-  onRemove
+  linkFieldPath,
+  linkFields,
+  onRemove,
+  onLinkChange
 }) => {
   const classes = useStyles();
   const {
@@ -701,6 +763,12 @@ const SortableItemPropertyRow: React.FunctionComponent<ISortableItemPropertyRowP
       >
         <span className={classes.label}>{label}</span>
       </div>
+      <ItemPropertyLinkMenu
+        fieldLabel={label}
+        linkFieldPath={linkFieldPath}
+        linkFields={linkFields}
+        onChange={(nextLinkFieldPath) => onLinkChange(fieldPath, nextLinkFieldPath)}
+      />
       {onRemove ? (
         <Button
           appearance="subtle"
@@ -713,6 +781,61 @@ const SortableItemPropertyRow: React.FunctionComponent<ISortableItemPropertyRowP
         />
       ) : null}
     </div>
+  );
+};
+
+const ItemPropertyLinkMenu: React.FunctionComponent<{
+  fieldLabel: string;
+  linkFieldPath?: string;
+  linkFields: readonly IItemLinkFieldOption[];
+  onChange: (linkFieldPath: string) => void;
+}> = ({ fieldLabel, linkFieldPath, linkFields, onChange }) => {
+  const classes = useStyles();
+  const selected = linkFields.find((option) => option.fieldPath === linkFieldPath);
+  const currentLinkLabel = selected?.label || linkFieldPath;
+  const ariaLabel = currentLinkLabel
+    ? `Change link column for ${fieldLabel}; currently ${currentLinkLabel}`
+    : `Choose link column for ${fieldLabel}`;
+
+  return (
+    <Menu
+      checkedValues={{ itemLink: [linkFieldPath || noItemLinkValue] }}
+      onCheckedValueChange={(_event, data) => {
+        const nextValue = data.checkedItems[0];
+        onChange(nextValue === noItemLinkValue ? '' : nextValue || '');
+      }}
+    >
+      <MenuTrigger disableButtonEnhancement>
+        <Button
+          appearance="subtle"
+          aria-label={ariaLabel}
+          className={mergeClasses(
+            classes.linkButton,
+            linkFieldPath && classes.linkButtonConfigured
+          )}
+          disabled={linkFields.length === 0 && !linkFieldPath}
+          icon={<LinkRegular />}
+          size="small"
+          title={ariaLabel}
+        />
+      </MenuTrigger>
+      <MenuPopover className={classes.menuPopover}>
+        <MenuList>
+          <MenuItemRadio name="itemLink" value={noItemLinkValue}>
+            No link
+          </MenuItemRadio>
+          {linkFields.map((option) => (
+            <MenuItemRadio
+              key={option.fieldPath}
+              name="itemLink"
+              value={option.fieldPath}
+            >
+              {option.label}
+            </MenuItemRadio>
+          ))}
+        </MenuList>
+      </MenuPopover>
+    </Menu>
   );
 };
 
@@ -838,6 +961,31 @@ function createLookupFieldPath(
   targetField: IBetterListFieldDescriptor
 ): string {
   return `${field.internalName}.${targetField.internalName}`;
+}
+
+function getItemLinkFieldOptions(
+  fields: readonly IBetterListFieldDescriptor[]
+): readonly IItemLinkFieldOption[] {
+  return fields.reduce<IItemLinkFieldOption[]>((result, field) => {
+    if (isLookupField(field)) {
+      getLookupTargetFields(field)
+        .filter((targetField) => isHyperlinkField(targetField))
+        .forEach((targetField) => {
+          result.push({
+            fieldPath: createLookupFieldPath(field, targetField),
+            label: `${field.title} → ${targetField.title}`
+          });
+        });
+    } else if (isHyperlinkField(field)) {
+      result.push({ fieldPath: field.internalName, label: field.title });
+    }
+    return result;
+  }, []);
+}
+
+function isHyperlinkField(field: IBetterListFieldDescriptor): boolean {
+  const type = field.typeAsString.toLocaleLowerCase();
+  return type.indexOf('url') >= 0 || type.indexOf('hyperlink') >= 0;
 }
 
 function findField(
