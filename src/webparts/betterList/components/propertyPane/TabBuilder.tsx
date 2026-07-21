@@ -1,6 +1,25 @@
 /* eslint-disable @typescript-eslint/no-use-before-define -- The compact editor composes helpers declared after the main form. */
 import * as React from 'react';
-import { Accordion, AccordionHeader, AccordionItem, AccordionPanel } from '@fluentui/react-components';
+import {
+  closestCenter,
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors
+} from '@dnd-kit/core';
+import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { Accordion, AccordionHeader, AccordionItem, AccordionPanel, Button, Portal, tokens } from '@fluentui/react-components';
+import { DismissRegular, ReOrderDotsVerticalRegular } from '@fluentui/react-icons';
 
 import {
   BetterListComparableValue,
@@ -45,7 +64,12 @@ const ICON_OPTIONS: readonly { value: BetterListTabIcon; label: string }[] = [
 
 export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({ fields, showAddAction = true, tabs, onChange }) => {
   const [closedTabIds, setClosedTabIds] = React.useState<ReadonlySet<string>>(() => new Set<string>());
+  const [activeTabId, setActiveTabId] = React.useState<string>();
   const openTabIds = tabs.filter((tab) => !closedTabIds.has(tab.id)).map((tab) => tab.id);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   const patchTab = (index: number, patch: Partial<IBetterListTabConfig>): void => {
     onChange(tabs.map((tab, candidateIndex) => (candidateIndex === index ? { ...tab, ...patch } : tab)));
@@ -62,15 +86,28 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({ fields, 
     onChange(tabs.filter((_tab, candidateIndex) => candidateIndex !== index));
   };
 
-  const moveTab = (index: number, offset: -1 | 1): void => {
-    const destination = index + offset;
-    if (destination < 0 || destination >= tabs.length) {
+  const beginDrag = (event: DragStartEvent): void => {
+    setActiveTabId(String(event.active.id));
+  };
+
+  const cancelDrag = (): void => {
+    setActiveTabId(undefined);
+  };
+
+  const finishDrag = (event: DragEndEvent): void => {
+    setActiveTabId(undefined);
+    const overId = event.over?.id;
+    if (overId === undefined || event.active.id === overId) {
       return;
     }
-    const next = tabs.slice();
-    [next[index], next[destination]] = [next[destination], next[index]];
-    onChange(next);
+    const next = reorderTabsById(tabs, String(event.active.id), String(overId));
+    if (next !== tabs) {
+      onChange(next);
+    }
   };
+
+  const activeTab = tabs.find((tab) => tab.id === activeTabId);
+  const activeTabIndex = activeTab ? tabs.indexOf(activeTab) : -1;
 
   return (
     <div className="bl-tabs-builder">
@@ -82,53 +119,41 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({ fields, 
           </button>
         </div>
       ) : null}
-      <Accordion<string>
-        collapsible
-        multiple
-        openItems={openTabIds}
-        onToggle={(_event, data) => {
-          const nextOpenTabIds = new Set(data.openItems);
-          setClosedTabIds(new Set(tabs.filter((tab) => !nextOpenTabIds.has(tab.id)).map((tab) => tab.id)));
-        }}
+      <DndContext
+        collisionDetection={closestCenter}
+        sensors={sensors}
+        onDragCancel={cancelDrag}
+        onDragEnd={finishDrag}
+        onDragStart={beginDrag}
       >
-        {tabs.map((tab, index) => {
-          const queryFields = fields.map(toQueryField);
-          const expression = filterExpression(tab.filter, fields);
-          const headerId = `tab-${safeId(tab.id)}-header`;
-          const panelId = `tab-${safeId(tab.id)}-panel`;
-          const open = !closedTabIds.has(tab.id);
-          return (
-            <AccordionItem className="bl-tabs-builder__card" key={tab.id} value={tab.id}>
-              <div className="bl-tabs-builder__card-heading">
-                <AccordionHeader
-                  as="h4"
-                  button={{ 'aria-controls': panelId, className: 'bl-tabs-builder__accordion-button', id: headerId }}
-                  className="bl-tabs-builder__accordion-header"
-                  expandIconPosition="start"
-                  size="small"
+        <SortableContext items={tabs.map((tab) => tab.id)} strategy={verticalListSortingStrategy}>
+          <Accordion<string>
+            collapsible
+            multiple
+            openItems={openTabIds}
+            onToggle={(_event, data) => {
+              const nextOpenTabIds = new Set(data.openItems);
+              setClosedTabIds(new Set(tabs.filter((tab) => !nextOpenTabIds.has(tab.id)).map((tab) => tab.id)));
+            }}
+          >
+            {tabs.map((tab, index) => {
+              const queryFields = fields.map(toQueryField);
+              const expression = filterExpression(tab.filter, fields);
+              const headerId = `tab-${safeId(tab.id)}-header`;
+              const panelId = `tab-${safeId(tab.id)}-panel`;
+              const open = !closedTabIds.has(tab.id);
+              return (
+                <SortableTabCard
+                  headerId={headerId}
+                  index={index}
+                  key={tab.id}
+                  panelId={panelId}
+                  tab={tab}
+                  tabsLength={tabs.length}
+                  onRemove={() => removeTab(index)}
                 >
-                  <strong>Tab {index + 1}</strong>
-                </AccordionHeader>
-                <div aria-label={`Actions for ${tab.label}`} className="bl-tabs-builder__actions" role="group">
-                  <button aria-label={`Move ${tab.label} up`} disabled={index === 0} type="button" onClick={() => moveTab(index, -1)}>
-                    ↑
-                  </button>
-                  <button
-                    aria-label={`Move ${tab.label} down`}
-                    disabled={index === tabs.length - 1}
-                    type="button"
-                    onClick={() => moveTab(index, 1)}
-                  >
-                    ↓
-                  </button>
-                  <button aria-label={`Remove ${tab.label}`} disabled={tabs.length <= 1} type="button" onClick={() => removeTab(index)}>
-                    ×
-                  </button>
-                </div>
-              </div>
-
-              {open ? (
-                <AccordionPanel aria-labelledby={headerId} className="bl-tabs-builder__card-body" id={panelId}>
+                  {open ? (
+                    <AccordionPanel aria-labelledby={headerId} className="bl-tabs-builder__card-body" id={panelId}>
                   <label className="bl-tabs-builder__field">
                     <span>Name</span>
                     <input
@@ -194,13 +219,108 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({ fields, 
                       });
                     }}
                   />
-                </AccordionPanel>
-              ) : null}
-            </AccordionItem>
-          );
-        })}
-      </Accordion>
+                    </AccordionPanel>
+                  ) : null}
+                </SortableTabCard>
+              );
+            })}
+          </Accordion>
+        </SortableContext>
+        {activeTab ? (
+          <Portal>
+            <DragOverlay adjustScale={false} dropAnimation={null} zIndex={1000000}>
+              <div aria-hidden="true" className="bl-tabs-builder__drag-overlay" data-tab-drag-overlay>
+                Tab {activeTabIndex + 1}: {activeTab.label}
+              </div>
+            </DragOverlay>
+          </Portal>
+        ) : null}
+      </DndContext>
     </div>
+  );
+};
+
+interface ISortableTabCardProps {
+  children?: React.ReactNode;
+  headerId: string;
+  index: number;
+  panelId: string;
+  tab: IBetterListTabConfig;
+  tabsLength: number;
+  onRemove: () => void;
+}
+
+const SortableTabCard: React.FunctionComponent<ISortableTabCardProps> = ({
+  children,
+  headerId,
+  index,
+  panelId,
+  tab,
+  tabsLength,
+  onRemove
+}) => {
+  const {
+    attributes,
+    isDragging,
+    listeners,
+    setActivatorNodeRef,
+    setNodeRef,
+    transform,
+    transition
+  } = useSortable({ id: tab.id });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition
+  };
+
+  return (
+    <AccordionItem
+      className={`bl-tabs-builder__card${isDragging ? ' is-dragging' : ''}`}
+      data-tab-sortable={tab.id}
+      ref={setNodeRef}
+      style={style}
+      value={tab.id}
+    >
+      <div className="bl-tabs-builder__card-heading">
+        <AccordionHeader
+          as="h4"
+          button={{
+            'aria-controls': panelId,
+            className: 'bl-tabs-builder__accordion-button',
+            id: headerId
+          }}
+          className="bl-tabs-builder__accordion-header"
+          expandIconPosition="start"
+          size="small"
+        >
+          <strong>Tab {index + 1}</strong>
+        </AccordionHeader>
+        <div aria-label={`Actions for ${tab.label}`} className="bl-tabs-builder__actions" role="group">
+          <Button
+            {...attributes}
+            {...listeners}
+            appearance="subtle"
+            aria-label={`Reorder ${tab.label}`}
+            className="bl-tabs-builder__drag-handle"
+            data-tab-drag-handle
+            icon={<ReOrderDotsVerticalRegular />}
+            ref={setActivatorNodeRef}
+            size="small"
+          />
+          <Button
+            appearance="subtle"
+            aria-label={`Remove ${tab.label}`}
+            className="bl-tabs-builder__remove"
+            data-tab-remove
+            disabled={tabsLength <= 1}
+            icon={<DismissRegular />}
+            size="small"
+            onClick={onRemove}
+          />
+        </div>
+      </div>
+      {children}
+    </AccordionItem>
   );
 };
 
@@ -409,14 +529,20 @@ const tabBuilderCss = `
 .bl-tabs-builder__card-heading { align-items: center; display: grid; grid-template-columns: minmax(0, 1fr) auto; }
 .bl-tabs-builder__heading { color: #616161; margin-bottom: 8px; }
 .bl-tabs-builder__card { background: transparent; border: 0; border-radius: 0; margin: 0 0 4px; padding: 0; }
-.bl-tabs-builder__card-heading { border-bottom: 1px solid #e0e0e0; min-height: 38px; }
+.bl-tabs-builder__card.is-dragging { opacity: .35; }
+.bl-tabs-builder__card-heading { border-bottom: 0; min-height: 38px; }
+.bl-tabs-builder__card-heading:hover > .bl-tabs-builder__actions [data-tab-remove], .bl-tabs-builder__card-heading:focus-within > .bl-tabs-builder__actions [data-tab-remove] { opacity: 1; pointer-events: auto; }
 .bl-tabs-builder__card-body { padding: 8px 0 6px; }
 .bl-tabs-builder__accordion-header { margin: 0; min-width: 0; }
 .bl-tabs-builder__accordion-button { justify-content: flex-start !important; padding-left: 0 !important; width: 100%; }
+.bl-tabs-builder .bl-tabs-builder__drag-handle { cursor: grab; height: 28px; min-height: 28px; min-width: 28px; padding: 0; touch-action: none; width: 28px; }
+.bl-tabs-builder .bl-tabs-builder__drag-handle:active { cursor: grabbing; }
+.bl-tabs-builder__drag-overlay { background: ${tokens.colorNeutralBackground1}; border: 1px solid ${tokens.colorNeutralStroke2}; border-radius: ${tokens.borderRadiusMedium}; box-shadow: ${tokens.shadow16}; color: ${tokens.colorNeutralForeground1}; font: 600 12px/1.4 "Segoe UI", sans-serif; min-width: 180px; padding: 10px 12px; }
 .bl-tabs-builder__actions { gap: 2px; }
 .bl-tabs-builder button { align-items: center; background: transparent; border: 1px solid transparent; border-radius: 4px; color: #242424; cursor: pointer; display: inline-flex; justify-content: center; min-height: 28px; padding: 2px 7px; }
 .bl-tabs-builder button:hover:not(:disabled) { background: #f0f0f0; }
 .bl-tabs-builder button:disabled { cursor: default; opacity: .35; }
+.bl-tabs-builder .bl-tabs-builder__remove { color: ${tokens.colorNeutralForeground3}; height: 28px; min-height: 28px; min-width: 28px; padding: 0; transition: opacity 100ms ease-out; width: 28px; }
 .bl-tabs-builder__add { border-color: #d1d1d1 !important; background: #fff !important; }
 .bl-tabs-builder__field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .bl-tabs-builder__field > span, .bl-tabs-builder__filter legend { color: #424242; font-weight: 600; }
@@ -437,6 +563,8 @@ const tabBuilderCss = `
 .bl-query-editor__help.is-error { color: #a4262c; }
 .bl-query-editor__sr-only { height: 1px; margin: -1px; overflow: hidden; position: absolute; width: 1px; clip: rect(0, 0, 0, 0); }
 @media (forced-colors: active) { .bl-query-editor__suggestions, .bl-query-editor__suggestions li.is-active { outline: 1px solid CanvasText; } }
+@media (hover: hover) { .bl-tabs-builder .bl-tabs-builder__remove { opacity: 0; pointer-events: none; } }
+@media (prefers-reduced-motion: reduce) { .bl-tabs-builder .bl-tabs-builder__remove { transition-duration: 0ms; } }
 @media (max-width: 360px) { .bl-tabs-builder__grid { grid-template-columns: minmax(0, 1fr); } }
 `;
 
@@ -451,6 +579,19 @@ export function appendNewTab(tabs: readonly IBetterListTabConfig[]): readonly IB
       layout: tabs[0]?.layout ? { ...tabs[0].layout } : undefined
     }
   ];
+}
+
+export function reorderTabsById(
+  tabs: readonly IBetterListTabConfig[],
+  activeId: string,
+  overId: string
+): readonly IBetterListTabConfig[] {
+  const activeIndex = tabs.findIndex((tab) => tab.id === activeId);
+  const overIndex = tabs.findIndex((tab) => tab.id === overId);
+  if (activeIndex < 0 || overIndex < 0 || activeIndex === overIndex) {
+    return tabs;
+  }
+  return arrayMove([...tabs], activeIndex, overIndex);
 }
 
 function createUniqueTabId(tabs: readonly IBetterListTabConfig[]): string {

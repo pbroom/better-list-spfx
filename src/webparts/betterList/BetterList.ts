@@ -1,6 +1,6 @@
 import * as React from 'react';
 import * as ReactDom from 'react-dom';
-import { Version } from '@microsoft/sp-core-library';
+import { DisplayMode, Version } from '@microsoft/sp-core-library';
 import { IPropertyPaneConfiguration, IPropertyPaneField, PropertyPaneFieldType } from '@microsoft/sp-property-pane';
 import { BaseClientSideWebPart } from '@microsoft/sp-webpart-base';
 import * as strings from 'WebPartStrings';
@@ -9,6 +9,7 @@ import {
   addTabFilterMappings,
   alignTabQueryFieldKinds,
   BetterListFieldValue,
+  BetterListGroupIconOverride,
   BetterListItemElementLinks,
   betterListStylePresetVersion,
   createDefaultTabs,
@@ -23,13 +24,16 @@ import {
   IBetterListItem as ICoreBetterListItem,
   IBetterListTabConfig,
   parseItemLayoutConfiguration,
+  parseBetterListGroupIconsConfiguration,
   parseItemPropertyFields,
   parseTabConfiguration,
   processItems,
   scopeBetterListStyles,
   serializeItemLayoutConfiguration,
+  serializeBetterListGroupIconsConfiguration,
   serializeItemPropertyFields,
-  serializeTabConfiguration
+  serializeTabConfiguration,
+  updateBetterListGroupIconOverride
 } from '../../shared';
 import BetterListView, { BetterListGroupIcon, IBetterListItem, IBetterListTab } from './components/BetterListView';
 import {
@@ -49,6 +53,7 @@ export interface IBetterListWebPartProps {
   tabsColumn: string;
   groupsColumn: string;
   groupsCollapsible: boolean;
+  groupIconsJson: string;
   tabsJson: string;
   customCss: string;
   htmlTemplate: string;
@@ -79,6 +84,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       this.properties.itemLayoutJson,
       parseItemPropertyFields(this.properties.itemPropertiesJson)
     );
+    const groupIcons = parseBetterListGroupIconsConfiguration(this.properties.groupIconsJson);
     const presentationTabs = tabs.map((tab) =>
       this._createPresentationTab(tab, itemLayout.itemProperties, itemLayout.links)
     );
@@ -99,13 +105,22 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       htmlTemplate: this.properties.htmlTemplate,
       itemPropertyFields: itemLayout.itemProperties,
       itemLayoutRows: itemLayout.rows,
+      groupIconScope: this.properties.groupsColumn,
+      groupIcons,
+      isEditMode: this.displayMode === DisplayMode.Edit,
       listTitle: this.properties.sourceListTitle,
       onTabChange: (tabKey: string): void => {
         this._activeTabKey = tabKey;
       },
       onRetry: (): void => {
         this._reloadItems().catch(() => undefined);
-      }
+      },
+      onGroupIconOverrideChange:
+        this.displayMode === DisplayMode.Edit
+          ? (groupKey: string, override: BetterListGroupIconOverride | undefined): void => {
+              this._updateGroupIconOverride(groupKey, override);
+            }
+          : undefined
     });
 
     ReactDom.render(
@@ -130,6 +145,9 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     this.properties.tabsColumn = this.properties.tabsColumn || '';
     this.properties.groupsColumn = this.properties.groupsColumn || '';
     this.properties.groupsCollapsible = this.properties.groupsCollapsible !== false;
+    this.properties.groupIconsJson =
+      this.properties.groupIconsJson ||
+      serializeBetterListGroupIconsConfiguration(parseBetterListGroupIconsConfiguration(undefined));
     this.properties.tabsJson = this.properties.tabsJson || serializeTabConfiguration(createDefaultTabs());
     this.properties.htmlTemplate = this.properties.htmlTemplate || defaultBetterListHtmlTemplate;
     if (!this.properties.stylePresetVersion) {
@@ -239,6 +257,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       tabsColumn: this.properties.tabsColumn,
       groupsColumn: this.properties.groupsColumn,
       groupsCollapsible: this.properties.groupsCollapsible,
+      groupIcons: parseBetterListGroupIconsConfiguration(this.properties.groupIconsJson),
       tabs: this._readTabs().slice(),
       customCss: this.properties.customCss,
       htmlTemplate: this.properties.htmlTemplate
@@ -262,6 +281,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       tabsColumn: value.tabsColumn,
       groupsColumn: value.groupsColumn,
       groupsCollapsible: value.groupsCollapsible,
+      groupIconsJson: serializeBetterListGroupIconsConfiguration(value.groupIcons),
       tabsJson: serializeTabConfiguration(
         coerceTabFilterValues(value.tabs.length ? value.tabs : [createFallbackTab()], value.fieldMappings)
       ),
@@ -292,6 +312,14 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     } else {
       this.render();
     }
+  }
+
+  private _updateGroupIconOverride(groupKey: string, override: BetterListGroupIconOverride | undefined): void {
+    const current = parseBetterListGroupIconsConfiguration(this.properties.groupIconsJson);
+    const next = updateBetterListGroupIconOverride(current, this.properties.groupsColumn, groupKey, override);
+    this.properties.groupIconsJson = serializeBetterListGroupIconsConfiguration(next);
+    this.context.propertyPane.refresh();
+    this.render();
   }
 
   private async _reloadItems(): Promise<void> {

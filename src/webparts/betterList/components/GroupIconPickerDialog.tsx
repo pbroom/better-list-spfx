@@ -1,0 +1,385 @@
+import * as React from 'react';
+import {
+  Button,
+  Dialog,
+  DialogActions,
+  DialogBody,
+  DialogContent,
+  DialogSurface,
+  DialogTitle,
+  Field,
+  Input,
+  SelectTabData,
+  SelectTabEvent,
+  Spinner,
+  Tab,
+  TabList,
+  Text,
+  makeStyles,
+  mergeClasses,
+  shorthands,
+  tokens
+} from '@fluentui/react-components';
+import { ImageRegular, SearchRegular } from '@fluentui/react-icons';
+
+import {
+  BetterListGroupIconLibrary,
+  BetterListGroupIconOverride,
+  normalizeBetterListGroupImageUrl
+} from '../../../shared';
+import {
+  BetterListGroupIconVisual
+} from './GroupIconCatalog';
+import {
+  IBetterListGroupIconCatalogEntry,
+  loadBetterListGroupIconPickerCatalog
+} from './GroupIconPickerCatalog';
+
+type PickerView = BetterListGroupIconLibrary | 'image';
+
+export interface IGroupIconPickerDialogProps {
+  current: BetterListGroupIconOverride | undefined;
+  groupTitle: string;
+  open: boolean;
+  onApply: (override: BetterListGroupIconOverride | undefined) => void;
+  onOpenChange: (open: boolean) => void;
+}
+
+const useStyles = makeStyles({
+  surface: {
+    width: 'min(760px, calc(100vw - 32px))',
+    maxWidth: '760px',
+    maxHeight: 'calc(100vh - 32px)'
+  },
+  content: {
+    display: 'flex',
+    flexDirection: 'column',
+    rowGap: '16px',
+    minHeight: '0'
+  },
+  search: {
+    width: '100%'
+  },
+  resultsHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    columnGap: '12px'
+  },
+  grid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(92px, 1fr))',
+    gap: '8px'
+  },
+  results: {
+    minHeight: '240px',
+    maxHeight: '340px',
+    overflowY: 'auto',
+    overscrollBehavior: 'contain',
+    ...shorthands.padding('2px')
+  },
+  tile: {
+    minHeight: '80px',
+    height: 'auto',
+    ...shorthands.padding('10px', '6px'),
+    '& > span': {
+      display: 'flex',
+      flexDirection: 'column',
+      rowGap: '7px'
+    },
+    contentVisibility: 'auto'
+  },
+  tileSelected: {
+    outlineColor: tokens.colorBrandStroke1,
+    outlineOffset: '-2px',
+    outlineStyle: 'solid',
+    outlineWidth: '2px',
+    backgroundColor: tokens.colorBrandBackground2
+  },
+  tileIcon: {
+    width: '28px',
+    height: '28px',
+    fontSize: '28px'
+  },
+  tileLabel: {
+    maxWidth: '84px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap'
+  },
+  preview: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '112px',
+    backgroundColor: tokens.colorNeutralBackground2,
+    ...shorthands.borderRadius(tokens.borderRadiusMedium),
+    ...shorthands.border('1px', 'solid', tokens.colorNeutralStroke2)
+  },
+  previewIcon: {
+    width: '64px',
+    height: '64px',
+    fontSize: '64px',
+    objectFit: 'contain'
+  },
+  empty: {
+    color: tokens.colorNeutralForeground3,
+    textAlign: 'center',
+    ...shorthands.padding('32px')
+  },
+  loading: {
+    minHeight: '240px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  imageHelp: {
+    color: tokens.colorNeutralForeground3,
+    marginTop: '4px'
+  },
+  actionStart: {
+    marginRight: 'auto'
+  }
+});
+
+export const GroupIconPickerDialog: React.FunctionComponent<IGroupIconPickerDialogProps> = ({
+  current,
+  groupTitle,
+  open,
+  onApply,
+  onOpenChange
+}) => {
+  const classes = useStyles();
+  const [view, setView] = React.useState<PickerView>('solar-duotone');
+  const [query, setQuery] = React.useState('');
+  const [draft, setDraft] = React.useState<BetterListGroupIconOverride | undefined>(current);
+  const [imageUrl, setImageUrl] = React.useState('');
+  const [catalog, setCatalog] = React.useState<readonly IBetterListGroupIconCatalogEntry[]>([]);
+  const [catalogStatus, setCatalogStatus] = React.useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [catalogAttempt, setCatalogAttempt] = React.useState(0);
+  const [visibleCount, setVisibleCount] = React.useState(80);
+  const resultsRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!open) {
+      return;
+    }
+    setDraft(current);
+    setQuery('');
+    setImageUrl(current?.kind === 'image' ? current.url : '');
+    setView(current?.kind === 'image' ? 'image' : current?.kind === 'icon' ? current.library : 'solar-duotone');
+  }, [current, open]);
+
+  React.useEffect(() => {
+    if (!open || view === 'image') {
+      setCatalogStatus('idle');
+      return;
+    }
+    let active = true;
+    setCatalog([]);
+    setCatalogStatus('loading');
+    loadBetterListGroupIconPickerCatalog(view)
+      .then((entries) => {
+        if (!active) return;
+        setCatalog(entries);
+        setCatalogStatus('ready');
+      })
+      .catch(() => {
+        if (!active) return;
+        setCatalogStatus('error');
+      });
+    return () => { active = false; };
+  }, [catalogAttempt, open, view]);
+
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const results = React.useMemo(
+    () =>
+      catalog.filter(
+        (entry) =>
+          !normalizedQuery || entry.searchText.includes(normalizedQuery)
+      ),
+    [catalog, normalizedQuery]
+  );
+  const visibleResults = results.slice(0, visibleCount);
+
+  React.useEffect(() => {
+    setVisibleCount(80);
+    if (resultsRef.current) resultsRef.current.scrollTop = 0;
+  }, [normalizedQuery, view]);
+  const normalizedImageUrl = view === 'image' ? normalizeBetterListGroupImageUrl(imageUrl) : undefined;
+  const activeCatalogIcon =
+    draft?.kind === 'icon' && draft.library === view ? draft : undefined;
+  const previewOverride =
+    view === 'image' && normalizedImageUrl
+      ? ({ kind: 'image', url: normalizedImageUrl } as const)
+      : activeCatalogIcon;
+  const canApply = view === 'image' ? Boolean(normalizedImageUrl) : Boolean(activeCatalogIcon);
+
+  const apply = (): void => {
+    if (view === 'image' && normalizedImageUrl) {
+      onApply({ kind: 'image', url: normalizedImageUrl });
+    } else if (activeCatalogIcon) {
+      onApply(activeCatalogIcon);
+    } else {
+      return;
+    }
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog modalType="modal" open={open} onOpenChange={(_event, data) => onOpenChange(data.open)}>
+      <DialogSurface className={classes.surface}>
+        <DialogBody>
+          <DialogTitle>{`Icon for “${groupTitle}”`}</DialogTitle>
+          <DialogContent className={classes.content}>
+            <div className={classes.preview} aria-label="Selected icon preview">
+              {previewOverride ? (
+                <BetterListGroupIconVisual className={classes.previewIcon} override={previewOverride} />
+              ) : (
+                <ImageRegular className={classes.previewIcon} aria-hidden="true" />
+              )}
+            </div>
+            <TabList
+              aria-label="Icon source"
+              selectedValue={view}
+              onTabSelect={(_event: SelectTabEvent, data: SelectTabData) => setView(data.value as PickerView)}
+            >
+              <Tab value="solar-duotone">Solar duotone</Tab>
+              <Tab value="fluent">Fluent</Tab>
+              <Tab value="fluent-color">Fluent color</Tab>
+              <Tab value="image">Image</Tab>
+            </TabList>
+            {view === 'image' ? (
+              <div>
+                <Field
+                  label="Image URL"
+                  validationMessage={imageUrl && !normalizedImageUrl ? 'Use an HTTPS or SharePoint-relative image URL.' : undefined}
+                  validationState={imageUrl && !normalizedImageUrl ? 'error' : 'none'}
+                >
+                  <Input
+                    value={imageUrl}
+                    placeholder="/sites/example/SiteAssets/group-icon.png"
+                    onChange={(event) => setImageUrl(event.currentTarget.value)}
+                  />
+                </Field>
+                <div className={classes.imageHelp}>Use an HTTPS URL or a path beginning with / for a SharePoint-hosted image.</div>
+              </div>
+            ) : (
+              <>
+                <Input
+                  aria-label="Search icons"
+                  className={classes.search}
+                  contentBefore={<SearchRegular aria-hidden="true" />}
+                  placeholder="Search icons"
+                  value={query}
+                  onChange={(event) => setQuery(event.currentTarget.value)}
+                />
+                <div className={classes.resultsHeader}>
+                  <Text weight="semibold">Choose an icon</Text>
+                  <Text aria-live="polite" size={200}>
+                    {catalogStatus === 'ready'
+                      ? `Showing ${visibleResults.length} of ${results.length} icons`
+                      : catalogStatus === 'loading' ? 'Loading icons' : ''}
+                  </Text>
+                </div>
+                {catalogStatus === 'loading' ? (
+                  <div className={classes.loading} role="status">
+                    <Spinner label={`Loading ${libraryLabel(view)} icons`} />
+                  </div>
+                ) : catalogStatus === 'error' ? (
+                  <div className={classes.empty} role="alert">
+                    <Text block>Icons could not be loaded.</Text>
+                    <Button appearance="secondary" onClick={() => setCatalogAttempt((value) => value + 1)}>Retry</Button>
+                  </div>
+                ) : results.length ? (
+                  <div
+                    aria-label={`${libraryLabel(view)} icons`}
+                    className={classes.results}
+                    ref={resultsRef}
+                    role="group"
+                    tabIndex={-1}
+                    onScroll={(event) => {
+                      const target = event.currentTarget;
+                      if (target.scrollHeight - target.scrollTop - target.clientHeight < 160) {
+                        setVisibleCount((count) => Math.min(count + 80, results.length));
+                      }
+                    }}
+                  >
+                    <div className={classes.grid}>
+                    {visibleResults.map((entry) => {
+                      const icon = toOverride(entry);
+                      const selected = sameCatalogIcon(draft, icon);
+                      return (
+                        <Button
+                          appearance="subtle"
+                          aria-label={entry.label}
+                          aria-pressed={selected}
+                          className={mergeClasses(classes.tile, selected && classes.tileSelected)}
+                          key={`${entry.library}:${entry.name}`}
+                          onClick={() => setDraft(icon)}
+                        >
+                          <BetterListGroupIconVisual
+                            className={classes.tileIcon}
+                            fallback={<ImageRegular aria-hidden="true" className={classes.tileIcon} />}
+                            override={icon}
+                          />
+                          <span className={classes.tileLabel}>{entry.label}</span>
+                        </Button>
+                      );
+                    })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className={classes.empty} role="status">{`No icons match “${query}”.`}</div>
+                )}
+              </>
+            )}
+          </DialogContent>
+          <DialogActions fluid>
+            <Button
+              appearance="subtle"
+              className={classes.actionStart}
+              onClick={() => {
+                onApply(undefined);
+                onOpenChange(false);
+              }}
+            >
+              Use automatic icon
+            </Button>
+            <Button
+              appearance="subtle"
+              onClick={() => {
+                onApply({ kind: 'none' });
+                onOpenChange(false);
+              }}
+            >
+              No icon
+            </Button>
+            <Button appearance="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button appearance="primary" disabled={!canApply} onClick={apply}>Apply</Button>
+          </DialogActions>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
+  );
+};
+
+function toOverride(entry: IBetterListGroupIconCatalogEntry): BetterListGroupIconOverride {
+  return { kind: 'icon', library: entry.library, name: entry.name };
+}
+
+function sameCatalogIcon(
+  left: BetterListGroupIconOverride | undefined,
+  right: BetterListGroupIconOverride
+): boolean {
+  return Boolean(
+    left?.kind === 'icon' &&
+      right.kind === 'icon' &&
+      left.library === right.library &&
+      left.name === right.name
+  );
+}
+
+function libraryLabel(value: PickerView): string {
+  return value === 'solar-duotone' ? 'Solar duotone' : value === 'fluent-color' ? 'Fluent color' : 'Fluent';
+}

@@ -9,6 +9,7 @@ import {
   defaultBetterListScss,
   formatItemPropertyValue,
   getItemPropertyUrl,
+  parseBetterListGroupIconsConfiguration,
   groupItems,
   IBetterListFieldMappings,
   IBetterListGroupResult,
@@ -20,7 +21,9 @@ import {
   processItems,
   scopeBetterListStyles,
   serializeItemPropertyFields,
-  serializeTabConfiguration
+  serializeBetterListGroupIconsConfiguration,
+  serializeTabConfiguration,
+  updateBetterListGroupIconOverride
 } from '../../src/shared';
 import BetterListView, {
   BetterListGroupIcon,
@@ -54,12 +57,13 @@ const defaultProps: BetterListLabProps = {
   tabsColumn: '',
   groupsColumn: '',
   groupsCollapsible: true,
+  groupIconsJson: serializeBetterListGroupIconsConfiguration(parseBetterListGroupIconsConfiguration(undefined)),
   tabsJson: serializeTabConfiguration(servicesTabs),
   customCss: defaultBetterListScss,
   htmlTemplate: defaultBetterListHtmlTemplate
 };
 
-const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ props, lab }) => {
+const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ props, lab, updateProps }) => {
   const [items, setItems] = React.useState<readonly ICoreBetterListItem[]>([]);
   const [status, setStatus] = React.useState<'loading' | 'ready' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = React.useState('');
@@ -78,6 +82,10 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
     [props.itemLayoutJson, props.itemPropertiesJson]
   );
   const tabs = React.useMemo(() => readTabs(props.tabsJson), [props.tabsJson]);
+  const groupIcons = React.useMemo(
+    () => parseBetterListGroupIconsConfiguration(props.groupIconsJson),
+    [props.groupIconsJson]
+  );
   const dataSource = React.useMemo(
     () =>
       new FixtureBetterListDataSource(createServicesFixtureRecords(lab.spfxContext.pageContext.user), {
@@ -161,9 +169,19 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
         htmlTemplate={props.htmlTemplate}
         itemPropertyFields={itemLayout.itemProperties}
         itemLayoutRows={itemLayout.rows}
+        groupIconScope={props.groupsColumn}
+        groupIcons={groupIcons}
+        isEditMode={lab.displayMode === 'edit'}
         listTitle={props.sourceListTitle}
         emptyMessage="There are no active Services items to display."
         onTabChange={setActiveTabKey}
+        onGroupIconOverrideChange={(groupKey, override) =>
+          updateProps({
+            groupIconsJson: serializeBetterListGroupIconsConfiguration(
+              updateBetterListGroupIconOverride(groupIcons, props.groupsColumn, groupKey, override)
+            )
+          })
+        }
       />
     </div>
   );

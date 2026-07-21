@@ -275,6 +275,93 @@ describe('BetterListView', () => {
     expect(html).toContain('role="region"');
   });
 
+  it('hides every group icon when the global group-icon toggle is off', () => {
+    const tabs: readonly IBetterListTab[] = [
+      {
+        key: 'grouped',
+        label: 'Grouped',
+        grouped: true,
+        layout: { showSearch: false, collapsible: true },
+        items: [item]
+      }
+    ];
+
+    const html = renderToStaticMarkup(
+      <BetterListView
+        activeTabKey="grouped"
+        groupIcons={{ version: 1, showIcons: false, overrides: [] }}
+        items={[item]}
+        tabs={tabs}
+      />
+    );
+
+    expect(html).toContain('General');
+    expect(html).not.toContain('better-list__group-icon');
+  });
+
+  it('renders a scoped Solar duotone override without replacing another group automatically', () => {
+    const policyItem = { ...item, id: '2', groupId: 'policy', groupTitle: 'Policy' };
+    const tabs: readonly IBetterListTab[] = [
+      {
+        key: 'grouped',
+        label: 'Grouped',
+        grouped: true,
+        layout: { showSearch: false },
+        items: [item, policyItem]
+      }
+    ];
+
+    const html = renderToStaticMarkup(
+      <BetterListView
+        activeTabKey="grouped"
+        groupIconScope="Category.Title"
+        groupIcons={{
+          version: 1,
+          showIcons: true,
+          overrides: [
+            {
+              groupKey: 'category.title::general',
+              icon: { kind: 'icon', library: 'solar-duotone', name: 'buildings' }
+            }
+          ]
+        }}
+        items={[item, policyItem]}
+        tabs={tabs}
+      />
+    );
+
+    expect(html).toContain('General');
+    expect(html).toContain('Policy');
+    expect(html).toContain('better-list__group-icon');
+    expect(html).toContain('opacity=".5"');
+  });
+
+  it('exposes group icon editors only in page edit mode', () => {
+    const tabs: readonly IBetterListTab[] = [
+      {
+        key: 'grouped',
+        label: 'Grouped',
+        grouped: true,
+        layout: { showSearch: false, collapsible: true },
+        items: [item]
+      }
+    ];
+    const sharedProps = {
+      activeTabKey: 'grouped',
+      groupIconScope: 'Category.Title',
+      items: [item],
+      tabs,
+      onGroupIconOverrideChange: jest.fn()
+    };
+
+    const editHtml = renderToStaticMarkup(<BetterListView {...sharedProps} isEditMode />);
+    const viewerHtml = renderToStaticMarkup(<BetterListView {...sharedProps} isEditMode={false} />);
+
+    expect(editHtml).toContain('aria-label="Change icon for General"');
+    expect(editHtml).toContain('aria-haspopup="dialog"');
+    expect(viewerHtml).not.toContain('Change icon for General');
+  });
+
   it('falls back to the built-in template when persisted source is corrupt', () => {
     const tabs: readonly IBetterListTab[] = [
       {
