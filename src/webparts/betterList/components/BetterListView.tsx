@@ -87,6 +87,10 @@ export interface IBetterListTab {
   items?: readonly IBetterListItem[];
   /** Optional visitor-view presentation overrides for this tab. */
   layout?: IBetterListTabLayout;
+  itemPropertyFields?: readonly string[];
+  itemLayoutRows?: BetterListItemLayoutRows;
+  groupIconScope?: string;
+  groupIcons?: IBetterListGroupIconsConfiguration;
 }
 
 export interface IBetterListItem {
@@ -641,6 +645,10 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   }, [searchValue]);
 
   const selectedTab = tabs.find((tab) => tab.key === selectedTabKey) ?? tabs[0];
+  const selectedItemPropertyFields = selectedTab?.itemPropertyFields ?? itemPropertyFields;
+  const selectedItemLayoutRows = selectedTab?.itemLayoutRows ?? itemLayoutRows;
+  const selectedGroupIconScope = selectedTab?.groupIconScope ?? groupIconScope;
+  const selectedGroupIcons = selectedTab?.groupIcons ?? groupIcons;
   const selectedLayout = selectedTab?.layout;
   const density = selectedLayout?.density ?? 'comfortable';
   const showDescriptions = selectedLayout?.showDescriptions !== false;
@@ -685,7 +693,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   };
 
   const renderGroupIcon = (group: IBetterListGroup): React.ReactElement | null => {
-    if (!groupIcons.showIcons) {
+    if (!selectedGroupIcons.showIcons) {
       return null;
     }
     const className = mergeClasses(classes.groupIcon, 'better-list__group-icon');
@@ -693,15 +701,15 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
       <GroupIcon
         className={className}
         kind={group.icon}
-        style={groupIcons.defaultColor ? { color: groupIcons.defaultColor } : undefined}
+        style={selectedGroupIcons.defaultColor ? { color: selectedGroupIcons.defaultColor } : undefined}
         title={group.title}
       />
     );
-    const override = getBetterListGroupIconOverride(groupIcons, groupIconScope, group.id);
+    const override = getBetterListGroupIconOverride(selectedGroupIcons, selectedGroupIconScope, group.id);
     return override ? (
       <BetterListGroupIconVisual
         className={className}
-        defaultColor={groupIcons.defaultColor}
+        defaultColor={selectedGroupIcons.defaultColor}
         fallback={automatic}
         override={override}
       />
@@ -711,10 +719,10 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   };
 
   const renderGroupIconEditor = (group: IBetterListGroup): React.ReactElement | null => {
-    if (!isEditMode || !groupIcons.showIcons || !onGroupIconOverrideChange) {
+    if (!isEditMode || !selectedGroupIcons.showIcons || !onGroupIconOverrideChange) {
       return renderGroupIcon(group);
     }
-    const override = getBetterListGroupIconOverride(groupIcons, groupIconScope, group.id);
+    const override = getBetterListGroupIconOverride(selectedGroupIcons, selectedGroupIconScope, group.id);
     return (
       <Tooltip content={`Change icon for ${group.title}`} relationship="label">
         <Button
@@ -802,8 +810,8 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
       },
       {
         title: (attributes, key) =>
-          itemLayoutRows.length > 0
-            ? itemLayoutRows.map((row, index) =>
+          selectedItemLayoutRows.length > 0
+            ? selectedItemLayoutRows.map((row, index) =>
                 renderItemLayoutRow(
                   row,
                   index,
@@ -813,11 +821,11 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
                   () => renderTitle(attributes, `${key}-title`)
                 )
               )
-            : itemPropertyFields.indexOf('Title') >= 0
+            : selectedItemPropertyFields.indexOf('Title') >= 0
               ? renderTitle(attributes, key)
               : null,
         properties: () =>
-          itemLayoutRows.length > 0
+          selectedItemLayoutRows.length > 0
             ? null
             : renderItemElements(elements, classes, showItemDescriptions)
       },
@@ -1070,8 +1078,8 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
       {editingGroup && onGroupIconOverrideChange ? (
         <React.Suspense fallback={null}>
           <GroupIconPickerDialog
-            current={getBetterListGroupIconOverride(groupIcons, groupIconScope, editingGroup.id)}
-            defaultColor={groupIcons.defaultColor}
+            current={getBetterListGroupIconOverride(selectedGroupIcons, selectedGroupIconScope, editingGroup.id)}
+            defaultColor={selectedGroupIcons.defaultColor}
             groupTitle={editingGroup.title}
             imageAssetProvider={groupImageAssetProvider}
             open

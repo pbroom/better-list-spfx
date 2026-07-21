@@ -10,6 +10,8 @@ import type {
 
 import {
   createBetterListMetadataMappings,
+  createBetterListGroupingOverride,
+  createBetterListItemLayoutOverride,
   parseBetterListGroupIconsConfiguration,
   parseItemLayoutConfiguration,
   parseItemPropertyFields,
@@ -18,12 +20,10 @@ import {
   betterListTemplateMaxBytes,
   defaultBetterListHtmlTemplate,
   validateBetterListTemplateStructure,
-  serializeItemLayoutConfiguration,
-  serializeBetterListGroupIconsConfiguration,
-  serializeItemPropertyFields,
   serializeTabConfiguration,
   IBetterListFieldMappings,
-  IBetterListTabConfig
+  IBetterListTabConfig,
+  resolveBetterListTabConfigurations
 } from '../../src/shared';
 import { GroupIconColorField } from '../../src/webparts/betterList/components/GroupIconColorField';
 import { ItemPropertyBuilder } from '../../src/webparts/betterList/components/propertyPane/ItemPropertyBuilder';
@@ -48,6 +48,7 @@ export type BetterListLabProps = LabPropertyBag & {
   tabsJson: string;
   customCss: string;
   htmlTemplate: string;
+  authoringTabId: string;
 };
 
 const useStyles = makeStyles({
@@ -101,6 +102,15 @@ const useStyles = makeStyles({
   },
   advancedBody: {
     paddingTop: '2px'
+  },
+  inheritance: {
+    alignItems: 'center',
+    color: tokens.colorNeutralForeground3,
+    display: 'flex',
+    fontSize: '11px',
+    justifyContent: 'space-between',
+    columnGap: '8px',
+    marginBottom: '8px'
   }
 });
 
@@ -171,7 +181,55 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
   );
   const groupingFields = React.useMemo(() => servicesAuthoringFields.filter(isGroupingColumn), []);
   const groupingOptions = React.useMemo(() => createGroupingColumnOptions(groupingFields), [groupingFields]);
-  const selectedGroupingOption = groupingOptions.find((option) => option.value === values.groupsColumn);
+  const activeTabId = tabs.some((tab) => tab.id === values.authoringTabId)
+    ? values.authoringTabId
+    : tabs[0]?.id || '';
+  const effectiveTabs = React.useMemo(() => resolveBetterListTabConfigurations(tabs, {
+    grouping: {
+      column: values.groupsColumn,
+      collapsible: values.groupsCollapsible,
+      icons: groupIcons
+    },
+    itemLayout
+  }), [groupIcons, itemLayout, tabs, values.groupsCollapsible, values.groupsColumn]);
+  const activeConfiguration = effectiveTabs.find((entry) => entry.tab.id === activeTabId) ?? effectiveTabs[0];
+  const activeGrouping = activeConfiguration?.grouping ?? {
+    column: '',
+    collapsible: false,
+    icons: groupIcons
+  };
+  const activeItemLayout = activeConfiguration?.itemLayout ?? itemLayout;
+  const selectedGroupingOption = groupingOptions.find((option) => option.value === activeGrouping.column);
+  const updateActiveTab = (patch: Partial<IBetterListTabConfig>): IBetterListTabConfig[] =>
+    tabs.map((tab) => tab.id === activeTabId ? { ...tab, ...patch } : tab);
+  const patchTabsWithDerivedMetadata = (nextTabs: IBetterListTabConfig[]): void => {
+    const resolved = resolveBetterListTabConfigurations(nextTabs, {
+      grouping: {
+        column: values.groupsColumn,
+        collapsible: values.groupsCollapsible,
+        icons: groupIcons
+      },
+      itemLayout
+    });
+    const paths = resolved.reduce<string[]>((result, entry) => {
+      result.push(...entry.itemLayout.itemProperties);
+      result.push(...Object.keys(entry.itemLayout.links).map((fieldPath) => entry.itemLayout.links[fieldPath]));
+      if (entry.grouping.column) {
+        result.push(entry.grouping.column);
+      }
+      return result;
+    }, []);
+    const metadata = createBetterListMetadataMappings(servicesAuthoringFields, paths);
+    onChange({
+      fieldMappingsJson: JSON.stringify({ ...mappings, metadata }),
+      tabsJson: serializeTabConfiguration(nextTabs)
+    });
+  };
+  const patchActiveGrouping = (nextGrouping: typeof activeGrouping): void => {
+    patchTabsWithDerivedMetadata(updateActiveTab({
+      groupingOverride: createBetterListGroupingOverride(nextGrouping)
+    }));
+  };
 
   return (
     <section className={classes.root}>
@@ -202,9 +260,14 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
             aria-label="Add tab"
             icon={<AddRegular />}
             size="small"
-            onClick={() =>
-              onChange({ tabsColumn: '', tabsJson: serializeTabConfiguration(appendNewTab(tabs)) })
-            }
+            onClick={() => {
+              const nextTabs = appendNewTab(tabs);
+              onChange({
+                authoringTabId: nextTabs[nextTabs.length - 1]?.id || activeTabId,
+                tabsColumn: '',
+                tabsJson: serializeTabConfiguration(nextTabs)
+              });
+            }}
           />
         }
         label={
@@ -216,25 +279,55 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
       >
         <TabBuilder
           fields={tabFilterFields}
+          selectedTabId={activeTabId}
           showAddAction={false}
           tabs={tabs}
-          onChange={(nextTabs) =>
-            onChange({ tabsColumn: '', tabsJson: serializeTabConfiguration(nextTabs) })
-          }
+          onChange={(nextTabs) => {
+            const nextAuthoringTabId = nextTabs.some((tab) => tab.id === activeTabId)
+              ? activeTabId
+              : nextTabs[0]?.id || '';
+            onChange({
+              authoringTabId: nextAuthoringTabId,
+              tabsColumn: '',
+              tabsJson: serializeTabConfiguration(nextTabs)
+            });
+          }}
+          onSelectedTabChange={(authoringTabId) => onChange({ authoringTabId })}
         />
       </DisclosureSection>
       <DisclosureSection label="Groups">
+        <div className={classes.inheritance}>
+          <span>
+            {activeConfiguration?.groupingInherited
+              ? activeConfiguration.inheritedFromTabId
+                ? `Inherited from ${tabs.find((tab) => tab.id === activeConfiguration.inheritedFromTabId)?.label || 'the previous tab'}. Change a setting to override it.`
+                : 'Using the default web part settings. Change a setting to override it.'
+              : 'Customized for this tab.'}
+          </span>
+          {activeConfiguration && !activeConfiguration.groupingInherited ? (
+            <Button
+              appearance="subtle"
+              size="small"
+              onClick={() => patchTabsWithDerivedMetadata(updateActiveTab({ groupingOverride: undefined }))}
+            >
+              Use previous
+            </Button>
+          ) : null}
+        </div>
         <label className={classes.groupingField}>
           <span>Grouping column</span>
           <Dropdown
             aria-label="Grouping column"
-            selectedOptions={[values.groupsColumn || noGroupingValue]}
+            selectedOptions={[activeGrouping.column || noGroupingValue]}
             value={selectedGroupingOption?.label || 'No grouping'}
             onOptionSelect={(_event, data) => {
               const groupsColumn = data.optionValue === noGroupingValue ? '' : data.optionValue || '';
-              onChange({
-                groupsColumn,
-                groupIconsJson: serializeBetterListGroupIconsConfiguration({ ...groupIcons, overrides: [] })
+              patchActiveGrouping({
+                column: groupsColumn,
+                collapsible: groupsColumn ? activeGrouping.collapsible : false,
+                icons: groupsColumn === activeGrouping.column
+                  ? activeGrouping.icons
+                  : { ...activeGrouping.icons, overrides: [] }
               });
             }}
           >
@@ -246,46 +339,49 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
             ))}
           </Dropdown>
         </label>
-        {values.groupsColumn ? (
+        {activeGrouping.column ? (
           <>
             <Switch
-              checked={values.groupsCollapsible}
+              checked={activeGrouping.collapsible}
               className={classes.switch}
               label="Allow groups to collapse"
-              onChange={(_event, data) => onChange({ groupsCollapsible: data.checked })}
+              onChange={(_event, data) => patchActiveGrouping({ ...activeGrouping, collapsible: data.checked })}
             />
             <Switch
-              checked={groupIcons.showIcons}
+              checked={activeGrouping.icons.showIcons}
               className={classes.switch}
               label="Show group icons"
               onChange={(_event, data) =>
-                onChange({
-                  groupIconsJson: serializeBetterListGroupIconsConfiguration({ ...groupIcons, showIcons: data.checked })
+                patchActiveGrouping({
+                  ...activeGrouping,
+                  icons: { ...activeGrouping.icons, showIcons: data.checked }
                 })
               }
             />
-            {groupIcons.showIcons ? (
+            {activeGrouping.icons.showIcons ? (
               <GroupIconColorField
                 label="Default icon color"
-                value={groupIcons.defaultColor}
+                value={activeGrouping.icons.defaultColor}
                 onChange={(defaultColor) =>
-                  onChange({
-                    groupIconsJson: serializeBetterListGroupIconsConfiguration({ ...groupIcons, defaultColor })
+                  patchActiveGrouping({
+                    ...activeGrouping,
+                    icons: { ...activeGrouping.icons, defaultColor }
                   })
                 }
               />
             ) : null}
-            {groupIcons.overrides.length ? (
+            {activeGrouping.icons.overrides.length ? (
               <div className={classes.settingRow}>
-                <span className={classes.settingSummary}>{`${groupIcons.overrides.length} icon override${
-                  groupIcons.overrides.length === 1 ? '' : 's'
+                <span className={classes.settingSummary}>{`${activeGrouping.icons.overrides.length} icon override${
+                  activeGrouping.icons.overrides.length === 1 ? '' : 's'
                 }`}</span>
                 <Button
                   appearance="subtle"
                   size="small"
                   onClick={() =>
-                    onChange({
-                      groupIconsJson: serializeBetterListGroupIconsConfiguration({ ...groupIcons, overrides: [] })
+                    patchActiveGrouping({
+                      ...activeGrouping,
+                      icons: { ...activeGrouping.icons, overrides: [] }
                     })
                   }
                 >
@@ -300,29 +396,40 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
       </DisclosureSection>
 
       <ItemPropertyBuilder
+        context={(
+          <div className={classes.inheritance}>
+            <span>
+              {activeConfiguration?.itemLayoutInherited
+                ? activeConfiguration.inheritedFromTabId
+                  ? `Inherited from ${tabs.find((tab) => tab.id === activeConfiguration.inheritedFromTabId)?.label || 'the previous tab'}. Change a setting to override it.`
+                  : 'Using the default web part settings. Change a setting to override it.'
+                : 'Customized for this tab.'}
+            </span>
+            {activeConfiguration && !activeConfiguration.itemLayoutInherited ? (
+              <Button
+                appearance="subtle"
+                size="small"
+                onClick={() => patchTabsWithDerivedMetadata(updateActiveTab({ itemLayoutOverride: undefined }))}
+              >
+                Use previous
+              </Button>
+            ) : null}
+          </div>
+        )}
         fields={servicesAuthoringFields}
         value={{
-          itemProperties: itemLayout.itemProperties,
-          rows: itemLayout.rows,
-          links: itemLayout.links
+          itemProperties: activeItemLayout.itemProperties,
+          rows: activeItemLayout.rows,
+          links: activeItemLayout.links
         }}
         onChange={(nextValue) => {
-          const metadata = createBetterListMetadataMappings(
-            servicesAuthoringFields,
-            [
-              ...nextValue.itemProperties,
-              ...Object.keys(nextValue.links).map((fieldPath) => nextValue.links[fieldPath])
-            ]
-          );
-          onChange({
-            fieldMappingsJson: JSON.stringify({ ...mappings, metadata }),
-            itemPropertiesJson: serializeItemPropertyFields(nextValue.itemProperties),
-            itemLayoutJson: serializeItemLayoutConfiguration(
-              nextValue.rows,
-              nextValue.itemProperties,
-              nextValue.links
-            )
-          });
+          patchTabsWithDerivedMetadata(updateActiveTab({
+            itemLayoutOverride: createBetterListItemLayoutOverride({
+              itemProperties: nextValue.itemProperties,
+              rows: nextValue.rows,
+              links: nextValue.links
+            })
+          }));
         }}
       />
 

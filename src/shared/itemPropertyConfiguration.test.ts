@@ -113,12 +113,14 @@ describe('item property configuration', () => {
       Active: true,
       Category: { Title: 'General' },
       Audience: [{ Title: 'Alex' }, { Title: 'Morgan' }],
+      Organizations: [{ Title: 'Consular Affairs' }, { Title: 'Management' }],
       URL: { Url: 'https://contoso.example', Description: 'Open service' }
     };
 
     expect(formatItemPropertyValue(source, 'Active')).toBe('Yes');
     expect(formatItemPropertyValue(source, 'Category.Title')).toBe('General');
     expect(formatItemPropertyValue(source, 'Audience')).toBe('Alex, Morgan');
+    expect(formatItemPropertyValue(source, 'Organizations.Title')).toBe('Consular Affairs, Management');
     expect(formatItemPropertyValue(source, 'URL')).toBe('Open service');
     expect(getItemPropertyUrl(source, 'URL')).toBe('https://contoso.example');
   });

@@ -2,7 +2,7 @@ import * as React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { IBetterListTabConfig } from '../../../../shared';
-import { IBetterListTabFilterField, reorderTabsById, TabBuilder } from './TabBuilder';
+import { appendNewTab, IBetterListTabFilterField, reorderTabsById, TabBuilder } from './TabBuilder';
 
 describe('TabBuilder', () => {
   it('renders compact, accessible tab disclosures and the simplified filter copy', () => {
@@ -65,5 +65,28 @@ describe('TabBuilder', () => {
     expect(reordered.map((tab) => tab.id)).toEqual(['all-services', 'featured']);
     expect(tabs.map((tab) => tab.id)).toEqual(['featured', 'all-services']);
     expect(reorderTabsById(tabs, 'missing', 'featured')).toBe(tabs);
+  });
+
+  it('adds an inheriting tab without copying presentation overrides', () => {
+    const tabs: readonly IBetterListTabConfig[] = [
+      {
+        id: 'featured',
+        label: 'Featured',
+        filter: { kind: 'all' },
+        groupingOverride: { mode: 'custom', column: 'Category.Title', collapsible: true },
+        itemLayoutOverride: {
+          itemProperties: ['Title', 'Description'],
+          rows: [['Title'], ['Description']],
+          links: {}
+        }
+      }
+    ];
+
+    const added = appendNewTab(tabs);
+
+    expect(added).toHaveLength(2);
+    expect(added[1]).toMatchObject({ id: 'tab-2', label: 'Tab 2', filter: { kind: 'all' } });
+    expect(added[1]?.groupingOverride).toBeUndefined();
+    expect(added[1]?.itemLayoutOverride).toBeUndefined();
   });
 });
