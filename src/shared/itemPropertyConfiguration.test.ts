@@ -123,6 +123,33 @@ describe('item property configuration', () => {
     expect(getItemPropertyUrl(source, 'URL')).toBe('https://contoso.example');
   });
 
+  it('formats explicitly rich-text item properties as decoded plain text', () => {
+    const source = {
+      Description:
+        '<div class="ExternalClass123">Prow&nbsp;scuttle</div><span style="color&#58;rgb(36, 48, 83)">Final &amp; text</span>',
+      Category: {
+        Description: '<p>General&nbsp;services</p><script>ignored()</script>'
+      }
+    };
+
+    expect(formatItemPropertyValue(source, 'Description', true)).toBe('Prow scuttle Final & text');
+    expect(formatItemPropertyValue(source, 'Category.Description', true)).toBe('General services');
+  });
+
+  it('preserves ordinary markup-like text and normalizes only explicit rich text', () => {
+    const source = {
+      Description:
+        '&lt;div class=&quot;ExternalClass123&quot;&gt;Encoded&amp;nbsp;text&lt;/div&gt;' +
+        '&lt;script&gt;ignored()&lt;/script&gt;&lt;p&gt;Final&lt;/p&gt;',
+      Comparison: '2 < 3 and 5 > 4'
+    };
+
+    expect(formatItemPropertyValue(source, 'Description')).toBe(source.Description);
+    expect(formatItemPropertyValue(source, 'Description', true)).toBe('Encoded text Final');
+    expect(formatItemPropertyValue(source, 'Comparison')).toBe('2 < 3 and 5 > 4');
+    expect(formatItemPropertyValue({ Label: 'Use <code> literally' }, 'Label')).toBe('Use <code> literally');
+  });
+
   it('rejects unsafe hyperlink protocols', () => {
     expect(getItemPropertyUrl({ URL: { Url: `java${'script'}:alert(1)` } }, 'URL')).toBeUndefined();
     expect(

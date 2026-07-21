@@ -1,3 +1,5 @@
+import { toPlainText } from './plainText';
+
 const REQUIRED_TITLE_FIELD = 'Title';
 export const betterListMaxItemRows = 5;
 
@@ -200,10 +202,11 @@ export function normalizeItemPropertyFields(fields: readonly unknown[]): readonl
 
 export function formatItemPropertyValue(
   source: Readonly<Record<string, unknown>>,
-  fieldPath: string
+  fieldPath: string,
+  richText: boolean = false
 ): string | undefined {
   const value = readPath(source, fieldPath);
-  return formatValue(value);
+  return formatValue(value, richText);
 }
 
 export function getItemPropertyUrl(
@@ -245,7 +248,7 @@ function readPath(source: Readonly<Record<string, unknown>>, fieldPath: string):
   }, source);
 }
 
-function formatValue(value: unknown): string | undefined {
+function formatValue(value: unknown, richText: boolean): string | undefined {
   if (value === undefined || value === null || value === '') {
     return undefined;
   }
@@ -253,10 +256,10 @@ function formatValue(value: unknown): string | undefined {
     return value ? 'Yes' : 'No';
   }
   if (typeof value === 'string' || typeof value === 'number') {
-    return String(value);
+    return typeof value === 'string' && richText ? toPlainText(value) : String(value);
   }
   if (Array.isArray(value)) {
-    const values = value.map(formatValue).filter((entry): entry is string => Boolean(entry));
+    const values = value.map((entry) => formatValue(entry, richText)).filter((entry): entry is string => Boolean(entry));
     return values.length ? values.join(', ') : undefined;
   }
   if (isRecord(value)) {
@@ -268,7 +271,8 @@ function formatValue(value: unknown): string | undefined {
         value.Url ??
         value.URL ??
         value.EMail ??
-        value.Email
+        value.Email,
+      richText
     );
   }
   return String(value);
