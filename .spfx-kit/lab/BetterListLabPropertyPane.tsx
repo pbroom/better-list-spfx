@@ -19,7 +19,6 @@ import {
   serializeItemLayoutRows,
   serializeItemPropertyFields,
   serializeTabConfiguration,
-  updateBetterListFieldMapping,
   IBetterListFieldMappings,
   IBetterListTabConfig
 } from '../../src/shared';
@@ -169,7 +168,6 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
 }) => {
   const classes = useStyles();
   const [listQuery, setListQuery] = React.useState<string | undefined>(undefined);
-  const activePickerRef = React.useRef<HTMLButtonElement>(null);
   const selectedItemProperties = React.useMemo(
     () => parseItemPropertyFields(values.itemPropertiesJson),
     [values.itemPropertiesJson]
@@ -185,19 +183,6 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
     [mappings]
   );
   const groupingFields = React.useMemo(() => servicesAuthoringFields.filter(isGroupingColumn), []);
-  const activeFields = React.useMemo(() => servicesAuthoringFields.filter(isActiveColumn), []);
-  const activeFieldPath = mappings.active?.internalName || '';
-  const availableActiveFields = activeFields.filter((field) => field.internalName !== activeFieldPath);
-  const updateActiveColumn = (fieldPath: string): void => {
-    const field = activeFields.find((candidate) => candidate.internalName === fieldPath);
-    onChange({
-      fieldMappingsJson: JSON.stringify(updateBetterListFieldMapping(mappings, 'active', field))
-    });
-  };
-  const removeActiveColumn = (): void => {
-    updateActiveColumn('');
-    activePickerRef.current?.focus();
-  };
 
   return (
     <section className={classes.root}>
@@ -221,29 +206,6 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
       >
         <Option value={servicesListId}>{servicesListTitle}</Option>
       </Combobox>
-
-      <div className={classes.section}>
-        <div className={classes.sectionHeader}>
-          <h3 className={classes.sectionLabel}>Active items</h3>
-          <ColumnPickerMenu
-            ariaLabel="Select active items column"
-            buttonRef={activePickerRef}
-            disabledLabel="No Boolean columns available"
-            fields={availableActiveFields}
-            onSelect={updateActiveColumn}
-            selectedPaths={new Set(activeFieldPath ? [activeFieldPath] : [])}
-          />
-        </div>
-        <div className={classes.sectionBody}>
-          <ColumnSetting
-            emptyLabel="No active items column selected. All items are shown."
-            fieldPath={activeFieldPath}
-            removeAriaLabel="Remove active items column"
-            selectedLabel="Active items column"
-            onRemove={removeActiveColumn}
-          />
-        </div>
-      </div>
 
       <DisclosureSection
         action={
@@ -402,10 +364,6 @@ function isGroupingColumn(field: (typeof servicesAuthoringFields)[number]): bool
     type.indexOf('boolean') >= 0 ||
     type.indexOf('date') >= 0
   );
-}
-
-function isActiveColumn(field: (typeof servicesAuthoringFields)[number]): boolean {
-  return field.typeAsString.toLocaleLowerCase().indexOf('boolean') >= 0;
 }
 
 function getColumnSummary(fieldPath: string): string {

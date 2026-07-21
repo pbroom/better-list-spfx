@@ -3,7 +3,6 @@ import * as React from 'react';
 
 import {
   createBetterListFieldMapping,
-  updateBetterListFieldMapping,
   createDefaultTabs,
   betterListSemanticSlots,
   defaultBetterListHtmlTemplate,
@@ -103,7 +102,6 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
   const [fields, setFields] = React.useState<readonly ISharePointFieldOption[]>([]);
   const [loadingLists, setLoadingLists] = React.useState(false);
   const [error, setError] = React.useState('');
-  const activePickerRef = React.useRef<HTMLButtonElement>(null);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -236,19 +234,6 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
     });
   };
   const groupingFields = fields.filter(isGroupingColumn);
-  const activeFields = fields.filter(isActiveColumn);
-  const activeFieldPath = props.value.fieldMappings.active?.internalName || '';
-  const availableActiveFields = activeFields.filter((field) => field.internalName !== activeFieldPath);
-  const updateActiveColumn = (fieldPath: string): void => {
-    const field = activeFields.find((candidate) => candidate.internalName === fieldPath);
-    patchValue({
-      fieldMappings: updateBetterListFieldMapping(props.value.fieldMappings, 'active', field)
-    });
-  };
-  const removeActiveColumn = (): void => {
-    updateActiveColumn('');
-    activePickerRef.current?.focus();
-  };
   const tabFilterFields = createTabFilterFields(props.value.fieldMappings, fields);
 
   return (
@@ -276,28 +261,6 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
             {error}
           </div>
         )}
-      </section>
-
-      <section className="bl-pane__section">
-        <div className="bl-pane__section-heading">
-          <h3>Active items</h3>
-          <ColumnPickerMenu
-            ariaLabel="Select active items column"
-            buttonRef={activePickerRef}
-            disabledLabel="No Boolean columns available"
-            fields={availableActiveFields}
-            onSelect={updateActiveColumn}
-            selectedPaths={new Set(activeFieldPath ? [activeFieldPath] : [])}
-          />
-        </div>
-        <AxisColumnSummary
-          emptyLabel="No active items column selected. All items are shown."
-          fieldPath={activeFieldPath}
-          fields={fields}
-          removeAriaLabel="Remove active items column"
-          selectedLabel="Active items column"
-          onRemove={removeActiveColumn}
-        />
       </section>
 
       <section className="bl-pane__section">
@@ -453,10 +416,6 @@ function isGroupingColumn(field: ISharePointFieldOption): boolean {
     type.indexOf('boolean') >= 0 ||
     type.indexOf('date') >= 0
   );
-}
-
-function isActiveColumn(field: ISharePointFieldOption): boolean {
-  return field.typeAsString.toLocaleLowerCase().indexOf('boolean') >= 0;
 }
 
 const propertyPaneCss = `
