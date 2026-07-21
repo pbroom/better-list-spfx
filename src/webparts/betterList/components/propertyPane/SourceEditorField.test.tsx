@@ -146,6 +146,84 @@ describe('SourceEditorField', () => {
     });
     expect(document.body.querySelectorAll('[role="dialog"]')).toHaveLength(0);
   });
+
+  it('preserves invalid drafts when the workspace moves into and out of the portal', async () => {
+    const validate = (value: string): SourceEditorDiagnostic[] =>
+      value.includes('<script>') ? [{ level: 'error', message: 'Scripts are not allowed.' }] : [];
+
+    await act(async () => {
+      ReactDom.render(
+        <SourceWorkspaceField
+          label="Styles & template"
+          documents={[
+            {
+              commitMode: 'valid',
+              config: { monacoAdapter: unavailableMonaco },
+              id: 'html',
+              label: 'HTML template',
+              language: 'html',
+              validate,
+              value: '<section>valid</section>',
+              onChange: jest.fn()
+            }
+          ]}
+        />,
+        container
+      );
+      await settleEditorFallback();
+    });
+
+    changeTextarea(getTextareas(container)[0], '<script>draft</script>');
+    const popOut = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Pop out');
+    await act(async () => {
+      Simulate.click(popOut as HTMLButtonElement);
+      await settleEditorFallback();
+    });
+    expect(getTextareas(document.body).some((textarea) => textarea.value === '<script>draft</script>')).toBe(true);
+
+    const close = document.body.querySelector<HTMLButtonElement>('[aria-label="Close source workspace"]');
+    await act(async () => {
+      Simulate.click(close as HTMLButtonElement);
+      await settleEditorFallback();
+    });
+    expect(getTextareas(container)[0].value).toBe('<script>draft</script>');
+  });
+
+  it('lets Escape cancel a target rename without closing the floating workspace', async () => {
+    await act(async () => {
+      ReactDom.render(
+        <SourceWorkspaceField
+          label="Styles & template"
+          documents={[
+            {
+              config: { monacoAdapter: unavailableMonaco },
+              id: 'scss',
+              label: 'CSS/SCSS',
+              language: 'scss',
+              targets: [{ editable: true, label: 'Card', selector: '.card', snippet: '.card {}' }],
+              value: '.card {}',
+              onChange: jest.fn()
+            }
+          ]}
+        />,
+        container
+      );
+      await settleEditorFallback();
+    });
+
+    const popOut = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Pop out');
+    act(() => Simulate.click(popOut as HTMLButtonElement));
+    const edit = document.body.querySelector<HTMLButtonElement>('[aria-label="Edit .card"]');
+    act(() => Simulate.click(edit as HTMLButtonElement));
+    const renameInput = document.body.querySelector<HTMLInputElement>('[aria-label="Edit .card"]');
+    expect(renameInput).not.toBeNull();
+
+    act(() => {
+      renameInput?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    });
+    expect(document.body.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+    expect(document.body.querySelector<HTMLInputElement>('input[aria-label="Edit .card"]')).toBeNull();
+  });
 });
 
 function getTextareas(root: ParentNode): HTMLTextAreaElement[] {

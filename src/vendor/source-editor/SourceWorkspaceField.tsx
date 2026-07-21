@@ -61,11 +61,22 @@ export const SourceWorkspaceField: React.FunctionComponent<SourceWorkspaceFieldP
   const [pointerState, setPointerState] = React.useState<PointerInteraction | null>(null);
   const rootRef = React.useRef<HTMLDivElement | null>(null);
   const popoutButtonRef = React.useRef<HTMLButtonElement | null>(null);
+  const documentDraftsRef = React.useRef<Record<string, string>>({});
+  const documentValuesRef = React.useRef<Record<string, string>>({});
   const closeShortcutLabel = React.useMemo(() => getCloseShortcutLabel(), []);
   const viewIds = React.useMemo(
     () => [...props.documents.map((document) => document.id), ...(props.documents.length > 1 ? ['split'] : [])],
     [props.documents]
   );
+
+  props.documents.forEach((document) => {
+    const previousValue = documentValuesRef.current[document.id];
+    const currentDraft = documentDraftsRef.current[document.id];
+    if (currentDraft === undefined || previousValue === undefined || currentDraft === previousValue) {
+      documentDraftsRef.current[document.id] = document.value || '';
+    }
+    documentValuesRef.current[document.id] = document.value || '';
+  });
 
   React.useEffect(() => {
     if (view === 'split' ? props.documents.length > 1 : props.documents.some((document) => document.id === view)) {
@@ -126,15 +137,15 @@ export const SourceWorkspaceField: React.FunctionComponent<SourceWorkspaceFieldP
       return undefined;
     }
     const closeOnShortcut = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape' && !isCloseShortcut(event)) {
+      if (event.defaultPrevented || (event.key !== 'Escape' && !isCloseShortcut(event))) {
         return;
       }
       event.preventDefault();
       event.stopPropagation();
       closeFloatingWorkspace();
     };
-    window.addEventListener('keydown', closeOnShortcut, true);
-    return () => window.removeEventListener('keydown', closeOnShortcut, true);
+    window.addEventListener('keydown', closeOnShortcut);
+    return () => window.removeEventListener('keydown', closeOnShortcut);
   }, [closeFloatingWorkspace, floatingOpen]);
 
   if (!firstDocumentId) {
@@ -289,7 +300,12 @@ export const SourceWorkspaceField: React.FunctionComponent<SourceWorkspaceFieldP
                 embedded
                 fillHeight={floatingOpen}
                 height={document.height || 190}
+                initialDraft={documentDraftsRef.current[document.id]}
                 showShortcuts={floatingOpen}
+                onDraftChange={(value) => {
+                  documentDraftsRef.current[document.id] = value;
+                  document.onDraftChange?.(value);
+                }}
               />
             </section>
           );

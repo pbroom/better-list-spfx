@@ -41,6 +41,8 @@ export interface SourceEditorFieldProps {
   embedded?: boolean;
   fillHeight?: boolean;
   showShortcuts?: boolean;
+  initialDraft?: string;
+  onDraftChange?: (value: string) => void;
 }
 
 export interface SourceEditorFieldConfig {
@@ -136,7 +138,8 @@ export const SourceEditorField: React.FunctionComponent<SourceEditorFieldProps> 
     baseConfig.floatingModelPath || `source-editor.${sourceEditorInstanceIdRef.current}.floating.${props.language}`;
   const toolbarLabel = baseConfig.toolbarLabel || `${props.language.toLocaleUpperCase()} editor shortcuts`;
   const monacoAdapter = baseConfig.monacoAdapter || defaultMonacoAdapter;
-  const [draft, setDraft] = React.useState(props.value || '');
+  const [draft, setDraft] = React.useState(props.initialDraft ?? props.value ?? '');
+  const committedValueRef = React.useRef(props.value || '');
   const sourceDiagnostics = React.useMemo(() => getSourceDiagnostics(draft, maxBytes, validate), [draft, maxBytes, validate]);
   const [editorReady, setEditorReady] = React.useState(false);
   const [floatingEditorReady, setFloatingEditorReady] = React.useState(false);
@@ -187,7 +190,11 @@ export const SourceEditorField: React.FunctionComponent<SourceEditorFieldProps> 
   }, [closeFloatingEditor, floatingOpen]);
 
   React.useEffect(() => {
-    setDraft(props.value || '');
+    const nextValue = props.value || '';
+    if (nextValue !== committedValueRef.current) {
+      committedValueRef.current = nextValue;
+      setDraft(nextValue);
+    }
   }, [props.value]);
 
   React.useEffect(() => {
@@ -254,6 +261,7 @@ export const SourceEditorField: React.FunctionComponent<SourceEditorFieldProps> 
   const updateValue = (value: string): void => {
     const diagnostics = getSourceDiagnostics(value, maxBytes, validate);
     setDraft(value);
+    props.onDraftChange?.(value);
     if (shouldCommitSource(commitMode, diagnostics)) {
       props.onChange(value);
     }
