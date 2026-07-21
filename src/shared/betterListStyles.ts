@@ -67,7 +67,6 @@ Edit these rules in the web part's Monaco field to restyle this instance.
 
 .better-list__group {
   width: 100%;
-  border-bottom: 1px solid var(--better-list-border);
 }
 
 .better-list__items {

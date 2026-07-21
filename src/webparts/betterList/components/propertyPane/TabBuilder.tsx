@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-use-before-define -- The compact editor composes helpers declared after the main form. */
 import * as React from 'react';
+import { Accordion, AccordionHeader, AccordionItem, AccordionPanel } from '@fluentui/react-components';
 
 import {
   BetterListComparableValue,
@@ -43,6 +44,9 @@ const ICON_OPTIONS: readonly { value: BetterListTabIcon; label: string }[] = [
 ];
 
 export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({ fields, showAddAction = true, tabs, onChange }) => {
+  const [closedTabIds, setClosedTabIds] = React.useState<ReadonlySet<string>>(() => new Set<string>());
+  const openTabIds = tabs.filter((tab) => !closedTabIds.has(tab.id)).map((tab) => tab.id);
+
   const patchTab = (index: number, patch: Partial<IBetterListTabConfig>): void => {
     onChange(tabs.map((tab, candidateIndex) => (candidateIndex === index ? { ...tab, ...patch } : tab)));
   };
@@ -78,99 +82,124 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({ fields, 
           </button>
         </div>
       ) : null}
-      {tabs.map((tab, index) => {
-        const queryFields = fields.map(toQueryField);
-        const expression = filterExpression(tab.filter, fields);
-        return (
-          <section className="bl-tabs-builder__card" key={tab.id}>
-            <div className="bl-tabs-builder__card-heading">
-              <strong>Tab {index + 1}</strong>
-              <div className="bl-tabs-builder__actions">
-                <button aria-label={`Move ${tab.label} up`} disabled={index === 0} type="button" onClick={() => moveTab(index, -1)}>
-                  ↑
-                </button>
-                <button
-                  aria-label={`Move ${tab.label} down`}
-                  disabled={index === tabs.length - 1}
-                  type="button"
-                  onClick={() => moveTab(index, 1)}
+      <Accordion<string>
+        collapsible
+        multiple
+        openItems={openTabIds}
+        onToggle={(_event, data) => {
+          const nextOpenTabIds = new Set(data.openItems);
+          setClosedTabIds(new Set(tabs.filter((tab) => !nextOpenTabIds.has(tab.id)).map((tab) => tab.id)));
+        }}
+      >
+        {tabs.map((tab, index) => {
+          const queryFields = fields.map(toQueryField);
+          const expression = filterExpression(tab.filter, fields);
+          const headerId = `tab-${safeId(tab.id)}-header`;
+          const panelId = `tab-${safeId(tab.id)}-panel`;
+          const open = !closedTabIds.has(tab.id);
+          return (
+            <AccordionItem className="bl-tabs-builder__card" key={tab.id} value={tab.id}>
+              <div className="bl-tabs-builder__card-heading">
+                <AccordionHeader
+                  as="h4"
+                  button={{ 'aria-controls': panelId, className: 'bl-tabs-builder__accordion-button', id: headerId }}
+                  className="bl-tabs-builder__accordion-header"
+                  expandIconPosition="start"
+                  size="small"
                 >
-                  ↓
-                </button>
-                <button aria-label={`Remove ${tab.label}`} disabled={tabs.length <= 1} type="button" onClick={() => removeTab(index)}>
-                  ×
-                </button>
+                  <strong>Tab {index + 1}</strong>
+                </AccordionHeader>
+                <div aria-label={`Actions for ${tab.label}`} className="bl-tabs-builder__actions" role="group">
+                  <button aria-label={`Move ${tab.label} up`} disabled={index === 0} type="button" onClick={() => moveTab(index, -1)}>
+                    ↑
+                  </button>
+                  <button
+                    aria-label={`Move ${tab.label} down`}
+                    disabled={index === tabs.length - 1}
+                    type="button"
+                    onClick={() => moveTab(index, 1)}
+                  >
+                    ↓
+                  </button>
+                  <button aria-label={`Remove ${tab.label}`} disabled={tabs.length <= 1} type="button" onClick={() => removeTab(index)}>
+                    ×
+                  </button>
+                </div>
               </div>
-            </div>
 
-            <label className="bl-tabs-builder__field">
-              <span>Name</span>
-              <input
-                required
-                value={tab.label}
-                onChange={(event) => {
-                  if (event.currentTarget.value.trim()) {
-                    patchTab(index, { label: event.currentTarget.value });
-                  }
-                }}
-              />
-            </label>
+              {open ? (
+                <AccordionPanel aria-labelledby={headerId} className="bl-tabs-builder__card-body" id={panelId}>
+                  <label className="bl-tabs-builder__field">
+                    <span>Name</span>
+                    <input
+                      required
+                      value={tab.label}
+                      onChange={(event) => {
+                        if (event.currentTarget.value.trim()) {
+                          patchTab(index, { label: event.currentTarget.value });
+                        }
+                      }}
+                    />
+                  </label>
 
-            <div className="bl-tabs-builder__grid">
-              <label className="bl-tabs-builder__field">
-                <span>Icon</span>
-                <select
-                  value={tab.tabIcon || ''}
-                  onChange={(event) => patchTab(index, { tabIcon: (event.currentTarget.value || undefined) as BetterListTabIcon | undefined })}
-                >
-                  <option value="">No icon</option>
-                  {ICON_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="bl-tabs-builder__field">
-                <span>Maximum items</span>
-                <input
-                  min={1}
-                  placeholder="No limit"
-                  type="number"
-                  value={tab.maxItems ?? ''}
-                  onChange={(event) => {
-                    const value = event.currentTarget.valueAsNumber;
-                    patchTab(index, { maxItems: Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined });
-                  }}
-                />
-              </label>
-            </div>
+                  <div className="bl-tabs-builder__grid">
+                    <label className="bl-tabs-builder__field">
+                      <span>Icon</span>
+                      <select
+                        value={tab.tabIcon || ''}
+                        onChange={(event) => patchTab(index, { tabIcon: (event.currentTarget.value || undefined) as BetterListTabIcon | undefined })}
+                      >
+                        <option value="">No icon</option>
+                        {ICON_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="bl-tabs-builder__field">
+                      <span>Maximum items</span>
+                      <input
+                        min={1}
+                        placeholder="No limit"
+                        type="number"
+                        value={tab.maxItems ?? ''}
+                        onChange={(event) => {
+                          const value = event.currentTarget.valueAsNumber;
+                          patchTab(index, { maxItems: Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined });
+                        }}
+                      />
+                    </label>
+                  </div>
 
-            <label className="bl-tabs-builder__check">
-              <input
-                checked={tab.showItemCount === true}
-                type="checkbox"
-                onChange={(event) => patchTab(index, { showItemCount: event.currentTarget.checked })}
-              />
-              <span>Show item count</span>
-            </label>
+                  <label className="bl-tabs-builder__check">
+                    <input
+                      checked={tab.showItemCount === true}
+                      type="checkbox"
+                      onChange={(event) => patchTab(index, { showItemCount: event.currentTarget.checked })}
+                    />
+                    <span>Show item count</span>
+                  </label>
 
-            <FilterQueryEditor
-              expression={expression}
-              fields={queryFields}
-              id={`tab-filter-${safeId(tab.id)}`}
-              onChange={(nextExpression) => {
-                const trimmed = nextExpression.trim();
-                patchTab(index, {
-                  filter: trimmed
-                    ? { kind: 'query', expression: nextExpression, fields: collectBetterListQueryFields(nextExpression, queryFields) }
-                    : { kind: 'all' }
-                });
-              }}
-            />
-          </section>
-        );
-      })}
+                  <FilterQueryEditor
+                    expression={expression}
+                    fields={queryFields}
+                    id={`tab-filter-${safeId(tab.id)}`}
+                    onChange={(nextExpression) => {
+                      const trimmed = nextExpression.trim();
+                      patchTab(index, {
+                        filter: trimmed
+                          ? { kind: 'query', expression: nextExpression, fields: collectBetterListQueryFields(nextExpression, queryFields) }
+                          : { kind: 'all' }
+                      });
+                    }}
+                  />
+                </AccordionPanel>
+              ) : null}
+            </AccordionItem>
+          );
+        })}
+      </Accordion>
     </div>
   );
 };
@@ -198,6 +227,13 @@ const FilterQueryEditor: React.FunctionComponent<{
   const listboxId = `${id}-suggestions`;
   const helpId = `${id}-help`;
   const showSuggestions = open && suggestions.length > 0 && fields.length > 0;
+  const helpText = fields.length === 0
+    ? 'Map a list column before adding a filter.'
+    : diagnostic
+      ? diagnostic.message
+      : draft.trim()
+        ? 'Use AND, OR, NOT, and parentheses to combine conditions.'
+        : '';
 
   const updateCursor = (input: HTMLInputElement): void => {
     setCursor(input.selectionStart ?? input.value.length);
@@ -226,20 +262,20 @@ const FilterQueryEditor: React.FunctionComponent<{
 
   return (
     <fieldset className="bl-tabs-builder__filter">
-      <legend>Filter query</legend>
+      <legend>Filter items</legend>
       <div className="bl-query-editor">
         <label className="bl-tabs-builder__field" htmlFor={id}>
-          <span className="bl-query-editor__label">Items to show</span>
+          <span className="bl-query-editor__sr-only">Filter items</span>
           <input
             aria-activedescendant={showSuggestions ? `${listboxId}-${activeIndex}` : undefined}
             aria-autocomplete="list"
             aria-controls={listboxId}
-            aria-describedby={helpId}
+            aria-describedby={helpText ? helpId : undefined}
             aria-expanded={showSuggestions}
             aria-invalid={Boolean(diagnostic)}
             autoComplete="off"
             id={id}
-            placeholder='All items — try Featured = true'
+            placeholder="All items"
             ref={inputRef}
             role="combobox"
             spellCheck={false}
@@ -306,20 +342,16 @@ const FilterQueryEditor: React.FunctionComponent<{
           </ul>
         ) : null}
       </div>
-      <div
-        aria-atomic="true"
-        aria-live="polite"
-        className={diagnostic ? 'bl-query-editor__help is-error' : 'bl-query-editor__help'}
-        id={helpId}
-      >
-        {fields.length === 0
-          ? 'Map a list column before adding a filter.'
-          : diagnostic
-            ? diagnostic.message
-            : draft.trim()
-              ? 'Use AND, OR, NOT, and parentheses to combine conditions.'
-              : 'Leave empty for all items. Type a field name to build a filter.'}
-      </div>
+      {helpText ? (
+        <div
+          aria-atomic="true"
+          aria-live="polite"
+          className={diagnostic ? 'bl-query-editor__help is-error' : 'bl-query-editor__help'}
+          id={helpId}
+        >
+          {helpText}
+        </div>
+      ) : null}
       <span aria-live="polite" className="bl-query-editor__sr-only">
         {showSuggestions ? `${suggestions.length} suggestions available.` : ''}
       </span>
@@ -372,12 +404,15 @@ function safeId(value: string): string {
 const tabBuilderCss = `
 .bl-tabs-builder { color: #242424; font: 12px/1.4 "Segoe UI", sans-serif; }
 .bl-tabs-builder *, .bl-tabs-builder *::before, .bl-tabs-builder *::after { box-sizing: border-box; }
-.bl-tabs-builder__heading, .bl-tabs-builder__card-heading, .bl-tabs-builder__actions { align-items: center; display: flex; }
+.bl-tabs-builder__heading, .bl-tabs-builder__actions { align-items: center; display: flex; }
 .bl-tabs-builder__heading { justify-content: flex-end; }
-.bl-tabs-builder__card-heading { justify-content: space-between; }
+.bl-tabs-builder__card-heading { align-items: center; display: grid; grid-template-columns: minmax(0, 1fr) auto; }
 .bl-tabs-builder__heading { color: #616161; margin-bottom: 8px; }
-.bl-tabs-builder__card { background: #fafafa; border: 1px solid #e0e0e0; border-radius: 6px; margin: 0 0 8px; padding: 10px; }
-.bl-tabs-builder__card-heading { border-bottom: 1px solid #e0e0e0; margin-bottom: 10px; padding-bottom: 7px; }
+.bl-tabs-builder__card { background: transparent; border: 0; border-radius: 0; margin: 0 0 4px; padding: 0; }
+.bl-tabs-builder__card-heading { border-bottom: 1px solid #e0e0e0; min-height: 38px; }
+.bl-tabs-builder__card-body { padding: 8px 0 6px; }
+.bl-tabs-builder__accordion-header { margin: 0; min-width: 0; }
+.bl-tabs-builder__accordion-button { justify-content: flex-start !important; padding-left: 0 !important; width: 100%; }
 .bl-tabs-builder__actions { gap: 2px; }
 .bl-tabs-builder button { align-items: center; background: transparent; border: 1px solid transparent; border-radius: 4px; color: #242424; cursor: pointer; display: inline-flex; justify-content: center; min-height: 28px; padding: 2px 7px; }
 .bl-tabs-builder button:hover:not(:disabled) { background: #f0f0f0; }
