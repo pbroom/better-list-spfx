@@ -96,6 +96,7 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({ fields, 
           const expression = filterExpression(tab.filter, fields);
           const headerId = `tab-${safeId(tab.id)}-header`;
           const panelId = `tab-${safeId(tab.id)}-panel`;
+          const open = !closedTabIds.has(tab.id);
           return (
             <AccordionItem className="bl-tabs-builder__card" key={tab.id} value={tab.id}>
               <div className="bl-tabs-builder__card-heading">
@@ -126,73 +127,75 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({ fields, 
                 </div>
               </div>
 
-              <AccordionPanel aria-labelledby={headerId} className="bl-tabs-builder__card-body" id={panelId}>
-                <label className="bl-tabs-builder__field">
-                  <span>Name</span>
-                  <input
-                    required
-                    value={tab.label}
-                    onChange={(event) => {
-                      if (event.currentTarget.value.trim()) {
-                        patchTab(index, { label: event.currentTarget.value });
-                      }
-                    }}
-                  />
-                </label>
-
-                <div className="bl-tabs-builder__grid">
+              {open ? (
+                <AccordionPanel aria-labelledby={headerId} className="bl-tabs-builder__card-body" id={panelId}>
                   <label className="bl-tabs-builder__field">
-                    <span>Icon</span>
-                    <select
-                      value={tab.tabIcon || ''}
-                      onChange={(event) => patchTab(index, { tabIcon: (event.currentTarget.value || undefined) as BetterListTabIcon | undefined })}
-                    >
-                      <option value="">No icon</option>
-                      {ICON_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="bl-tabs-builder__field">
-                    <span>Maximum items</span>
+                    <span>Name</span>
                     <input
-                      min={1}
-                      placeholder="No limit"
-                      type="number"
-                      value={tab.maxItems ?? ''}
+                      required
+                      value={tab.label}
                       onChange={(event) => {
-                        const value = event.currentTarget.valueAsNumber;
-                        patchTab(index, { maxItems: Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined });
+                        if (event.currentTarget.value.trim()) {
+                          patchTab(index, { label: event.currentTarget.value });
+                        }
                       }}
                     />
                   </label>
-                </div>
 
-                <label className="bl-tabs-builder__check">
-                  <input
-                    checked={tab.showItemCount === true}
-                    type="checkbox"
-                    onChange={(event) => patchTab(index, { showItemCount: event.currentTarget.checked })}
+                  <div className="bl-tabs-builder__grid">
+                    <label className="bl-tabs-builder__field">
+                      <span>Icon</span>
+                      <select
+                        value={tab.tabIcon || ''}
+                        onChange={(event) => patchTab(index, { tabIcon: (event.currentTarget.value || undefined) as BetterListTabIcon | undefined })}
+                      >
+                        <option value="">No icon</option>
+                        {ICON_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="bl-tabs-builder__field">
+                      <span>Maximum items</span>
+                      <input
+                        min={1}
+                        placeholder="No limit"
+                        type="number"
+                        value={tab.maxItems ?? ''}
+                        onChange={(event) => {
+                          const value = event.currentTarget.valueAsNumber;
+                          patchTab(index, { maxItems: Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined });
+                        }}
+                      />
+                    </label>
+                  </div>
+
+                  <label className="bl-tabs-builder__check">
+                    <input
+                      checked={tab.showItemCount === true}
+                      type="checkbox"
+                      onChange={(event) => patchTab(index, { showItemCount: event.currentTarget.checked })}
+                    />
+                    <span>Show item count</span>
+                  </label>
+
+                  <FilterQueryEditor
+                    expression={expression}
+                    fields={queryFields}
+                    id={`tab-filter-${safeId(tab.id)}`}
+                    onChange={(nextExpression) => {
+                      const trimmed = nextExpression.trim();
+                      patchTab(index, {
+                        filter: trimmed
+                          ? { kind: 'query', expression: nextExpression, fields: collectBetterListQueryFields(nextExpression, queryFields) }
+                          : { kind: 'all' }
+                      });
+                    }}
                   />
-                  <span>Show item count</span>
-                </label>
-
-                <FilterQueryEditor
-                  expression={expression}
-                  fields={queryFields}
-                  id={`tab-filter-${safeId(tab.id)}`}
-                  onChange={(nextExpression) => {
-                    const trimmed = nextExpression.trim();
-                    patchTab(index, {
-                      filter: trimmed
-                        ? { kind: 'query', expression: nextExpression, fields: collectBetterListQueryFields(nextExpression, queryFields) }
-                        : { kind: 'all' }
-                    });
-                  }}
-                />
-              </AccordionPanel>
+                </AccordionPanel>
+              ) : null}
             </AccordionItem>
           );
         })}
