@@ -41,7 +41,12 @@ for (const library of libraries) {
   const shards = Array.from({ length: shardCount }, () => ({}));
   const manifest = names.map((name) => {
     const shard = getShard(name);
-    shards[shard][name] = source.icons[name];
+    const icon = source.icons[name];
+    shards[shard][name] = {
+      ...icon,
+      width: icon.width ?? source.width ?? 16,
+      height: icon.height ?? source.height ?? 16
+    };
     const label = humanize(name, library.id);
     return { name, label, searchText: `${label} ${name}`.toLocaleLowerCase(), shard };
   });
