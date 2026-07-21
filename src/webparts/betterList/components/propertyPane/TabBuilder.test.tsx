@@ -29,8 +29,11 @@ describe('TabBuilder', () => {
     expect(html.match(/data-tab-remove="true"/g)).toHaveLength(2);
     expect(html).toContain('aria-label="Remove Featured"');
     expect(html).toContain('aria-label="Remove All Services"');
-    expect(html).not.toContain('data-tab-drag-handle');
-    expect(html).not.toContain('aria-label="Reorder Featured"');
+    expect(html.match(/data-tab-drag-handle="true"/g)).toHaveLength(2);
+    expect(html).toContain('aria-label="Reorder Featured"');
+    expect(html).toContain('aria-describedby="tab-featured-header-reorder-help"');
+    expect(html).toContain('Drag to reorder. Press Alt+Arrow Up or Alt+Arrow Down to move.');
+    expect(html).toContain('title="Drag to reorder. Press Alt+Arrow Up or Alt+Arrow Down to move."');
     expect(html).toContain('aria-roledescription="sortable"');
     expect(html).toContain('fui-Switch');
     expect(html).toContain('Show item count');

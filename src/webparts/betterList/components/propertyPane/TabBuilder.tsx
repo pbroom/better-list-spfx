@@ -17,7 +17,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Accordion, AccordionHeader, AccordionItem, AccordionPanel, Button, Portal, Switch, tokens } from '@fluentui/react-components';
-import { AddRegular, DismissRegular } from '@fluentui/react-icons';
+import { AddRegular, DismissRegular, ReOrderDotsVerticalRegular } from '@fluentui/react-icons';
 
 import {
   BetterListComparableValue,
@@ -59,6 +59,8 @@ const ICON_OPTIONS: readonly { value: BetterListTabIcon; label: string }[] = [
   { value: 'policy', label: 'Document' },
   { value: 'support', label: 'Support' }
 ];
+
+const reorderInstructions = 'Drag to reorder. Press Alt+Arrow Up or Alt+Arrow Down to move.';
 
 export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({ fields, showAddAction = true, tabs, onChange }) => {
   const [closedTabIds, setClosedTabIds] = React.useState<ReadonlySet<string>>(() => new Set<string>());
@@ -280,11 +282,7 @@ const SortableTabCard: React.FunctionComponent<ISortableTabCardProps> = ({
     transform: CSS.Transform.toString(transform),
     transition
   };
-  const pointerDown = listeners?.onPointerDown;
-  const handlePointerDown: React.PointerEventHandler<HTMLAnchorElement> | undefined = pointerDown
-    ? (event) => pointerDown(event)
-    : undefined;
-
+  const reorderHelpId = `${headerId}-reorder-help`;
   return (
     <AccordionItem
       className={`bl-tabs-builder__card${isDragging ? ' is-dragging' : ''}`}
@@ -299,17 +297,8 @@ const SortableTabCard: React.FunctionComponent<ISortableTabCardProps> = ({
           button={
             {
               'aria-controls': panelId,
-              'aria-roledescription': attributes['aria-roledescription'],
               className: 'bl-tabs-builder__accordion-button',
-              id: headerId,
-              onKeyDown: (event: React.KeyboardEvent<HTMLAnchorElement>) => {
-                if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
-                  event.preventDefault();
-                  onMove(event.key === 'ArrowUp' ? -1 : 1);
-                }
-              },
-              onPointerDown: handlePointerDown,
-              ref: setActivatorNodeRef
+              id: headerId
             } as unknown as NonNullable<React.ComponentProps<typeof AccordionHeader>['button']>
           }
           className="bl-tabs-builder__accordion-header"
@@ -319,6 +308,27 @@ const SortableTabCard: React.FunctionComponent<ISortableTabCardProps> = ({
           <strong>Tab {index + 1}</strong>
         </AccordionHeader>
         <div aria-label={`Actions for ${tab.label}`} className="bl-tabs-builder__actions" role="group">
+          <span className="bl-tabs-builder__sr-only" id={reorderHelpId}>{reorderInstructions}</span>
+          <Button
+            {...attributes}
+            {...listeners}
+            appearance="subtle"
+            aria-describedby={reorderHelpId}
+            aria-label={`Reorder ${tab.label}`}
+            className="bl-tabs-builder__drag-handle"
+            data-tab-drag-handle
+            icon={<ReOrderDotsVerticalRegular />}
+            ref={setActivatorNodeRef}
+            size="small"
+            title={reorderInstructions}
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+                event.preventDefault();
+                onMove(event.key === 'ArrowUp' ? -1 : 1);
+              }
+            }}
+          />
           <Button
             appearance="subtle"
             aria-label={`Remove ${tab.label}`}
@@ -549,10 +559,12 @@ const tabBuilderCss = `
 .bl-tabs-builder__card-heading:hover > .bl-tabs-builder__actions [data-tab-remove], .bl-tabs-builder__card-heading:focus-within > .bl-tabs-builder__actions [data-tab-remove] { opacity: 1; pointer-events: auto; }
 .bl-tabs-builder__card-body { padding: 8px 0 6px; }
 .bl-tabs-builder__accordion-header { margin: 0; min-width: 0; }
-.bl-tabs-builder__accordion-button { cursor: grab; justify-content: flex-start !important; padding-left: 0 !important; touch-action: none; width: 100%; }
-.bl-tabs-builder__accordion-button:active { cursor: grabbing; }
+.bl-tabs-builder__accordion-button { justify-content: flex-start !important; padding-left: 0 !important; width: 100%; }
 .bl-tabs-builder__drag-overlay { background: ${tokens.colorNeutralBackground1}; border: 1px solid ${tokens.colorNeutralStroke2}; border-radius: ${tokens.borderRadiusMedium}; box-shadow: ${tokens.shadow16}; color: ${tokens.colorNeutralForeground1}; font: 600 12px/1.4 "Segoe UI", sans-serif; min-width: 180px; padding: 10px 12px; }
 .bl-tabs-builder__actions { gap: 2px; }
+.bl-tabs-builder .bl-tabs-builder__drag-handle { cursor: grab; height: 28px; min-height: 28px; min-width: 28px; padding: 0; touch-action: none; width: 28px; }
+.bl-tabs-builder .bl-tabs-builder__drag-handle:active { cursor: grabbing; }
+.bl-tabs-builder__sr-only { clip: rect(0, 0, 0, 0); clip-path: inset(50%); height: 1px; overflow: hidden; position: absolute; white-space: nowrap; width: 1px; }
 .bl-tabs-builder .bl-tabs-builder__remove { color: ${tokens.colorNeutralForeground3}; height: 28px; min-height: 28px; min-width: 28px; padding: 0; transition: opacity 100ms ease-out; width: 28px; }
 .bl-tabs-builder__field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .bl-tabs-builder__field > span, .bl-tabs-builder__filter legend { color: #424242; font-weight: 600; }
