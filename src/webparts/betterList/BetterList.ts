@@ -90,13 +90,14 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
 
   public render(): void {
     const tabs = this._createEffectiveTabs();
+    const descriptionFieldPath = this._readMappings().description?.internalName;
     const itemLayout = parseItemLayoutConfiguration(
       this.properties.itemLayoutJson,
       parseItemPropertyFields(this.properties.itemPropertiesJson)
     );
     const groupIcons = parseBetterListGroupIconsConfiguration(this.properties.groupIconsJson);
     const presentationTabs = tabs.map((tab) =>
-      this._createPresentationTab(tab, itemLayout.itemProperties, itemLayout.links)
+      this._createPresentationTab(tab, itemLayout.itemProperties, itemLayout.links, descriptionFieldPath)
     );
     const firstTab = presentationTabs[0];
     if (!this._activeTabKey || !presentationTabs.some((tab) => tab.key === this._activeTabKey)) {
@@ -376,7 +377,8 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
   private _createPresentationTab(
     tab: IBetterListTabConfig,
     itemProperties: readonly string[],
-    itemElementLinks: BetterListItemElementLinks
+    itemElementLinks: BetterListItemElementLinks,
+    descriptionFieldPath: string | undefined
   ): IBetterListTab {
     const processed = processItems(this._items, tab);
     const groups: readonly IBetterListGroupResult[] = tab.group
@@ -385,7 +387,15 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     const items: IBetterListItem[] = [];
     groups.forEach((group, groupIndex) => {
       group.items.forEach((item) => {
-        items.push(this._createPresentationItem(item, group, groupIndex, tab, itemProperties, itemElementLinks));
+        items.push(this._createPresentationItem(
+          item,
+          group,
+          groupIndex,
+          tab,
+          itemProperties,
+          itemElementLinks,
+          descriptionFieldPath
+        ));
       });
     });
     return {
@@ -407,16 +417,18 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     groupIndex: number,
     tab: IBetterListTabConfig,
     itemProperties: readonly string[],
-    itemElementLinks: BetterListItemElementLinks
+    itemElementLinks: BetterListItemElementLinks,
+    descriptionFieldPath: string | undefined
   ): IBetterListItem {
     const elements = itemProperties
       .filter((fieldPath) => fieldPath !== 'Title')
       .map((fieldPath) => {
-        const value = formatItemPropertyValue(item.source, fieldPath);
+        const isDescription = fieldPath === descriptionFieldPath;
+        const value = formatItemPropertyValue(item.source, fieldPath, isDescription);
         return value
           ? {
               key: fieldPath,
-              kind: fieldPath === 'Description' ? ('description' as const) : ('metadata' as const),
+              kind: isDescription ? ('description' as const) : ('metadata' as const),
               value,
               href: itemElementLinks[fieldPath]
                 ? getItemPropertyUrl(item.source, itemElementLinks[fieldPath])
@@ -435,7 +447,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       id: String(item.id),
       title: item.title,
       href: itemElementLinks.Title ? getItemPropertyUrl(item.source, itemElementLinks.Title) : undefined,
-      description: itemProperties.indexOf('Description') >= 0 ? formatItemPropertyValue(item.source, 'Description') : undefined,
+      description: descriptionFieldPath && itemProperties.indexOf(descriptionFieldPath) >= 0 ? item.description : undefined,
       metadata,
       elements,
       groupId: group.key,
