@@ -42,6 +42,8 @@ describe('BetterListPropertyPane', () => {
     expect(html).toContain('bl-pane__source-dropdown');
     expect(html).toContain('--bl-font-mono: &quot;Geist Mono Variable&quot;');
     expect(html).toContain('data-property-pane-section-heading="true"');
+    expect(html.match(/data-property-pane-section-divider="before"/g)).toHaveLength(3);
+    expect(html.match(/data-property-pane-section-divider="none"/g)).toHaveLength(1);
     expect(html).toContain('aria-label="Add tab"');
     expect(html).not.toContain('aria-label="Select groups column"');
     expect(html).not.toContain('+ Add tab');

@@ -523,6 +523,7 @@ export const ItemPropertyBuilder: React.FunctionComponent<IItemPropertyBuilderPr
           selectedPaths={selected}
         />
       }
+      divider={false}
       label="Item layout"
     >
       {rows.length === 0 ? (
