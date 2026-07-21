@@ -79,6 +79,7 @@ interface IItemLinkFieldOption {
 }
 
 export interface IItemPropertyBuilderProps {
+  context?: React.ReactNode;
   fields: readonly IBetterListFieldDescriptor[];
   value: IItemLayoutBuilderValue;
   onChange: (value: IItemLayoutBuilderValue) => void;
@@ -260,6 +261,7 @@ const useStyles = makeStyles({
 });
 
 export const ItemPropertyBuilder: React.FunctionComponent<IItemPropertyBuilderProps> = ({
+  context,
   fields,
   value,
   onChange
@@ -526,6 +528,7 @@ export const ItemPropertyBuilder: React.FunctionComponent<IItemPropertyBuilderPr
       divider={false}
       label="Item layout"
     >
+      {context}
       {rows.length === 0 ? (
           <DndContext
             collisionDetection={closestCenter}

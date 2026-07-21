@@ -9,9 +9,19 @@ import {
   IBetterListLayoutOverride,
   IBetterListQueryField,
   IBetterListSort,
-  IBetterListTabConfig
+  IBetterListTabConfig,
+  IBetterListTabGroupingOverride,
+  IBetterListTabItemLayoutOverride
 } from './betterListTypes';
-import { normalizeBetterListIconOverride } from './groupIconConfiguration';
+import {
+  normalizeBetterListIconOverride,
+  parseBetterListGroupIconsConfiguration
+} from './groupIconConfiguration';
+import {
+  normalizeItemElementLinks,
+  normalizeItemLayoutRows,
+  normalizeItemPropertyFields
+} from './itemPropertyConfiguration';
 
 const FIELD_SLOTS: readonly BetterListFieldSlot[] = [
   'title',
@@ -233,6 +243,46 @@ function readMaxItems(value: unknown): number | undefined {
   throw new Error('A tab maximum item count must be a positive integer.');
 }
 
+function readGroupingOverride(value: unknown): IBetterListTabGroupingOverride | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isRecord(value) || (value.mode !== 'none' && value.mode !== 'custom')) {
+    throw new Error('A tab grouping override must use none or custom mode.');
+  }
+  const icons = value.icons === undefined
+    ? undefined
+    : parseBetterListGroupIconsConfiguration(JSON.stringify(value.icons));
+  if (value.mode === 'none') {
+    return { mode: 'none', icons };
+  }
+  const column = typeof value.column === 'string' ? value.column.trim() : '';
+  if (!column) {
+    throw new Error('A custom tab grouping override must include a grouping column.');
+  }
+  return {
+    mode: 'custom',
+    column,
+    collapsible: value.collapsible !== false,
+    icons
+  };
+}
+
+function readItemLayoutOverride(value: unknown): IBetterListTabItemLayoutOverride | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isRecord(value) || !Array.isArray(value.itemProperties) || !Array.isArray(value.rows)) {
+    throw new Error('A tab item layout override must include itemProperties and rows arrays.');
+  }
+  const itemProperties = normalizeItemPropertyFields(value.itemProperties);
+  return {
+    itemProperties,
+    rows: normalizeItemLayoutRows(value.rows, itemProperties),
+    links: normalizeItemElementLinks(value.links, itemProperties)
+  };
+}
+
 function readTab(value: unknown, index: number): IBetterListTabConfig {
   if (!isRecord(value)) {
     throw new Error(`Tab ${index + 1} must be an object.`);
@@ -253,7 +303,9 @@ function readTab(value: unknown, index: number): IBetterListTabConfig {
     group: readGroup(value.group),
     sort: readSort(value.sort),
     icon: readIcon(value.icon),
-    layout: readLayout(value.layout)
+    layout: readLayout(value.layout),
+    groupingOverride: readGroupingOverride(value.groupingOverride),
+    itemLayoutOverride: readItemLayoutOverride(value.itemLayoutOverride)
   };
 }
 

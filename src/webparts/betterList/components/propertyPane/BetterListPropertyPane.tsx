@@ -13,6 +13,8 @@ import { AddRegular } from '@fluentui/react-icons';
 
 import {
   createBetterListFieldMapping,
+  createBetterListGroupingOverride,
+  createBetterListItemLayoutOverride,
   createBetterListMetadataMappings,
   createDefaultTabs,
   betterListSemanticSlots,
@@ -24,6 +26,7 @@ import {
   IBetterListFieldMappings,
   IBetterListGroupIconsConfiguration,
   IBetterListTabConfig,
+  resolveBetterListTabConfigurations,
   validateBetterListTemplateStructure
 } from '../../../../shared';
 import { ISourceEditorTarget } from '../../../../vendor/source-editor/SourceEditorField';
@@ -66,10 +69,12 @@ export interface IBetterListPickerDataSource {
 }
 
 export interface IBetterListPropertyPaneProps {
+  activeTabId?: string;
   value: IBetterListAuthoringState;
   pickerDataSource: IBetterListPickerDataSource;
   imageAssetProvider?: ISharePointImageAssetProvider;
   onChange: (value: IBetterListAuthoringState) => void;
+  onActiveTabChange?: (tabId: string) => void;
 }
 
 const cssTargets: readonly ISourceEditorTarget[] = [
@@ -182,6 +187,69 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
     props.onChange({ ...props.value, ...patch });
   };
 
+  const activeTabId = props.value.tabs.some((tab) => tab.id === props.activeTabId)
+    ? props.activeTabId as string
+    : props.value.tabs[0]?.id || '';
+  const effectiveTabs = resolveBetterListTabConfigurations(props.value.tabs, {
+    grouping: {
+      column: props.value.groupsColumn,
+      collapsible: props.value.groupsCollapsible,
+      icons: props.value.groupIcons
+    },
+    itemLayout: {
+      itemProperties: props.value.itemProperties,
+      rows: props.value.itemLayoutRows,
+      links: props.value.itemElementLinks
+    }
+  });
+  const activeConfiguration =
+    effectiveTabs.find((entry) => entry.tab.id === activeTabId) ?? effectiveTabs[0];
+  const activeGrouping = activeConfiguration?.grouping ?? {
+    column: '',
+    collapsible: false,
+    icons: props.value.groupIcons
+  };
+  const activeItemLayout = activeConfiguration?.itemLayout ?? {
+    itemProperties: props.value.itemProperties,
+    rows: props.value.itemLayoutRows,
+    links: props.value.itemElementLinks
+  };
+
+  const updateActiveTab = (patch: Partial<IBetterListTabConfig>): IBetterListTabConfig[] =>
+    props.value.tabs.map((tab) => tab.id === activeTabId ? { ...tab, ...patch } : tab);
+
+  const patchTabsWithDerivedMetadata = (tabs: IBetterListTabConfig[]): void => {
+    const resolved = resolveBetterListTabConfigurations(tabs, {
+      grouping: {
+        column: props.value.groupsColumn,
+        collapsible: props.value.groupsCollapsible,
+        icons: props.value.groupIcons
+      },
+      itemLayout: {
+        itemProperties: props.value.itemProperties,
+        rows: props.value.itemLayoutRows,
+        links: props.value.itemElementLinks
+      }
+    });
+    const metadata = createBetterListMetadataMappings(
+      fields,
+      resolved.reduce<string[]>((paths, entry) => {
+        paths.push(...entry.itemLayout.itemProperties);
+        paths.push(...Object.keys(entry.itemLayout.links).map((fieldPath) => entry.itemLayout.links[fieldPath]));
+        if (entry.grouping.column) {
+          paths.push(entry.grouping.column);
+        }
+        return paths;
+      }, [])
+    );
+    patchValue({ tabs, fieldMappings: { ...props.value.fieldMappings, metadata } });
+  };
+
+  const patchActiveGrouping = (nextGrouping: typeof activeGrouping): void => {
+    const tabs = updateActiveTab({ groupingOverride: createBetterListGroupingOverride(nextGrouping) });
+    patchTabsWithDerivedMetadata(tabs);
+  };
+
   const selectList = (listId: string): void => {
     const selected = lists.find((list) => list.id === listId);
     patchValue({
@@ -223,39 +291,24 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
     links: BetterListItemElementLinks;
   }): void => {
     const { itemProperties, rows, links } = value;
-    const metadata = createBetterListMetadataMappings(
-      fields,
-      [...itemProperties, ...Object.keys(links).map((fieldPath) => links[fieldPath])]
-    );
-    patchValue({
-      itemProperties,
-      itemLayoutRows: rows,
-      itemElementLinks: links,
-      fieldMappings: { ...props.value.fieldMappings, metadata }
+    const tabs = updateActiveTab({
+      itemLayoutOverride: createBetterListItemLayoutOverride({ itemProperties, rows, links })
     });
+    patchTabsWithDerivedMetadata(tabs);
   };
 
   const updateGroupColumn = (fieldPath: string): void => {
-    const [internalName, lookupValueField] = fieldPath.split('.');
-    const field = fields.find((candidate) => candidate.internalName === internalName);
-    const fieldMappings = { ...props.value.fieldMappings };
-    if (field) {
-      fieldMappings.group = createBetterListFieldMapping(field, 'group', lookupValueField);
-    } else {
-      delete fieldMappings.group;
-    }
-    patchValue({
-      fieldMappings,
-      groupsColumn: fieldPath,
-      groupIcons:
-        fieldPath === props.value.groupsColumn
-          ? props.value.groupIcons
-          : { ...props.value.groupIcons, overrides: [] }
+    patchActiveGrouping({
+      column: fieldPath,
+      collapsible: fieldPath ? activeGrouping.collapsible : false,
+      icons: fieldPath === activeGrouping.column
+        ? activeGrouping.icons
+        : { ...activeGrouping.icons, overrides: [] }
     });
   };
   const groupingFields = fields.filter(isGroupingColumn);
   const groupingOptions = createGroupingColumnOptions(groupingFields);
-  const selectedGroupingOption = groupingOptions.find((option) => option.value === props.value.groupsColumn);
+  const selectedGroupingOption = groupingOptions.find((option) => option.value === activeGrouping.column);
   const tabFilterFields = createTabFilterFields(props.value.fieldMappings, fields);
 
   return (
@@ -300,7 +353,14 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
               aria-label="Add tab"
               icon={<AddRegular />}
               size="small"
-              onClick={() => patchValue({ tabs: appendNewTab(props.value.tabs).slice(), tabsColumn: '' })}
+              onClick={() => {
+                const tabs = appendNewTab(props.value.tabs).slice();
+                const addedTabId = tabs[tabs.length - 1]?.id || '';
+                patchValue({ tabs, tabsColumn: '' });
+                if (addedTabId) {
+                  props.onActiveTabChange?.(addedTabId);
+                }
+              }}
             />
           }
           label={
@@ -313,20 +373,29 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
           }
         >
           <TabBuilder
+            selectedTabId={activeTabId}
             fields={tabFilterFields}
             imageAssetProvider={props.imageAssetProvider}
             showAddAction={false}
             tabs={props.value.tabs}
             onChange={(tabs) => patchValue({ tabs: tabs.slice(), tabsColumn: '' })}
+            onSelectedTabChange={props.onActiveTabChange}
           />
         </PropertyPaneSection>
 
         <PropertyPaneSection label="Groups">
+        <TabSettingInheritance
+          inherited={Boolean(activeConfiguration?.groupingInherited)}
+          inheritedFromLabel={getTabLabel(props.value.tabs, activeConfiguration?.inheritedFromTabId)}
+          onReset={activeConfiguration?.groupingInherited
+            ? undefined
+            : () => patchTabsWithDerivedMetadata(updateActiveTab({ groupingOverride: undefined }))}
+        />
         <label className="bl-pane__field">
           <span className="bl-pane__label">Grouping column</span>
           <Dropdown
             aria-label="Grouping column"
-            selectedOptions={[props.value.groupsColumn || noGroupingValue]}
+            selectedOptions={[activeGrouping.column || noGroupingValue]}
             value={selectedGroupingOption?.label || 'No grouping'}
             onOptionSelect={(_event, data) =>
               updateGroupColumn(data.optionValue === noGroupingValue ? '' : data.optionValue || '')
@@ -340,41 +409,50 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
             ))}
           </Dropdown>
         </label>
-        {props.value.groupsColumn ? (
+        {activeGrouping.column ? (
           <>
             <Switch
-              checked={props.value.groupsCollapsible}
+              checked={activeGrouping.collapsible}
               className="bl-pane__switch"
               label="Allow groups to collapse"
-              onChange={(_event, data) => patchValue({ groupsCollapsible: data.checked })}
+              onChange={(_event, data) => patchActiveGrouping({ ...activeGrouping, collapsible: data.checked })}
             />
             <Switch
-              checked={props.value.groupIcons.showIcons}
+              checked={activeGrouping.icons.showIcons}
               className="bl-pane__switch"
               label="Show group icons"
               onChange={(_event, data) =>
-                patchValue({ groupIcons: { ...props.value.groupIcons, showIcons: data.checked } })
+                patchActiveGrouping({
+                  ...activeGrouping,
+                  icons: { ...activeGrouping.icons, showIcons: data.checked }
+                })
               }
             />
-            {props.value.groupIcons.showIcons ? (
+            {activeGrouping.icons.showIcons ? (
               <GroupIconColorField
                 label="Default icon color"
-                value={props.value.groupIcons.defaultColor}
+                value={activeGrouping.icons.defaultColor}
                 onChange={(defaultColor) =>
-                  patchValue({ groupIcons: { ...props.value.groupIcons, defaultColor } })
+                  patchActiveGrouping({
+                    ...activeGrouping,
+                    icons: { ...activeGrouping.icons, defaultColor }
+                  })
                 }
               />
             ) : null}
-            {props.value.groupIcons.overrides.length ? (
+            {activeGrouping.icons.overrides.length ? (
               <div className="bl-pane__setting-row">
-                <span>{`${props.value.groupIcons.overrides.length} icon override${
-                  props.value.groupIcons.overrides.length === 1 ? '' : 's'
+                <span>{`${activeGrouping.icons.overrides.length} icon override${
+                  activeGrouping.icons.overrides.length === 1 ? '' : 's'
                 }`}</span>
                 <Button
                   appearance="subtle"
                   className="bl-pane__text-button"
                   size="small"
-                  onClick={() => patchValue({ groupIcons: { ...props.value.groupIcons, overrides: [] } })}
+                  onClick={() => patchActiveGrouping({
+                    ...activeGrouping,
+                    icons: { ...activeGrouping.icons, overrides: [] }
+                  })}
                 >
                   Reset all
                 </Button>
@@ -389,11 +467,20 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
         </PropertyPaneSection>
 
         <ItemPropertyBuilder
+          context={(
+            <TabSettingInheritance
+              inherited={Boolean(activeConfiguration?.itemLayoutInherited)}
+              inheritedFromLabel={getTabLabel(props.value.tabs, activeConfiguration?.inheritedFromTabId)}
+              onReset={activeConfiguration?.itemLayoutInherited
+                ? undefined
+                : () => patchTabsWithDerivedMetadata(updateActiveTab({ itemLayoutOverride: undefined }))}
+            />
+          )}
           fields={fields}
           value={{
-            itemProperties: props.value.itemProperties,
-            rows: props.value.itemLayoutRows,
-            links: props.value.itemElementLinks
+            itemProperties: activeItemLayout.itemProperties,
+            rows: activeItemLayout.rows,
+            links: activeItemLayout.links
           }}
           onChange={updateItemLayout}
         />
@@ -479,6 +566,37 @@ interface IGroupingColumnOption {
 
 const noGroupingValue = '__no_grouping__';
 
+interface ITabSettingInheritanceProps {
+  inherited: boolean;
+  inheritedFromLabel?: string;
+  onReset?: () => void;
+}
+
+const TabSettingInheritance: React.FunctionComponent<ITabSettingInheritanceProps> = ({
+  inherited,
+  inheritedFromLabel,
+  onReset
+}) => (
+  <div className="bl-pane__inheritance">
+    <span>
+      {inherited
+        ? inheritedFromLabel
+          ? `Inherited from ${inheritedFromLabel}. Change a setting to override it for this tab.`
+          : 'Using the legacy web part settings. Change a setting to override it for this tab.'
+        : 'Customized for this tab.'}
+    </span>
+    {onReset ? (
+      <Button appearance="subtle" className="bl-pane__text-button" size="small" onClick={onReset}>
+        Use previous
+      </Button>
+    ) : null}
+  </div>
+);
+
+function getTabLabel(tabs: readonly IBetterListTabConfig[], tabId: string | undefined): string | undefined {
+  return tabs.find((tab) => tab.id === tabId)?.label;
+}
+
 function createGroupingColumnOptions(
   fields: readonly ISharePointFieldOption[]
 ): readonly IGroupingColumnOption[] {
@@ -525,6 +643,7 @@ const propertyPaneCss = `
 .bl-pane__empty { background: #f5f5f5; color: #616161; font-size: 12px; padding: 10px; }
 .bl-pane__switch { margin-top: 8px; }
 .bl-pane__setting-row { align-items: center; color: #616161; display: flex; font-size: 12px; justify-content: space-between; gap: 8px; margin-top: 10px; }
+.bl-pane__inheritance { align-items: flex-start; background: ${tokens.colorNeutralBackground2}; color: ${tokens.colorNeutralForeground3}; display: flex; font-size: 11px; gap: 8px; justify-content: space-between; line-height: 1.35; margin: 0 0 10px; padding: 8px; }
 .bl-pane__text-button { border-color: transparent !important; min-height: 24px !important; padding: 2px 4px !important; }
 .bl-pane__hint { color: #616161; font-size: 11px; line-height: 1.4; margin: 8px 0 0; }
 .bl-pane__template-editor { border-top: 1px solid #e0e0e0; margin-top: 16px; padding-top: 16px; }

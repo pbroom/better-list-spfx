@@ -92,6 +92,41 @@ describe('BetterListView', () => {
     expect(html).not.toContain('better-list-row-1');
   });
 
+  it('uses the selected tab\'s grouping and item layout configuration', () => {
+    const tabs: readonly IBetterListTab[] = [
+      {
+        key: 'featured',
+        label: 'Featured',
+        grouped: false,
+        itemPropertyFields: ['Title'],
+        itemLayoutRows: [['Title']],
+        items: [item]
+      },
+      {
+        key: 'details',
+        label: 'Details',
+        grouped: true,
+        itemPropertyFields: ['Description'],
+        itemLayoutRows: [['Description']],
+        items: [item]
+      }
+    ];
+
+    const featuredHtml = renderToStaticMarkup(
+      <BetterListView activeTabKey="featured" items={[item]} tabs={tabs} />
+    );
+    const detailsHtml = renderToStaticMarkup(
+      <BetterListView activeTabKey="details" items={[item]} tabs={tabs} />
+    );
+
+    expect(featuredHtml).toContain('Service title');
+    expect(featuredHtml).not.toContain('Service description');
+    expect(featuredHtml).not.toContain('better-list__group-heading');
+    expect(detailsHtml).not.toContain('Service title');
+    expect(detailsHtml).toContain('Service description');
+    expect(detailsHtml).toContain('better-list__group-heading');
+  });
+
   it('links Title and other item elements to their independently configured hyperlinks', () => {
     const linkedItem: IBetterListItem = {
       ...item,

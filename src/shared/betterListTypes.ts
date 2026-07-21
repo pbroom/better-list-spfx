@@ -1,6 +1,13 @@
 /* eslint-disable @rushstack/no-new-null */
 
-import type { BetterListGroupIconOverride } from './groupIconConfiguration';
+import type {
+  BetterListGroupIconOverride,
+  IBetterListGroupIconsConfiguration
+} from './groupIconConfiguration';
+import type {
+  BetterListItemElementLinks,
+  BetterListItemLayoutRows
+} from './itemPropertyConfiguration';
 
 export type BetterListFieldSlot =
   | 'title'
@@ -180,6 +187,20 @@ export interface IBetterListLayoutOverride {
   showSearch?: boolean;
 }
 
+export interface IBetterListTabGroupingOverride {
+  /** Explicit none is distinct from an omitted override, which inherits the previous tab. */
+  mode: 'none' | 'custom';
+  column?: string;
+  collapsible?: boolean;
+  icons?: IBetterListGroupIconsConfiguration;
+}
+
+export interface IBetterListTabItemLayoutOverride {
+  itemProperties: readonly string[];
+  rows: BetterListItemLayoutRows;
+  links: BetterListItemElementLinks;
+}
+
 export interface IBetterListTabConfig {
   id: string;
   label: string;
@@ -193,6 +214,10 @@ export interface IBetterListTabConfig {
   sort?: readonly IBetterListSort[];
   icon?: IBetterListIconOverride;
   layout?: IBetterListLayoutOverride;
+  /** Omit to inherit the effective grouping configuration from the preceding tab. */
+  groupingOverride?: IBetterListTabGroupingOverride;
+  /** Omit to inherit the effective item layout configuration from the preceding tab. */
+  itemLayoutOverride?: IBetterListTabItemLayoutOverride;
 }
 
 export interface IBetterListListReference {

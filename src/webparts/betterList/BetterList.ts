@@ -17,6 +17,7 @@ import {
   BetterListItemElementLinks,
   betterListStylePresetVersion,
   createDefaultTabs,
+  createBetterListGroupingOverride,
   defaultBetterListScss,
   defaultBetterListHtmlTemplate,
   formatItemPropertyValue,
@@ -25,6 +26,7 @@ import {
   IBetterListFieldMappings,
   IBetterListFieldInfo,
   IBetterListGroupResult,
+  IBetterListEffectiveTabConfiguration,
   IBetterListItem as ICoreBetterListItem,
   IBetterListTabConfig,
   parseItemLayoutConfiguration,
@@ -32,6 +34,7 @@ import {
   parseItemPropertyFields,
   parseTabConfiguration,
   processItems,
+  resolveBetterListTabConfigurations,
   scopeBetterListStyles,
   serializeItemLayoutConfiguration,
   serializeBetterListGroupIconsConfiguration,
@@ -91,16 +94,14 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
   private _isDarkTheme = false;
 
   public render(): void {
-    const tabs = this._createEffectiveTabs();
+    const tabs = this._createEffectiveTabConfigurations();
     const descriptionFieldPath = this._readMappings().description?.internalName;
     const itemLayout = parseItemLayoutConfiguration(
       this.properties.itemLayoutJson,
       parseItemPropertyFields(this.properties.itemPropertiesJson)
     );
     const groupIcons = parseBetterListGroupIconsConfiguration(this.properties.groupIconsJson);
-    const presentationTabs = tabs.map((tab) =>
-      this._createPresentationTab(tab, itemLayout.itemProperties, itemLayout.links, descriptionFieldPath)
-    );
+    const presentationTabs = tabs.map((tab) => this._createPresentationTab(tab, descriptionFieldPath));
     const firstTab = presentationTabs[0];
     if (!this._activeTabKey || !presentationTabs.some((tab) => tab.key === this._activeTabKey)) {
       this._activeTabKey = firstTab?.key || '';
@@ -125,6 +126,10 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       listTitle: this.properties.sourceListTitle,
       onTabChange: (tabKey: string): void => {
         this._activeTabKey = tabKey;
+        if (this.displayMode === DisplayMode.Edit) {
+          this.context.propertyPane.refresh();
+          this.render();
+        }
       },
       onRetry: (): void => {
         this._reloadItems().catch(() => undefined);
@@ -255,10 +260,16 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
         onRender: (domElement, _context, changeCallback): void => {
           ReactDom.render(
             React.createElement(BetterListPropertyPane, {
+              activeTabId: this._activeTabKey,
               value: this._createAuthoringState(),
               pickerDataSource: this._pickerDataSource,
               imageAssetProvider: this._imageAssetProvider,
-              onChange: (value): void => this._applyAuthoringState(value, changeCallback)
+              onChange: (value): void => this._applyAuthoringState(value, changeCallback),
+              onActiveTabChange: (tabId: string): void => {
+                this._activeTabKey = tabId;
+                this.render();
+                this.context.propertyPane.refresh();
+              }
             }),
             domElement
           );
@@ -343,9 +354,25 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
   }
 
   private _updateGroupIconOverride(groupKey: string, override: BetterListGroupIconOverride | undefined): void {
-    const current = parseBetterListGroupIconsConfiguration(this.properties.groupIconsJson);
-    const next = updateBetterListGroupIconOverride(current, this.properties.groupsColumn, groupKey, override);
-    this.properties.groupIconsJson = serializeBetterListGroupIconsConfiguration(next);
+    const configurations = this._createEffectiveTabConfigurations();
+    const active = configurations.find((entry) => entry.tab.id === this._activeTabKey) ?? configurations[0];
+    if (!active || !active.grouping.column) {
+      return;
+    }
+    const icons = updateBetterListGroupIconOverride(
+      active.grouping.icons,
+      active.grouping.column,
+      groupKey,
+      override
+    );
+    this.properties.tabsJson = serializeTabConfiguration(
+      this._readTabs().map((tab) => tab.id === active.tab.id
+        ? {
+            ...tab,
+            groupingOverride: createBetterListGroupingOverride({ ...active.grouping, icons })
+          }
+        : tab)
+    );
     this.context.propertyPane.refresh();
     this.render();
   }
@@ -378,14 +405,33 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
   }
 
   private _createPresentationTab(
-    tab: IBetterListTabConfig,
-    itemProperties: readonly string[],
-    itemElementLinks: BetterListItemElementLinks,
+    configuration: IBetterListEffectiveTabConfiguration,
     descriptionFieldPath: string | undefined
   ): IBetterListTab {
-    const processed = processItems(this._items, tab);
-    const groups: readonly IBetterListGroupResult[] = tab.group
-      ? groupItems(processed, tab.group)
+    const group = configuration.grouping.column
+      ? { field: 'group' as const, direction: 'ascending' as const, ungroupedLabel: 'Other' }
+      : undefined;
+    const tab = {
+      ...configuration.tab,
+      group,
+      layout: {
+        ...configuration.tab.layout,
+        columns: configuration.tab.layout?.columns ?? (2 as const),
+        collapsible: group ? configuration.grouping.collapsible : false
+      }
+    };
+    const sourceItems = configuration.grouping.column
+      ? this._items.map((item) => ({
+          ...item,
+          values: {
+            ...item.values,
+            group: formatItemPropertyValue(item.source, configuration.grouping.column)
+          }
+        }))
+      : this._items;
+    const processed = processItems(sourceItems, tab);
+    const groups: readonly IBetterListGroupResult[] = group
+      ? groupItems(processed, group)
       : [{ key: 'all', label: this.properties.sourceListTitle || 'Items', items: processed }];
     const items: IBetterListItem[] = [];
     groups.forEach((group, groupIndex) => {
@@ -395,8 +441,8 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
           group,
           groupIndex,
           tab,
-          itemProperties,
-          itemElementLinks,
+          configuration.itemLayout.itemProperties,
+          configuration.itemLayout.links,
           descriptionFieldPath
         ));
       });
@@ -411,7 +457,11 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       showItemCount: tab.showItemCount,
       grouped: Boolean(tab.group),
       items,
-      layout: tab.layout
+      layout: tab.layout,
+      itemPropertyFields: configuration.itemLayout.itemProperties,
+      itemLayoutRows: configuration.itemLayout.rows,
+      groupIconScope: configuration.grouping.column,
+      groupIcons: configuration.grouping.icons
     };
   }
 
@@ -479,20 +529,19 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     }
   }
 
-  private _createEffectiveTabs(): readonly IBetterListTabConfig[] {
-    const configuredTabs = this._readTabs();
-    const group = this.properties.groupsColumn
-      ? { field: 'group' as const, direction: 'ascending' as const, ungroupedLabel: 'Other' }
-      : undefined;
-    return configuredTabs.map((tab) => ({
-      ...tab,
-      group,
-      layout: {
-        ...tab.layout,
-        columns: tab.layout?.columns ?? (2 as const),
-        collapsible: group ? this.properties.groupsCollapsible : false
-      }
-    }));
+  private _createEffectiveTabConfigurations(): readonly IBetterListEffectiveTabConfiguration[] {
+    const itemLayout = parseItemLayoutConfiguration(
+      this.properties.itemLayoutJson,
+      parseItemPropertyFields(this.properties.itemPropertiesJson)
+    );
+    return resolveBetterListTabConfigurations(this._readTabs(), {
+      grouping: {
+        column: this.properties.groupsColumn,
+        collapsible: this.properties.groupsCollapsible,
+        icons: parseBetterListGroupIconsConfiguration(this.properties.groupIconsJson)
+      },
+      itemLayout
+    });
   }
 
   private _hasCompleteConfiguration(): boolean {

@@ -1,6 +1,7 @@
 export * from './betterListTypes';
 export * from './betterListStyles';
 export * from './betterListTemplate';
+export * from './effectiveTabConfiguration';
 export * from './fieldMappingAuthoring';
 export * from './filterQuery';
 export * from './groupIconConfiguration';

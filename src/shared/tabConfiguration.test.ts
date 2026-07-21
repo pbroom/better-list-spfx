@@ -7,6 +7,54 @@ import {
 } from './tabConfiguration';
 
 describe('Better List tab configuration', () => {
+  it('parses and serializes tab-scoped grouping and item-layout overrides', () => {
+    const serialized = JSON.stringify([
+      {
+        id: 'custom',
+        label: 'Custom',
+        filter: { kind: 'all' },
+        groupingOverride: {
+          mode: 'custom',
+          column: 'Organization.Title',
+          collapsible: false,
+          icons: { version: 1, showIcons: false, overrides: [] }
+        },
+        itemLayoutOverride: {
+          itemProperties: ['Title', 'Description'],
+          rows: [['Description'], ['Title']],
+          links: { Title: 'URL' }
+        }
+      },
+      {
+        id: 'ungrouped',
+        label: 'Ungrouped',
+        filter: { kind: 'all' },
+        groupingOverride: { mode: 'none' }
+      }
+    ]);
+
+    const tabs = parseTabConfiguration(serialized);
+
+    expect(tabs[0].groupingOverride).toMatchObject({
+      mode: 'custom',
+      column: 'Organization.Title',
+      collapsible: false
+    });
+    expect(tabs[0].itemLayoutOverride).toEqual({
+      itemProperties: ['Title', 'Description'],
+      rows: [['Description'], ['Title']],
+      links: { Title: 'URL' }
+    });
+    expect(tabs[1].groupingOverride).toEqual({ mode: 'none', icons: undefined });
+    expect(parseTabConfiguration(serializeTabConfiguration(tabs))).toEqual(tabs);
+  });
+
+  it('leaves missing tab-scoped settings undefined for legacy inheritance', () => {
+    const [tab] = parseTabConfiguration('[{"id":"all","label":"All","filter":{"kind":"all"}}]');
+    expect(tab.groupingOverride).toBeUndefined();
+    expect(tab.itemLayoutOverride).toBeUndefined();
+  });
+
   it('round trips an unlimited tab array', () => {
     const tabs = createDefaultTabs().concat([
       {

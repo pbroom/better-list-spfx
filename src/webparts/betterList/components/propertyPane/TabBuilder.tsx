@@ -59,14 +59,24 @@ export interface IBetterListTabFilterField {
 export interface ITabBuilderProps {
   fields: readonly IBetterListTabFilterField[];
   imageAssetProvider?: ISharePointImageAssetProvider;
+  selectedTabId?: string;
   showAddAction?: boolean;
   tabs: readonly IBetterListTabConfig[];
   onChange: (tabs: readonly IBetterListTabConfig[]) => void;
+  onSelectedTabChange?: (tabId: string) => void;
 }
 
 const reorderInstructions = 'Drag to reorder. Press Alt+Arrow Up or Alt+Arrow Down to move.';
 
-export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({ fields, imageAssetProvider, showAddAction = true, tabs, onChange }) => {
+export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({
+  fields,
+  imageAssetProvider,
+  selectedTabId,
+  showAddAction = true,
+  tabs,
+  onChange,
+  onSelectedTabChange
+}) => {
   const [closedTabIds, setClosedTabIds] = React.useState<ReadonlySet<string>>(() => new Set<string>());
   const [activeTabId, setActiveTabId] = React.useState<string>();
   const [iconPickerTabId, setIconPickerTabId] = React.useState<string>();
@@ -75,19 +85,46 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({ fields, 
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
   );
 
+  React.useEffect(() => {
+    if (!selectedTabId) {
+      return;
+    }
+    setClosedTabIds((current) => {
+      if (!current.has(selectedTabId)) {
+        return current;
+      }
+      const next = new Set(current);
+      next.delete(selectedTabId);
+      return next;
+    });
+  }, [selectedTabId]);
+
   const patchTab = (index: number, patch: Partial<IBetterListTabConfig>): void => {
     onChange(tabs.map((tab, candidateIndex) => (candidateIndex === index ? { ...tab, ...patch } : tab)));
   };
 
   const addTab = (): void => {
-    onChange(appendNewTab(tabs));
+    const nextTabs = appendNewTab(tabs);
+    onChange(nextTabs);
+    const addedTab = nextTabs[nextTabs.length - 1];
+    if (addedTab) {
+      onSelectedTabChange?.(addedTab.id);
+    }
   };
 
   const removeTab = (index: number): void => {
     if (tabs.length <= 1) {
       return;
     }
-    onChange(tabs.filter((_tab, candidateIndex) => candidateIndex !== index));
+    const removedTab = tabs[index];
+    const nextTabs = tabs.filter((_tab, candidateIndex) => candidateIndex !== index);
+    onChange(nextTabs);
+    if (removedTab?.id === selectedTabId) {
+      const nextSelectedTab = nextTabs[Math.min(index, nextTabs.length - 1)];
+      if (nextSelectedTab) {
+        onSelectedTabChange?.(nextSelectedTab.id);
+      }
+    }
   };
 
   const beginDrag = (event: DragStartEvent): void => {
@@ -143,6 +180,10 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({ fields, 
             onToggle={(_event, data) => {
               const nextOpenTabIds = new Set(data.openItems);
               setClosedTabIds(new Set(tabs.filter((tab) => !nextOpenTabIds.has(tab.id)).map((tab) => tab.id)));
+              const newlyOpened = data.openItems.find((tabId) => closedTabIds.has(tabId));
+              if (newlyOpened) {
+                onSelectedTabChange?.(newlyOpened);
+              }
             }}
           >
             {tabs.map((tab, index) => {
@@ -157,8 +198,10 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({ fields, 
                   index={index}
                   key={tab.id}
                   panelId={panelId}
+                  selected={tab.id === selectedTabId}
                   tab={tab}
                   tabsLength={tabs.length}
+                  onSelect={() => onSelectedTabChange?.(tab.id)}
                   onRemove={() => removeTab(index)}
                   onMove={(offset) => {
                     const nextIndex = index + offset;
@@ -303,8 +346,10 @@ interface ISortableTabCardProps {
   headerId: string;
   index: number;
   panelId: string;
+  selected: boolean;
   tab: IBetterListTabConfig;
   tabsLength: number;
+  onSelect: () => void;
   onRemove: () => void;
   onMove: (offset: -1 | 1) => void;
 }
@@ -314,8 +359,10 @@ const SortableTabCard: React.FunctionComponent<ISortableTabCardProps> = ({
   headerId,
   index,
   panelId,
+  selected,
   tab,
   tabsLength,
+  onSelect,
   onRemove,
   onMove
 }) => {
@@ -336,7 +383,10 @@ const SortableTabCard: React.FunctionComponent<ISortableTabCardProps> = ({
   return (
     <AccordionItem
       className={`bl-tabs-builder__card${isDragging ? ' is-dragging' : ''}`}
+      data-tab-selected={selected || undefined}
       data-tab-sortable={tab.id}
+      onFocusCapture={onSelect}
+      onPointerDown={onSelect}
       ref={setNodeRef}
       style={style}
       value={tab.id}
@@ -604,6 +654,7 @@ const tabBuilderCss = `
 .bl-tabs-builder__card-heading { align-items: center; display: grid; grid-template-columns: minmax(0, 1fr) auto; }
 .bl-tabs-builder__heading { color: #616161; margin-bottom: 8px; }
 .bl-tabs-builder__card { background: transparent; border: 0; border-radius: 0; margin: 0 0 4px; padding: 0; }
+.bl-tabs-builder__card[data-tab-selected="true"] > .bl-tabs-builder__card-heading { background: ${tokens.colorNeutralBackground1Hover}; }
 .bl-tabs-builder__card.is-dragging { opacity: .35; }
 .bl-tabs-builder__card-heading { border-bottom: 0; min-height: 38px; }
 .bl-tabs-builder__card-heading:hover > .bl-tabs-builder__actions [data-tab-remove], .bl-tabs-builder__card-heading:focus-within > .bl-tabs-builder__actions [data-tab-remove] { opacity: 1; pointer-events: auto; }
@@ -649,8 +700,7 @@ export function appendNewTab(tabs: readonly IBetterListTabConfig[]): readonly IB
       id: createUniqueTabId(tabs),
       label: `Tab ${tabs.length + 1}`,
       filter: { kind: 'all' },
-      icon: { mode: 'none' },
-      layout: tabs[0]?.layout ? { ...tabs[0].layout } : undefined
+      icon: { mode: 'none' }
     }
   ];
 }
