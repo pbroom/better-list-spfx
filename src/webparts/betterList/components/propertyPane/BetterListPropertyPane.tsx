@@ -26,7 +26,8 @@ import {
   IBetterListTabConfig,
   validateBetterListTemplateStructure
 } from '../../../../shared';
-import { ISourceEditorTarget, SourceEditorField } from '../../../../vendor/source-editor/SourceEditorField';
+import { ISourceEditorTarget } from '../../../../vendor/source-editor/SourceEditorField';
+import { SourceWorkspaceField } from '../../../../vendor/source-editor/SourceWorkspaceField';
 import { GroupIconColorField } from '../GroupIconColorField';
 import { ItemPropertyBuilder } from './ItemPropertyBuilder';
 import { PropertyPaneSection } from './PropertyPaneSection';
@@ -395,32 +396,36 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
         />
 
         <PropertyPaneSection defaultExpanded label="Advanced">
-        <SourceEditorField
-          description="Styles are scoped to this web part. Insert a supported target, then override only the declarations you need."
-          label="Custom CSS/SCSS"
-          language="scss"
-          targets={cssTargets}
-          value={props.value.customCss}
-          onChange={(customCss) => patchValue({ customCss })}
-        />
-        <div className="bl-pane__template-editor">
-          <SourceEditorField
-            commitMode="valid"
-            description="Customize structural wrappers around trusted tabs, search, groups, items, links, and properties. Invalid drafts stay local until corrected."
-            height={360}
-            label="HTML template"
-            language="html"
-            maxBytes={betterListTemplateMaxBytes}
-            snippets={[
-              { label: 'Default template', snippet: defaultBetterListHtmlTemplate },
-              { label: 'Item title token', snippet: '{{item.title}}' },
-              { label: 'Result count token', snippet: '{{results.count}}' }
+          <SourceWorkspaceField
+            description="Edit scoped styles and the trusted HTML template in one workspace. Invalid template drafts stay local until corrected."
+            label="Styles & template"
+            documents={[
+              {
+                id: 'scss',
+                label: 'CSS/SCSS',
+                language: 'scss',
+                targets: cssTargets,
+                value: props.value.customCss,
+                onChange: (customCss) => patchValue({ customCss })
+              },
+              {
+                commitMode: 'valid',
+                height: 360,
+                id: 'html',
+                label: 'HTML template',
+                language: 'html',
+                maxBytes: betterListTemplateMaxBytes,
+                snippets: [
+                  { label: 'Default template', snippet: defaultBetterListHtmlTemplate },
+                  { label: 'Item title token', snippet: '{{item.title}}' },
+                  { label: 'Result count token', snippet: '{{results.count}}' }
+                ],
+                validate: validateBetterListTemplateStructure,
+                value: props.value.htmlTemplate,
+                onChange: (htmlTemplate) => patchValue({ htmlTemplate })
+              }
             ]}
-            validate={validateBetterListTemplateStructure}
-            value={props.value.htmlTemplate}
-            onChange={(htmlTemplate) => patchValue({ htmlTemplate })}
           />
-        </div>
         </PropertyPaneSection>
       </div>
     </FluentProvider>

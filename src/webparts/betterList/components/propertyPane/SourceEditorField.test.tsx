@@ -7,6 +7,7 @@ import {
   SourceEditorField,
   SourceEditorMonacoAdapter
 } from '../../../../vendor/source-editor/SourceEditorField';
+import { SourceWorkspaceField } from '../../../../vendor/source-editor/SourceWorkspaceField';
 import { SourceEditorDiagnostic } from '../../../../vendor/source-editor/sourceEditorCore';
 
 describe('SourceEditorField', () => {
@@ -98,6 +99,52 @@ describe('SourceEditorField', () => {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', metaKey: true, bubbles: true }));
     });
     expect(getTextareas(document.body)).toHaveLength(1);
+  });
+
+  it('opens one floating workspace and switches between CSS and HTML documents', async () => {
+    await act(async () => {
+      ReactDom.render(
+        <SourceWorkspaceField
+          label="Styles & template"
+          documents={[
+            {
+              config: { monacoAdapter: unavailableMonaco },
+              id: 'scss',
+              label: 'CSS/SCSS',
+              language: 'scss',
+              value: '.better-list {}',
+              onChange: jest.fn()
+            },
+            {
+              config: { monacoAdapter: unavailableMonaco },
+              id: 'html',
+              label: 'HTML template',
+              language: 'html',
+              value: '<section></section>',
+              onChange: jest.fn()
+            }
+          ]}
+        />,
+        container
+      );
+      await settleEditorFallback();
+    });
+
+    const popOut = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Pop out');
+    act(() => Simulate.click(popOut as HTMLButtonElement));
+    expect(document.body.querySelectorAll('[role="dialog"][aria-label="Styles & template source workspace"]')).toHaveLength(1);
+
+    const htmlTab = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find(
+      (button) => button.textContent === 'HTML template'
+    );
+    act(() => Simulate.click(htmlTab as HTMLButtonElement));
+    expect(htmlTab?.getAttribute('aria-selected')).toBe('true');
+    expect(getTextareas(document.body).some((textarea) => textarea.value === '<section></section>')).toBe(true);
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(document.body.querySelectorAll('[role="dialog"]')).toHaveLength(0);
   });
 });
 
