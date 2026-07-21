@@ -43,6 +43,8 @@ const ICON_OPTIONS: readonly { value: BetterListTabIcon; label: string }[] = [
 ];
 
 export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({ fields, showAddAction = true, tabs, onChange }) => {
+  const [collapsedTabIds, setCollapsedTabIds] = React.useState<ReadonlySet<string>>(() => new Set<string>());
+
   const patchTab = (index: number, patch: Partial<IBetterListTabConfig>): void => {
     onChange(tabs.map((tab, candidateIndex) => (candidateIndex === index ? { ...tab, ...patch } : tab)));
   };
@@ -68,6 +70,18 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({ fields, 
     onChange(next);
   };
 
+  const toggleTab = (tabId: string): void => {
+    setCollapsedTabIds((current) => {
+      const next = new Set(current);
+      if (next.has(tabId)) {
+        next.delete(tabId);
+      } else {
+        next.add(tabId);
+      }
+      return next;
+    });
+  };
+
   return (
     <div className="bl-tabs-builder">
       <style>{tabBuilderCss}</style>
@@ -81,10 +95,24 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({ fields, 
       {tabs.map((tab, index) => {
         const queryFields = fields.map(toQueryField);
         const expression = filterExpression(tab.filter, fields);
+        const collapsed = collapsedTabIds.has(tab.id);
+        const bodyId = `tab-card-${safeId(tab.id)}-body`;
         return (
           <section className="bl-tabs-builder__card" key={tab.id}>
             <div className="bl-tabs-builder__card-heading">
-              <strong>Tab {index + 1}</strong>
+              <button
+                aria-controls={bodyId}
+                aria-expanded={!collapsed}
+                aria-label={`${collapsed ? 'Expand' : 'Collapse'} Tab ${index + 1}`}
+                className="bl-tabs-builder__card-toggle"
+                type="button"
+                onClick={() => toggleTab(tab.id)}
+              >
+                <span aria-hidden="true" className="bl-tabs-builder__chevron">
+                  {collapsed ? '›' : '⌄'}
+                </span>
+                <strong>Tab {index + 1}</strong>
+              </button>
               <div className="bl-tabs-builder__actions">
                 <button aria-label={`Move ${tab.label} up`} disabled={index === 0} type="button" onClick={() => moveTab(index, -1)}>
                   ↑
@@ -103,71 +131,73 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({ fields, 
               </div>
             </div>
 
-            <label className="bl-tabs-builder__field">
-              <span>Name</span>
-              <input
-                required
-                value={tab.label}
-                onChange={(event) => {
-                  if (event.currentTarget.value.trim()) {
-                    patchTab(index, { label: event.currentTarget.value });
-                  }
-                }}
-              />
-            </label>
-
-            <div className="bl-tabs-builder__grid">
+            <div className="bl-tabs-builder__card-body" hidden={collapsed} id={bodyId}>
               <label className="bl-tabs-builder__field">
-                <span>Icon</span>
-                <select
-                  value={tab.tabIcon || ''}
-                  onChange={(event) => patchTab(index, { tabIcon: (event.currentTarget.value || undefined) as BetterListTabIcon | undefined })}
-                >
-                  <option value="">No icon</option>
-                  {ICON_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="bl-tabs-builder__field">
-                <span>Maximum items</span>
+                <span>Name</span>
                 <input
-                  min={1}
-                  placeholder="No limit"
-                  type="number"
-                  value={tab.maxItems ?? ''}
+                  required
+                  value={tab.label}
                   onChange={(event) => {
-                    const value = event.currentTarget.valueAsNumber;
-                    patchTab(index, { maxItems: Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined });
+                    if (event.currentTarget.value.trim()) {
+                      patchTab(index, { label: event.currentTarget.value });
+                    }
                   }}
                 />
               </label>
-            </div>
 
-            <label className="bl-tabs-builder__check">
-              <input
-                checked={tab.showItemCount === true}
-                type="checkbox"
-                onChange={(event) => patchTab(index, { showItemCount: event.currentTarget.checked })}
+              <div className="bl-tabs-builder__grid">
+                <label className="bl-tabs-builder__field">
+                  <span>Icon</span>
+                  <select
+                    value={tab.tabIcon || ''}
+                    onChange={(event) => patchTab(index, { tabIcon: (event.currentTarget.value || undefined) as BetterListTabIcon | undefined })}
+                  >
+                    <option value="">No icon</option>
+                    {ICON_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="bl-tabs-builder__field">
+                  <span>Maximum items</span>
+                  <input
+                    min={1}
+                    placeholder="No limit"
+                    type="number"
+                    value={tab.maxItems ?? ''}
+                    onChange={(event) => {
+                      const value = event.currentTarget.valueAsNumber;
+                      patchTab(index, { maxItems: Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined });
+                    }}
+                  />
+                </label>
+              </div>
+
+              <label className="bl-tabs-builder__check">
+                <input
+                  checked={tab.showItemCount === true}
+                  type="checkbox"
+                  onChange={(event) => patchTab(index, { showItemCount: event.currentTarget.checked })}
+                />
+                <span>Show item count</span>
+              </label>
+
+              <FilterQueryEditor
+                expression={expression}
+                fields={queryFields}
+                id={`tab-filter-${safeId(tab.id)}`}
+                onChange={(nextExpression) => {
+                  const trimmed = nextExpression.trim();
+                  patchTab(index, {
+                    filter: trimmed
+                      ? { kind: 'query', expression: nextExpression, fields: collectBetterListQueryFields(nextExpression, queryFields) }
+                      : { kind: 'all' }
+                  });
+                }}
               />
-              <span>Show item count</span>
-            </label>
-
-            <FilterQueryEditor
-              expression={expression}
-              fields={queryFields}
-              id={`tab-filter-${safeId(tab.id)}`}
-              onChange={(nextExpression) => {
-                const trimmed = nextExpression.trim();
-                patchTab(index, {
-                  filter: trimmed
-                    ? { kind: 'query', expression: nextExpression, fields: collectBetterListQueryFields(nextExpression, queryFields) }
-                    : { kind: 'all' }
-                });
-              }}
-            />
+            </div>
           </section>
         );
       })}
@@ -198,6 +228,13 @@ const FilterQueryEditor: React.FunctionComponent<{
   const listboxId = `${id}-suggestions`;
   const helpId = `${id}-help`;
   const showSuggestions = open && suggestions.length > 0 && fields.length > 0;
+  const helpText = fields.length === 0
+    ? 'Map a list column before adding a filter.'
+    : diagnostic
+      ? diagnostic.message
+      : draft.trim()
+        ? 'Use AND, OR, NOT, and parentheses to combine conditions.'
+        : '';
 
   const updateCursor = (input: HTMLInputElement): void => {
     setCursor(input.selectionStart ?? input.value.length);
@@ -226,20 +263,20 @@ const FilterQueryEditor: React.FunctionComponent<{
 
   return (
     <fieldset className="bl-tabs-builder__filter">
-      <legend>Filter query</legend>
+      <legend>Filter items</legend>
       <div className="bl-query-editor">
         <label className="bl-tabs-builder__field" htmlFor={id}>
-          <span className="bl-query-editor__label">Items to show</span>
+          <span className="bl-query-editor__sr-only">Filter items</span>
           <input
             aria-activedescendant={showSuggestions ? `${listboxId}-${activeIndex}` : undefined}
             aria-autocomplete="list"
             aria-controls={listboxId}
-            aria-describedby={helpId}
+            aria-describedby={helpText ? helpId : undefined}
             aria-expanded={showSuggestions}
             aria-invalid={Boolean(diagnostic)}
             autoComplete="off"
             id={id}
-            placeholder='All items — try Featured = true'
+            placeholder="All items"
             ref={inputRef}
             role="combobox"
             spellCheck={false}
@@ -306,20 +343,16 @@ const FilterQueryEditor: React.FunctionComponent<{
           </ul>
         ) : null}
       </div>
-      <div
-        aria-atomic="true"
-        aria-live="polite"
-        className={diagnostic ? 'bl-query-editor__help is-error' : 'bl-query-editor__help'}
-        id={helpId}
-      >
-        {fields.length === 0
-          ? 'Map a list column before adding a filter.'
-          : diagnostic
-            ? diagnostic.message
-            : draft.trim()
-              ? 'Use AND, OR, NOT, and parentheses to combine conditions.'
-              : 'Leave empty for all items. Type a field name to build a filter.'}
-      </div>
+      {helpText ? (
+        <div
+          aria-atomic="true"
+          aria-live="polite"
+          className={diagnostic ? 'bl-query-editor__help is-error' : 'bl-query-editor__help'}
+          id={helpId}
+        >
+          {helpText}
+        </div>
+      ) : null}
       <span aria-live="polite" className="bl-query-editor__sr-only">
         {showSuggestions ? `${suggestions.length} suggestions available.` : ''}
       </span>
@@ -376,8 +409,11 @@ const tabBuilderCss = `
 .bl-tabs-builder__heading { justify-content: flex-end; }
 .bl-tabs-builder__card-heading { justify-content: space-between; }
 .bl-tabs-builder__heading { color: #616161; margin-bottom: 8px; }
-.bl-tabs-builder__card { background: #fafafa; border: 1px solid #e0e0e0; border-radius: 6px; margin: 0 0 8px; padding: 10px; }
-.bl-tabs-builder__card-heading { border-bottom: 1px solid #e0e0e0; margin-bottom: 10px; padding-bottom: 7px; }
+.bl-tabs-builder__card { background: transparent; border: 0; border-radius: 0; margin: 0 0 4px; padding: 0; }
+.bl-tabs-builder__card-heading { border-bottom: 1px solid #e0e0e0; min-height: 38px; }
+.bl-tabs-builder__card-body { padding: 8px 0 6px; }
+.bl-tabs-builder__card-toggle { flex: 1; gap: 5px; justify-content: flex-start !important; padding-left: 0 !important; }
+.bl-tabs-builder__chevron { font-size: 18px; line-height: 1; transform: translateY(-1px); width: 12px; }
 .bl-tabs-builder__actions { gap: 2px; }
 .bl-tabs-builder button { align-items: center; background: transparent; border: 1px solid transparent; border-radius: 4px; color: #242424; cursor: pointer; display: inline-flex; justify-content: center; min-height: 28px; padding: 2px 7px; }
 .bl-tabs-builder button:hover:not(:disabled) { background: #f0f0f0; }
