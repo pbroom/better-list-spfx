@@ -84,6 +84,49 @@ describe('BetterListView', () => {
     expect(html).not.toContain('better-list-row-1');
   });
 
+  it('links Title and other item elements to their independently configured hyperlinks', () => {
+    const linkedItem: IBetterListItem = {
+      ...item,
+      href: 'https://contoso.example/title',
+      elements: [
+        {
+          key: 'Description',
+          kind: 'description',
+          value: 'Service description',
+          href: 'https://contoso.example/description'
+        },
+        {
+          key: 'Organization',
+          kind: 'metadata',
+          value: 'Organization',
+          href: 'https://contoso.example/organization'
+        }
+      ]
+    };
+    const tabs: readonly IBetterListTab[] = [
+      {
+        key: 'all',
+        label: 'All items',
+        grouped: false,
+        layout: { showSearch: false },
+        items: [linkedItem]
+      }
+    ];
+
+    const html = renderToStaticMarkup(
+      <BetterListView
+        activeTabKey="all"
+        itemLayoutRows={[["Title"], ["Description", "Organization"]]}
+        items={[linkedItem]}
+        tabs={tabs}
+      />
+    );
+
+    expect(html).toContain('href="https://contoso.example/title"');
+    expect(html).toContain('href="https://contoso.example/description"');
+    expect(html).toContain('href="https://contoso.example/organization"');
+  });
+
   it('renders configured flex rows in authored order, including a moved Title, and keeps empty rows addressable', () => {
     const tabs: readonly IBetterListTab[] = [
       {

@@ -95,6 +95,7 @@ export interface IBetterListItemElement {
   key: string;
   kind: 'description' | 'metadata';
   value: string;
+  href?: string;
 }
 
 export interface IBetterListViewProps {
@@ -378,13 +379,24 @@ function renderItemElements(
         key={`metadata-${run.map((element) => element.key).join('-')}`}
       >
         {run.map((element) => (
-          <span
-            className={mergeClasses(classes.metadataPart, 'better-list__metadata-part')}
-            data-item-element={element.key}
-            key={element.key}
-          >
-            {element.value}
-          </span>
+          element.href ? (
+            <Link
+              className={mergeClasses(classes.metadataPart, 'better-list__metadata-part')}
+              data-item-element={element.key}
+              href={element.href}
+              key={element.key}
+            >
+              {element.value}
+            </Link>
+          ) : (
+            <span
+              className={mergeClasses(classes.metadataPart, 'better-list__metadata-part')}
+              data-item-element={element.key}
+              key={element.key}
+            >
+              {element.value}
+            </span>
+          )
         ))}
       </div>
     );
@@ -397,7 +409,16 @@ function renderItemElements(
     }
     flushMetadata();
     if (showDescriptions) {
-      rendered.push(
+      rendered.push(element.href ? (
+        <Link
+          className={mergeClasses(classes.description, 'better-list__item-description')}
+          data-item-element={element.key}
+          href={element.href}
+          key={element.key}
+        >
+          {element.value}
+        </Link>
+      ) : (
         <Text
           className={mergeClasses(classes.description, 'better-list__item-description')}
           data-item-element={element.key}
@@ -405,7 +426,7 @@ function renderItemElements(
         >
           {element.value}
         </Text>
-      );
+      ));
     }
   });
   flushMetadata();
@@ -437,13 +458,24 @@ function renderItemLayoutRow(
         key={`metadata-${rowIndex}-${run.map((element) => element.key).join('-')}`}
       >
         {run.map((element) => (
-          <span
-            className={mergeClasses(classes.metadataPart, 'better-list__metadata-part')}
-            data-item-element={element.key}
-            key={element.key}
-          >
-            {element.value}
-          </span>
+          element.href ? (
+            <Link
+              className={mergeClasses(classes.metadataPart, 'better-list__metadata-part')}
+              data-item-element={element.key}
+              href={element.href}
+              key={element.key}
+            >
+              {element.value}
+            </Link>
+          ) : (
+            <span
+              className={mergeClasses(classes.metadataPart, 'better-list__metadata-part')}
+              data-item-element={element.key}
+              key={element.key}
+            >
+              {element.value}
+            </span>
+          )
         ))}
       </div>
     );
@@ -457,9 +489,6 @@ function renderItemLayoutRow(
       }
       return;
     }
-    if (fieldPath === 'URL') {
-      return;
-    }
     const element = elementsByKey.get(fieldPath);
     if (!element) {
       return;
@@ -470,7 +499,16 @@ function renderItemLayoutRow(
     }
     flushMetadata();
     if (showDescriptions) {
-      rendered.push(
+      rendered.push(element.href ? (
+        <Link
+          className={mergeClasses(classes.description, 'better-list__item-description')}
+          data-item-element={element.key}
+          href={element.href}
+          key={element.key}
+        >
+          {element.value}
+        </Link>
+      ) : (
         <Text
           className={mergeClasses(classes.description, 'better-list__item-description')}
           data-item-element={element.key}
@@ -478,7 +516,7 @@ function renderItemLayoutRow(
         >
           {element.value}
         </Text>
-      );
+      ));
     }
   });
   flushMetadata();

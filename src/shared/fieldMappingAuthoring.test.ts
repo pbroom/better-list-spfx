@@ -1,5 +1,6 @@
 import {
   createBetterListFieldMapping,
+  createBetterListMetadataMappings,
   IBetterListFieldDescriptor,
   updateBetterListFieldMapping
 } from './fieldMappingAuthoring';
@@ -86,5 +87,18 @@ describe('createBetterListFieldMapping', () => {
     const cleared = updateBetterListFieldMapping(remapped, 'description');
     expect(cleared.description).toBeUndefined();
     expect(cleared.metadata).toEqual(mappings.metadata);
+  });
+
+  it('includes link-only fields once in item metadata mappings', () => {
+    const fields = [
+      field('Title', 'Text'),
+      field('Description', 'Note'),
+      field('URL', 'URL')
+    ];
+
+    expect(createBetterListMetadataMappings(fields, ['Description', 'URL', 'URL'])).toEqual([
+      expect.objectContaining({ key: 'Description', label: 'Description' }),
+      expect.objectContaining({ key: 'URL', label: 'URL' })
+    ]);
   });
 });
