@@ -88,6 +88,29 @@ export function flattenItemLayoutRows(rows: BetterListItemLayoutRows): readonly 
   }, []);
 }
 
+export function removeItemLayoutRow(
+  rows: BetterListItemLayoutRows,
+  rowIndex: number,
+  itemProperties: readonly string[]
+): BetterListItemLayoutRows {
+  if (rowIndex < 0 || rowIndex >= rows.length) {
+    return rows;
+  }
+  if (rows.length === 1) {
+    return [];
+  }
+
+  const removed = rows[rowIndex];
+  const nextRows = rows
+    .filter((_row, index) => index !== rowIndex)
+    .map((row) => row.slice());
+  const targetIndex = rowIndex === 0 ? 0 : rowIndex - 1;
+  nextRows[targetIndex] = rowIndex === 0
+    ? [...removed, ...nextRows[targetIndex]]
+    : [...nextRows[targetIndex], ...removed];
+  return normalizeItemLayoutRows(nextRows, itemProperties);
+}
+
 export function normalizeItemPropertyFields(fields: readonly unknown[]): readonly string[] {
   const seen = new Set<string>();
   const normalized: string[] = [];

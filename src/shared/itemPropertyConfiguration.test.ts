@@ -5,6 +5,7 @@ import {
   getItemPropertyUrl,
   parseItemLayoutRows,
   parseItemPropertyFields,
+  removeItemLayoutRow,
   serializeItemLayoutRows,
   serializeItemPropertyFields
 } from './itemPropertyConfiguration';
@@ -62,6 +63,24 @@ describe('item property configuration', () => {
     expect(parseItemLayoutRows('[[],["Description"]]', ['Description'])).toEqual([
       [],
       ['Description']
+    ]);
+  });
+
+  it('preserves authored reading order when removing the first or a later row', () => {
+    const properties = ['Title', 'Category', 'Description', 'Owner'];
+    const rows = [['Title'], ['Category', 'Description'], ['Owner']];
+
+    expect(removeItemLayoutRow(rows, 0, properties)).toEqual([
+      ['Title', 'Category', 'Description'],
+      ['Owner']
+    ]);
+    expect(removeItemLayoutRow(rows, 1, properties)).toEqual([
+      ['Title', 'Category', 'Description'],
+      ['Owner']
+    ]);
+    expect(removeItemLayoutRow(rows, 2, properties)).toEqual([
+      ['Title'],
+      ['Category', 'Description', 'Owner']
     ]);
   });
 

@@ -1,4 +1,10 @@
-import { addTabFilterMappings, createDefaultTabs, parseTabConfiguration, serializeTabConfiguration } from './tabConfiguration';
+import {
+  addTabFilterMappings,
+  alignTabQueryFieldKinds,
+  createDefaultTabs,
+  parseTabConfiguration,
+  serializeTabConfiguration
+} from './tabConfiguration';
 
 describe('Better List tab configuration', () => {
   it('round trips an unlimited tab array', () => {
@@ -79,6 +85,37 @@ describe('Better List tab configuration', () => {
     expect(addTabFilterMappings({ title: { kind: 'text', internalName: 'Title' } }, tabs).filterFields).toEqual([
       { kind: 'text', internalName: 'Region', displayName: 'Region' }
     ]);
+  });
+
+  it('uses current mapping kinds instead of stale serialized query metadata', () => {
+    const [sourceTab] = parseTabConfiguration(JSON.stringify([
+      {
+        id: 'north',
+        label: 'North',
+        filter: {
+          kind: 'query',
+          expression: 'Region = "North"',
+          fields: [{
+            name: 'Region',
+            kind: 'boolean',
+            fieldPath: 'Region',
+            mapping: { kind: 'text', internalName: 'Region' }
+          }]
+        }
+      }
+    ]));
+    expect(sourceTab.filter).toMatchObject({ fields: [{ kind: 'text' }] });
+
+    const semanticTab = alignTabQueryFieldKinds({
+      id: 'priorities',
+      label: 'Priorities',
+      filter: {
+        kind: 'query',
+        expression: 'Priority > 2',
+        fields: [{ name: 'Priority', kind: 'text', field: 'sortOrder' }]
+      }
+    }, { sortOrder: { kind: 'number', internalName: 'Priority' } });
+    expect(semanticTab.filter).toMatchObject({ fields: [{ kind: 'number' }] });
   });
 
   it('rejects duplicate ids and multi-condition rule shapes', () => {

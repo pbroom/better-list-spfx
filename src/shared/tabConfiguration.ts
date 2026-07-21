@@ -49,11 +49,12 @@ function readQueryField(value: unknown): IBetterListQueryField {
     return { name: value.name.trim(), kind: value.kind, field: value.field };
   }
   if (typeof value.fieldPath === 'string' && value.fieldPath.trim()) {
+    const mapping = readSourceMapping(value.mapping);
     return {
       name: value.name.trim(),
-      kind: value.kind,
+      kind: mapping.kind,
       fieldPath: value.fieldPath.trim(),
-      mapping: readSourceMapping(value.mapping)
+      mapping
     };
   }
   throw new Error('Each query field must reference a mapped or source field.');
@@ -285,6 +286,20 @@ export function serializeTabConfiguration(tabs: readonly IBetterListTabConfig[])
     throw new Error('Better List requires at least one tab.');
   }
   return JSON.stringify(tabs);
+}
+
+export function alignTabQueryFieldKinds(
+  tab: IBetterListTabConfig,
+  mappings: Partial<IBetterListFieldMappings>
+): IBetterListTabConfig {
+  if (tab.filter.kind !== 'query') {
+    return tab;
+  }
+  const fields = tab.filter.fields.map((field) => {
+    const currentKind = field.field ? mappings[field.field]?.kind : field.mapping?.kind;
+    return currentKind && currentKind !== field.kind ? { ...field, kind: currentKind } : field;
+  });
+  return { ...tab, filter: { ...tab.filter, fields } };
 }
 
 export function createDefaultTabs(): readonly IBetterListTabConfig[] {

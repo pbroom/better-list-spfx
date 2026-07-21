@@ -7,6 +7,7 @@ import * as strings from 'WebPartStrings';
 
 import {
   addTabFilterMappings,
+  alignTabQueryFieldKinds,
   BetterListFieldValue,
   betterListStylePresetVersion,
   createDefaultTabs,
@@ -447,8 +448,11 @@ function coerceTabFilterValues(
   mappings: Partial<IBetterListFieldMappings>
 ): readonly IBetterListTabConfig[] {
   return tabs.map((tab) => {
-    if (tab.filter.kind === 'all' || tab.filter.kind === 'query') {
+    if (tab.filter.kind === 'all') {
       return tab;
+    }
+    if (tab.filter.kind === 'query') {
+      return alignTabQueryFieldKinds(tab, mappings);
     }
     const mapping = tab.filter.kind === 'sourceEquals' ? tab.filter.mapping : mappings[tab.filter.field];
     const rawValue = tab.filter.value;

@@ -59,7 +59,8 @@ import {
   flattenItemLayoutRows,
   IBetterListFieldDescriptor,
   normalizeItemLayoutRows,
-  normalizeItemPropertyFields
+  normalizeItemPropertyFields,
+  removeItemLayoutRow
 } from '../../../../shared';
 
 export interface IItemLayoutBuilderValue {
@@ -410,13 +411,9 @@ export const ItemPropertyBuilder: React.FunctionComponent<IItemPropertyBuilderPr
         onChange({ itemProperties, rows: [] });
         return;
       }
-      const removed = rows[rowIndex];
-      const nextRows = rows.filter((_row, index) => index !== rowIndex).map((row) => row.slice());
-      const targetIndex = Math.max(0, rowIndex - 1);
-      nextRows[targetIndex].push(...removed);
       onChange({
         itemProperties,
-        rows: normalizeItemLayoutRows(nextRows, itemProperties)
+        rows: removeItemLayoutRow(rows, rowIndex, itemProperties)
       });
     },
     [itemProperties, onChange, rows]
