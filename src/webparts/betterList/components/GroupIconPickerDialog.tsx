@@ -71,7 +71,7 @@ const useStyles = makeStyles({
   },
   grid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(92px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(104px, 1fr))',
     gap: '8px'
   },
   results: {
@@ -82,15 +82,18 @@ const useStyles = makeStyles({
     ...shorthands.padding('2px')
   },
   tile: {
-    minHeight: '80px',
-    height: 'auto',
-    ...shorthands.padding('10px', '6px'),
-    '& > span': {
-      display: 'flex',
-      flexDirection: 'column',
-      rowGap: '7px'
-    },
-    contentVisibility: 'auto'
+    width: '100%',
+    minWidth: 0,
+    minHeight: '104px',
+    height: '104px',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    rowGap: '8px',
+    overflow: 'hidden',
+    fontWeight: tokens.fontWeightRegular,
+    ...shorthands.padding('8px')
   },
   tileSelected: {
     outlineColor: tokens.colorBrandStroke1,
@@ -99,16 +102,35 @@ const useStyles = makeStyles({
     outlineWidth: '2px',
     backgroundColor: tokens.colorBrandBackground2
   },
+  tileIconFrame: {
+    width: '32px',
+    height: '32px',
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
   tileIcon: {
-    width: '28px',
-    height: '28px',
-    fontSize: '28px'
+    width: '100%',
+    height: '100%',
+    display: 'block',
+    flexShrink: 0,
+    fontSize: '32px'
   },
   tileLabel: {
-    maxWidth: '84px',
+    width: '100%',
+    minWidth: 0,
+    maxHeight: '32px',
+    display: '-webkit-box',
+    WebkitBoxOrient: 'vertical',
+    WebkitLineClamp: 2,
     overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap'
+    overflowWrap: 'anywhere',
+    whiteSpace: 'normal',
+    textAlign: 'center',
+    fontSize: tokens.fontSizeBase200,
+    fontWeight: tokens.fontWeightRegular,
+    lineHeight: tokens.lineHeightBase200
   },
   preview: {
     display: 'flex',
@@ -321,13 +343,16 @@ export const GroupIconPickerDialog: React.FunctionComponent<IGroupIconPickerDial
                           aria-pressed={selected}
                           className={mergeClasses(classes.tile, selected && classes.tileSelected)}
                           key={`${entry.library}:${entry.name}`}
+                          title={entry.label}
                           onClick={() => setDraft(icon)}
                         >
-                          <BetterListGroupIconVisual
-                            className={classes.tileIcon}
-                            fallback={<ImageRegular aria-hidden="true" className={classes.tileIcon} />}
-                            override={icon}
-                          />
+                          <span className={classes.tileIconFrame}>
+                            <BetterListGroupIconVisual
+                              className={classes.tileIcon}
+                              fallback={<ImageRegular aria-hidden="true" className={classes.tileIcon} />}
+                              override={icon}
+                            />
+                          </span>
                           <span className={classes.tileLabel}>{entry.label}</span>
                         </Button>
                       );

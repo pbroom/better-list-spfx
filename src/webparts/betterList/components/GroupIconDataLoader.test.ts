@@ -24,4 +24,13 @@ describe('group icon data loader', () => {
     expect(await loadBetterListGroupIconData('fluent', name)).toMatchObject({ body: expect.any(String) });
     expect(await loadBetterListGroupIconData('fluent', 'missing-24-regular')).toBeUndefined();
   });
+
+  it('preserves each collection default viewbox so artwork is not clipped', async () => {
+    await expect(loadBetterListGroupIconData('solar-duotone', 'accessibility-bold-duotone'))
+      .resolves.toMatchObject({ width: 24, height: 24 });
+    await expect(loadBetterListGroupIconData('fluent', 'align-end-horizontal-20-regular'))
+      .resolves.toMatchObject({ width: 20, height: 20 });
+    await expect(loadBetterListGroupIconData('fluent-color', 'calendar-people-20'))
+      .resolves.toMatchObject({ width: 20, height: 20 });
+  });
 });
