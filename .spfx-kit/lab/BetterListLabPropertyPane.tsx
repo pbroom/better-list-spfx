@@ -1,6 +1,6 @@
 import * as React from 'react';
-import { Button, Combobox, Option, Switch, makeStyles, tokens } from '@fluentui/react-components';
-import { AddRegular, ChevronDownRegular, ChevronRightRegular, CodeRegular } from '@fluentui/react-icons';
+import { Button, Dropdown, Option, Switch, makeStyles, tokens } from '@fluentui/react-components';
+import { AddRegular } from '@fluentui/react-icons';
 import type {
   LabCssEditorTarget,
   LabPropertyBag,
@@ -26,6 +26,7 @@ import {
   IBetterListTabConfig
 } from '../../src/shared';
 import { ColumnPickerMenu, ItemPropertyBuilder } from '../../src/webparts/betterList/components/propertyPane/ItemPropertyBuilder';
+import { PropertyPaneSection } from '../../src/webparts/betterList/components/propertyPane/PropertyPaneSection';
 import {
   appendNewTab,
   IBetterListTabFilterField,
@@ -58,22 +59,6 @@ const useStyles = makeStyles({
     width: '100%',
     marginBottom: '12px'
   },
-  section: {
-    borderTop: `1px solid ${tokens.colorNeutralStroke2}`
-  },
-  sectionHeader: {
-    display: 'grid',
-    gridTemplateColumns: 'minmax(0, 1fr) 32px',
-    alignItems: 'center',
-    minHeight: '48px'
-  },
-  sectionButton: {
-    justifyContent: 'flex-start',
-    minWidth: 0,
-    paddingLeft: 0,
-    fontSize: '14px',
-    fontWeight: 600
-  },
   sectionLabel: {
     fontSize: '14px',
     fontWeight: 600,
@@ -83,19 +68,6 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground3,
     fontWeight: 400,
     marginLeft: '4px'
-  },
-  sectionIcon: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: tokens.colorNeutralForeground3,
-    fontSize: '16px'
-  },
-  sectionBody: {
-    color: tokens.colorNeutralForeground3,
-    fontSize: '12px',
-    lineHeight: '18px',
-    padding: '0 0 12px'
   },
   settingRow: {
     display: 'flex',
@@ -176,7 +148,6 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
   title: _title
 }) => {
   const classes = useStyles();
-  const [listQuery, setListQuery] = React.useState<string | undefined>(undefined);
   const itemLayout = React.useMemo(
     () => parseItemLayoutConfiguration(
       values.itemLayoutJson,
@@ -198,16 +169,15 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
 
   return (
     <section className={classes.root}>
-      <Combobox
-        aria-label="Choose list or enter URL"
+      <Dropdown
+        aria-label="Source list"
         className={classes.listPicker}
-        placeholder="Choose list or enter URL…"
+        listbox={{ style: { maxHeight: 'min(320px, 70vh)', overflowY: 'auto' } }}
+        placeholder="Select a SharePoint list"
+        positioning={{ align: 'start', autoSize: 'height', position: 'below', strategy: 'fixed' }}
         selectedOptions={values.sourceListId ? [values.sourceListId] : []}
-        value={listQuery !== undefined ? listQuery : values.sourceListTitle}
-        onBlur={() => setListQuery(undefined)}
-        onChange={(event) => setListQuery(event.currentTarget.value)}
+        value={values.sourceListTitle}
         onOptionSelect={(_event, data) => {
-          setListQuery(undefined);
           if (data.optionValue === servicesListId) {
             onChange({
               sourceListId: servicesListId,
@@ -217,7 +187,7 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
         }}
       >
         <Option value={servicesListId}>{servicesListTitle}</Option>
-      </Combobox>
+      </Dropdown>
 
       <DisclosureSection
         action={
@@ -346,7 +316,7 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
         />
       </div>
 
-      <DisclosureSection defaultExpanded icon="code" label="Advanced">
+      <DisclosureSection defaultExpanded label="Advanced">
         <div className={classes.advancedBody}>
           {renderControl(betterListSourceWorkspaceControl)}
         </div>
@@ -392,7 +362,6 @@ interface IDisclosureSectionProps {
   action?: React.ReactNode;
   children: React.ReactNode;
   defaultExpanded?: boolean;
-  icon?: 'code';
   label: React.ReactNode;
 }
 
@@ -400,32 +369,12 @@ const DisclosureSection: React.FunctionComponent<IDisclosureSectionProps> = ({
   action,
   children,
   defaultExpanded = false,
-  icon,
   label
-}) => {
-  const classes = useStyles();
-  const [expanded, setExpanded] = React.useState(defaultExpanded);
-  return (
-    <div className={classes.section}>
-      <div className={classes.sectionHeader}>
-        <Button
-          appearance="transparent"
-          aria-expanded={expanded}
-          className={classes.sectionButton}
-          onClick={() => setExpanded((current) => !current)}
-        >
-          {label}
-        </Button>
-        {action || (
-          <span className={classes.sectionIcon} aria-hidden="true">
-            {icon === 'code' ? <CodeRegular /> : expanded ? <ChevronDownRegular /> : <ChevronRightRegular />}
-          </span>
-        )}
-      </div>
-      {expanded ? <div className={classes.sectionBody}>{children}</div> : null}
-    </div>
-  );
-};
+}) => (
+  <PropertyPaneSection action={action} defaultExpanded={defaultExpanded} label={label}>
+    {children}
+  </PropertyPaneSection>
+);
 
 function isGroupingColumn(field: (typeof servicesAuthoringFields)[number]): boolean {
   const type = field.typeAsString.toLocaleLowerCase();

@@ -223,6 +223,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
           groups: [
             {
               groupName: strings.PropertyPaneGroupName,
+              isGroupNameHidden: true,
               groupFields: [this._createCustomPropertyPaneField()]
             }
           ]

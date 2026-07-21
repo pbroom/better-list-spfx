@@ -29,8 +29,11 @@ describe('TabBuilder', () => {
     expect(html.match(/data-tab-remove="true"/g)).toHaveLength(2);
     expect(html).toContain('aria-label="Remove Featured"');
     expect(html).toContain('aria-label="Remove All Services"');
-    expect(html).toContain('aria-label="Reorder Featured"');
-    expect(html).toContain('aria-label="Reorder All Services"');
+    expect(html).not.toContain('data-tab-drag-handle');
+    expect(html).not.toContain('aria-label="Reorder Featured"');
+    expect(html).toContain('aria-roledescription="sortable"');
+    expect(html).toContain('fui-Switch');
+    expect(html).toContain('Show item count');
     expect(html).not.toContain('Move Featured up');
     expect(html).not.toContain('Move Featured down');
     expect(html).toContain('.bl-tabs-builder__card-heading { border-bottom: 0;');
