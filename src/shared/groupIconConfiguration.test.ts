@@ -2,6 +2,7 @@ import {
   createBetterListGroupIconKey,
   defaultBetterListGroupIconsConfiguration,
   getBetterListGroupIconOverride,
+  normalizeBetterListGroupIconColor,
   normalizeBetterListGroupImageUrl,
   parseBetterListGroupIconsConfiguration,
   serializeBetterListGroupIconsConfiguration,
@@ -20,13 +21,47 @@ describe('group icon configuration', () => {
       version: 1,
       showIcons: true,
       overrides: [
-        { groupKey: 'category::general', icon: { kind: 'icon', library: 'solar-duotone', name: 'buildings' } },
+        { groupKey: 'category::general', icon: { kind: 'icon', library: 'solar-duotone', name: 'buildings', color: '#245a8d' } },
         { groupKey: 'category::policy', icon: { kind: 'image', url: '/SiteAssets/policy.png' } },
         { groupKey: 'category::other', icon: { kind: 'none' } }
       ]
     }));
 
     expect(parseBetterListGroupIconsConfiguration(serializeBetterListGroupIconsConfiguration(value))).toEqual(value);
+  });
+
+  it('normalizes supported icon colors and rejects arbitrary CSS values', () => {
+    expect(normalizeBetterListGroupIconColor('#ABC')).toBe('#aabbcc');
+    expect(normalizeBetterListGroupIconColor(' #245A8D ')).toBe('#245a8d');
+    expect(normalizeBetterListGroupIconColor('red')).toBeUndefined();
+    expect(normalizeBetterListGroupIconColor('var(--brand-color)')).toBeUndefined();
+    expect(normalizeBetterListGroupIconColor('url(https://example.com/a)')).toBeUndefined();
+  });
+
+  it('drops an invalid color without dropping the selected icon', () => {
+    const value = parseBetterListGroupIconsConfiguration(JSON.stringify({
+      version: 1,
+      overrides: [
+        { groupKey: 'a', icon: { kind: 'icon', library: 'fluent', name: 'mail', color: 'currentColor' } }
+      ]
+    }));
+
+    expect(value.overrides).toEqual([
+      { groupKey: 'a', icon: { kind: 'icon', library: 'fluent', name: 'mail' } }
+    ]);
+  });
+
+  it('ignores color overrides for Fluent color artwork', () => {
+    const value = parseBetterListGroupIconsConfiguration(JSON.stringify({
+      version: 1,
+      overrides: [
+        { groupKey: 'a', icon: { kind: 'icon', library: 'fluent-color', name: 'mail', color: '#245a8d' } }
+      ]
+    }));
+
+    expect(value.overrides).toEqual([
+      { groupKey: 'a', icon: { kind: 'icon', library: 'fluent-color', name: 'mail' } }
+    ]);
   });
 
   it('deduplicates normalized keys without treating object-prototype names specially', () => {

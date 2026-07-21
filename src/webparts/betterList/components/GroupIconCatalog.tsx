@@ -116,6 +116,9 @@ export const BetterListGroupIconVisual: React.FunctionComponent<{
   const [loadedIcon, setLoadedIcon] = React.useState<IconifyIconData>();
   const library = override.kind === 'icon' ? override.library : undefined;
   const name = override.kind === 'icon' ? override.name : undefined;
+  const iconStyle = override.kind === 'icon' && override.library !== 'fluent-color' && override.color
+    ? { color: override.color }
+    : undefined;
   const hasCuratedIcon = override.kind === 'icon' && hasCuratedGroupIcon(override);
 
   React.useEffect(() => setImageFailed(false), [override]);
@@ -156,17 +159,17 @@ export const BetterListGroupIconVisual: React.FunctionComponent<{
   if (override.library === 'solar-duotone') {
     const curatedSolar = solarGroupIcons[override.name];
     if (curatedSolar) {
-      return renderSolarGroupIcon(override.name, className, fallback);
+      return renderSolarGroupIcon(override.name, className, fallback, iconStyle);
     }
   }
   const Component = getFluentCatalogComponent(override);
   if (Component) {
     return (
-    <Component aria-hidden="true" className={className} />
+    <Component aria-hidden="true" className={className} style={iconStyle} />
     );
   }
   return loadedIcon ? (
-    <IconifyIcon aria-hidden="true" className={className} icon={loadedIcon} />
+    <IconifyIcon aria-hidden="true" className={className} icon={loadedIcon} style={iconStyle} />
   ) : <>{fallback}</>;
 };
 
@@ -179,7 +182,8 @@ function hasCuratedGroupIcon(icon: IBetterListCatalogGroupIcon): boolean {
 function renderSolarGroupIcon(
   name: string,
   className: string | undefined,
-  fallback: React.ReactNode
+  fallback: React.ReactNode,
+  style?: React.CSSProperties
 ): React.ReactElement {
   const icon = solarGroupIcons[name];
   if (!icon) {
@@ -192,6 +196,7 @@ function renderSolarGroupIcon(
       className={className}
       focusable="false"
       height={icon.height}
+      style={style}
       viewBox={`0 0 ${icon.width} ${icon.height}`}
       width={icon.width}
       xmlns="http://www.w3.org/2000/svg"
