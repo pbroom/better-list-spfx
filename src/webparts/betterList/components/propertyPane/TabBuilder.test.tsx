@@ -48,6 +48,9 @@ describe('TabBuilder', () => {
     expect(html).not.toContain('Move Featured up');
     expect(html).not.toContain('Move Featured down');
     expect(html).toContain('.bl-tabs-builder__card-heading { border-bottom: 0;');
+    expect(html).toContain(
+      'font-family: var(--bl-font-mono, &quot;Geist Mono Variable&quot;, &quot;Geist Mono&quot;, ui-monospace, SFMono-Regular, Consolas, &quot;Liberation Mono&quot;, monospace) !important;'
+    );
     expect(html).not.toContain('>×<');
   });
 

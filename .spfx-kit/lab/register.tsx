@@ -1,3 +1,5 @@
+import '@fontsource-variable/geist-mono';
+
 import * as React from 'react';
 import type { LabRenderProps, LabWebPart, LabWebPartRegistry } from '@spfx-kit/spfx-lab-runtime';
 import { FluentProvider, webDarkTheme, webLightTheme } from '@fluentui/react-components';

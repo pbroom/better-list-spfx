@@ -1,3 +1,5 @@
+import '@fontsource-variable/geist-mono';
+
 import * as React from 'react';
 import * as ReactDom from 'react-dom';
 import { FluentProvider, webDarkTheme, webLightTheme } from '@fluentui/react-components';
