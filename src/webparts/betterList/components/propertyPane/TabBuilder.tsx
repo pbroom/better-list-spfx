@@ -627,7 +627,7 @@ const tabBuilderCss = `
 .bl-tabs-builder__filter { border: 0; border-top: 1px solid #e0e0e0; margin: 10px 0 0; padding: 10px 0 0; }
 .bl-tabs-builder__filter legend { padding: 0 6px 0 0; }
 .bl-query-editor { position: relative; }
-.bl-query-editor input { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace !important; }
+.bl-query-editor input { font-family: var(--bl-font-mono, "Geist Mono Variable", "Geist Mono", ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace) !important; }
 .bl-query-editor__label { margin-bottom: 1px; }
 .bl-query-editor__suggestions { background: #fff; border: 1px solid #d1d1d1; border-radius: 4px; box-shadow: 0 4px 12px rgba(0, 0, 0, .18); left: 0; list-style: none; margin: 3px 0 0; max-height: 176px; overflow: auto; padding: 3px; position: absolute; right: 0; top: 100%; z-index: 40; }
 .bl-query-editor__suggestions li { align-items: center; border-radius: 3px; cursor: pointer; display: flex; gap: 8px; justify-content: space-between; min-height: 30px; padding: 5px 7px; }

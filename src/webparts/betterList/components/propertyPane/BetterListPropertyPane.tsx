@@ -512,7 +512,7 @@ function isGroupingColumn(field: ISharePointFieldOption): boolean {
 
 const propertyPaneCss = `
 .bl-pane-provider { background: transparent; }
-.bl-pane { color: #242424; container-type: inline-size; font-family: "Segoe UI", sans-serif; margin: -8px; }
+.bl-pane { --bl-font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; color: #242424; container-type: inline-size; font-family: "Segoe UI", sans-serif; margin: -8px; }
 .bl-pane *, .bl-pane *::before, .bl-pane *::after { box-sizing: border-box; }
 .bl-pane__source-section { border: 0; margin: 0; padding: 8px 0 12px; }
 .bl-pane__section-count { color: ${tokens.colorNeutralForeground3}; font-weight: 400; margin-left: 4px; }

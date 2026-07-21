@@ -23,6 +23,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@fluentui/react-components": "9.74.1",
     "@fluentui/react-icons": "2.0.330",
+    "@fontsource-variable/geist-mono": "5.3.0",
     "@iconify/react": "^4.1.1",
     "@microsoft/sp-component-base": "1.23.2",
     "@microsoft/sp-core-library": "1.23.2",

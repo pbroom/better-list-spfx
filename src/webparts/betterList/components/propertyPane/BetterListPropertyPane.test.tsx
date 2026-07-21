@@ -40,6 +40,7 @@ describe('BetterListPropertyPane', () => {
     expect(html).toContain('fui-FluentProvider');
     expect(html).toContain('fui-Dropdown');
     expect(html).toContain('bl-pane__source-dropdown');
+    expect(html).toContain('--bl-font-mono: &quot;Geist Mono Variable&quot;');
     expect(html).toContain('data-property-pane-section-heading="true"');
     expect(html).toContain('aria-label="Add tab"');
     expect(html).not.toContain('aria-label="Select groups column"');
