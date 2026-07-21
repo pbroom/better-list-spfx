@@ -15,6 +15,9 @@ const useStyles = makeStyles({
   root: {
     borderTop: `1px solid ${tokens.colorNeutralStroke2}`
   },
+  rootWithoutDivider: {
+    borderTopWidth: 0
+  },
   heading: {
     display: 'grid',
     gridTemplateColumns: 'minmax(0, 1fr) 32px',
@@ -58,6 +61,7 @@ export interface IPropertyPaneSectionProps {
   action?: React.ReactNode;
   children: React.ReactNode;
   defaultExpanded?: boolean;
+  divider?: boolean;
   label: React.ReactNode;
 }
 
@@ -70,6 +74,7 @@ export const PropertyPaneSection: React.FunctionComponent<IPropertyPaneSectionPr
   action,
   children,
   defaultExpanded = false,
+  divider = true,
   label
 }) => {
   const classes = useStyles();
@@ -77,8 +82,9 @@ export const PropertyPaneSection: React.FunctionComponent<IPropertyPaneSectionPr
 
   return (
     <Accordion
-      className={classes.root}
+      className={mergeClasses(classes.root, !divider && classes.rootWithoutDivider)}
       collapsible
+      data-property-pane-section-divider={divider ? 'before' : 'none'}
       openItems={expanded ? [sectionValue] : []}
       onToggle={(_event, data) => setExpanded(data.openItems.indexOf(sectionValue) >= 0)}
     >
