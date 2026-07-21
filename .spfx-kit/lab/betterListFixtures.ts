@@ -152,15 +152,20 @@ export function createServicesFixtureRecords(user: IFixtureUser): readonly Reado
   ];
 
   return [
-    service(1, 'Acquisition Request', 'Create and submit acquisition request.', {
-      org: 'AGSO',
-      organization: 'Advanced Projects Office (APO)',
-      category: '1 | General',
-      icon: 'general',
-      featured: true,
-      order: 10,
-      path: 'acquisition-request'
-    }),
+    service(
+      1,
+      'Acquisition Request',
+      '<div class="ExternalClassFixture"><p>Create and submit&nbsp;an acquisition request.</p></div>',
+      {
+        org: 'AGSO',
+        organization: 'Advanced Projects Office (APO)',
+        category: '1 | General',
+        icon: 'general',
+        featured: true,
+        order: 10,
+        path: 'acquisition-request'
+      }
+    ),
     service(2, 'Test General Services Request', 'A guided request for common workplace and administrative services.', {
       org: 'APO',
       organization: 'Operational Alignment Directorate (OAD)',

@@ -1,3 +1,5 @@
+import { toPlainText } from './plainText';
+
 const REQUIRED_TITLE_FIELD = 'Title';
 export const betterListMaxItemRows = 5;
 
@@ -253,7 +255,7 @@ function formatValue(value: unknown): string | undefined {
     return value ? 'Yes' : 'No';
   }
   if (typeof value === 'string' || typeof value === 'number') {
-    return String(value);
+    return typeof value === 'string' ? toPlainText(value) : String(value);
   }
   if (Array.isArray(value)) {
     const values = value.map(formatValue).filter((entry): entry is string => Boolean(entry));

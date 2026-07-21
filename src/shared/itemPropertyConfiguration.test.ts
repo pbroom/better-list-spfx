@@ -123,6 +123,31 @@ describe('item property configuration', () => {
     expect(getItemPropertyUrl(source, 'URL')).toBe('https://contoso.example');
   });
 
+  it('formats SharePoint rich-text item properties as decoded plain text', () => {
+    const source = {
+      Description:
+        '<div class="ExternalClass123">Prow&nbsp;scuttle</div><span style="color&#58;rgb(36, 48, 83)">Final &amp; text</span>',
+      Category: {
+        Description: '<p>General&nbsp;services</p><script>ignored()</script>'
+      }
+    };
+
+    expect(formatItemPropertyValue(source, 'Description')).toBe('Prow scuttle Final & text');
+    expect(formatItemPropertyValue(source, 'Category.Description')).toBe('General services');
+  });
+
+  it('normalizes entity-encoded SharePoint markup without exposing executable content', () => {
+    const source = {
+      Description:
+        '&lt;div class=&quot;ExternalClass123&quot;&gt;Encoded&amp;nbsp;text&lt;/div&gt;' +
+        '&lt;script&gt;ignored()&lt;/script&gt;&lt;p&gt;Final&lt;/p&gt;',
+      Comparison: '2 < 3 and 5 > 4'
+    };
+
+    expect(formatItemPropertyValue(source, 'Description')).toBe('Encoded text Final');
+    expect(formatItemPropertyValue(source, 'Comparison')).toBe('2 < 3 and 5 > 4');
+  });
+
   it('rejects unsafe hyperlink protocols', () => {
     expect(getItemPropertyUrl({ URL: { Url: `java${'script'}:alert(1)` } }, 'URL')).toBeUndefined();
     expect(

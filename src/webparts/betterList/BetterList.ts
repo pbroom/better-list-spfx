@@ -1,5 +1,6 @@
 import * as React from 'react';
 import * as ReactDom from 'react-dom';
+import { FluentProvider, webLightTheme } from '@fluentui/react-components';
 import { DisplayMode, Version } from '@microsoft/sp-core-library';
 import { IPropertyPaneConfiguration, IPropertyPaneField, PropertyPaneFieldType } from '@microsoft/sp-property-pane';
 import { BaseClientSideWebPart } from '@microsoft/sp-webpart-base';
@@ -133,8 +134,12 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
 
     ReactDom.render(
       React.createElement(
-        'div',
-        { className: wrapperClassName },
+        FluentProvider,
+        {
+          className: wrapperClassName,
+          targetDocument: this.domElement.ownerDocument,
+          theme: webLightTheme
+        },
         this.properties.customCss
           ? React.createElement('style', undefined, scopeBetterListStyles(this.properties.customCss, `.${wrapperClassName}`))
           : undefined,

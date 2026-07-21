@@ -1,5 +1,6 @@
 import * as React from 'react';
 import type { LabRenderProps, LabWebPart, LabWebPartRegistry } from '@spfx-kit/spfx-lab-runtime';
+import { FluentProvider, webDarkTheme, webLightTheme } from '@fluentui/react-components';
 
 import {
   BetterListFieldValue,
@@ -157,12 +158,14 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
   } as React.CSSProperties;
 
   return (
-    <div
+    <FluentProvider
       className="better-list-lab"
       data-active-tab={activeTabKey}
       data-breakpoint={lab.breakpoint.id}
       data-theme={lab.theme.mode}
       style={style}
+      targetDocument={typeof document === 'undefined' ? undefined : document}
+      theme={lab.theme.mode === 'dark' ? webDarkTheme : webLightTheme}
     >
       {props.customCss ? <style>{scopeBetterListStyles(props.customCss, '.better-list-lab')}</style> : null}
       <BetterListView
@@ -189,7 +192,7 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
           })
         }
       />
-    </div>
+    </FluentProvider>
   );
 };
 

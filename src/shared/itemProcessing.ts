@@ -18,6 +18,7 @@ import {
   IBetterListTabConfig
 } from './betterListTypes';
 import { compileBetterListFilterQuery } from './filterQuery';
+import { toPlainText } from './plainText';
 
 const FIELD_SLOTS: readonly BetterListFieldSlot[] = [
   'title',
@@ -75,7 +76,10 @@ function property(value: unknown, names: readonly string[]): unknown {
 export function normalizeFieldValue(value: unknown, mapping: BetterListFieldMapping): BetterListFieldValue {
   if (mapping.kind === 'url') {
     const key: string = mapping.valueProperty === 'description' ? 'Description' : 'Url';
-    return scalar(isRecord(value) ? property(value, [key, key.toLocaleLowerCase()]) : value);
+    const normalized = scalar(isRecord(value) ? property(value, [key, key.toLocaleLowerCase()]) : value);
+    return mapping.valueProperty === 'description' && typeof normalized === 'string'
+      ? toPlainText(normalized)
+      : normalized;
   }
   if (mapping.kind === 'lookup') {
     const values: readonly unknown[] = unwrapCollection(value);
@@ -84,7 +88,8 @@ export function normalizeFieldValue(value: unknown, mapping: BetterListFieldMapp
         return scalar(property(entry, ['Id', 'ID', 'id']));
       }
       const lookupValueField: string = mapping.lookupValueField || 'Title';
-      return scalar(property(entry, [lookupValueField, 'Title', 'LookupValue', 'title']) ?? entry);
+      const normalized = scalar(property(entry, [lookupValueField, 'Title', 'LookupValue', 'title']) ?? entry);
+      return typeof normalized === 'string' ? toPlainText(normalized) : normalized;
     });
     return mapping.multi || normalized.length > 1 ? normalized : normalized[0] ?? null;
   }
@@ -132,7 +137,8 @@ export function normalizeFieldValue(value: unknown, mapping: BetterListFieldMapp
     }
     return typeof value === 'string' || typeof value === 'number' ? value : null;
   }
-  return scalar(value);
+  const normalized = scalar(value);
+  return typeof normalized === 'string' ? toPlainText(normalized) : normalized;
 }
 
 export function normalizeAudiencePrincipals(value: unknown): readonly IBetterListAudiencePrincipal[] {
