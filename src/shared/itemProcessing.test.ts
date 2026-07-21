@@ -74,6 +74,24 @@ describe('Better List item processing', () => {
     expect(item.values.description).toBe('First paragraph Second & final');
   });
 
+  it('preserves tag-like substrings in ordinary text and lookup values', () => {
+    const item = normalizeItem(
+      {
+        Id: 10,
+        Title: 'Use <code> literally',
+        Category: { Title: 'Policy <draft>' }
+      },
+      {
+        title: { internalName: 'Title', kind: 'text' },
+        category: { internalName: 'Category', kind: 'lookup', lookupValueField: 'Title' }
+      }
+    );
+
+    expect(item.title).toBe('Use <code> literally');
+    expect(item.values.category).toBe('Policy <draft>');
+    expect(searchItems([item], '<code>')).toEqual([item]);
+  });
+
   it('normalizes a selected column from the lookup target row', () => {
     const item = normalizeItem(
       {

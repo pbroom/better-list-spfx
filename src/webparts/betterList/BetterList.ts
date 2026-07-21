@@ -1,6 +1,7 @@
 import * as React from 'react';
 import * as ReactDom from 'react-dom';
-import { FluentProvider, webLightTheme } from '@fluentui/react-components';
+import { FluentProvider, webDarkTheme, webLightTheme } from '@fluentui/react-components';
+import { IReadonlyTheme } from '@microsoft/sp-component-base';
 import { DisplayMode, Version } from '@microsoft/sp-core-library';
 import { IPropertyPaneConfiguration, IPropertyPaneField, PropertyPaneFieldType } from '@microsoft/sp-property-pane';
 import { BaseClientSideWebPart } from '@microsoft/sp-webpart-base';
@@ -85,6 +86,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
   private _status: 'loading' | 'ready' | 'error' = 'loading';
   private _errorMessage = '';
   private _activeTabKey = '';
+  private _isDarkTheme = false;
 
   public render(): void {
     const tabs = this._createEffectiveTabs();
@@ -138,7 +140,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
         {
           className: wrapperClassName,
           targetDocument: this.domElement.ownerDocument,
-          theme: webLightTheme
+          theme: this._isDarkTheme ? webDarkTheme : webLightTheme
         },
         this.properties.customCss
           ? React.createElement('style', undefined, scopeBetterListStyles(this.properties.customCss, `.${wrapperClassName}`))
@@ -210,6 +212,10 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       }
     };
     await this._reloadItems();
+  }
+
+  protected onThemeChanged(theme: IReadonlyTheme | undefined): void {
+    this._isDarkTheme = Boolean(theme?.isInverted);
   }
 
   protected onDispose(): void {

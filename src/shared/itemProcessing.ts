@@ -89,7 +89,7 @@ export function normalizeFieldValue(value: unknown, mapping: BetterListFieldMapp
       }
       const lookupValueField: string = mapping.lookupValueField || 'Title';
       const normalized = scalar(property(entry, [lookupValueField, 'Title', 'LookupValue', 'title']) ?? entry);
-      return typeof normalized === 'string' ? toPlainText(normalized) : normalized;
+      return normalized;
     });
     return mapping.multi || normalized.length > 1 ? normalized : normalized[0] ?? null;
   }
@@ -138,7 +138,14 @@ export function normalizeFieldValue(value: unknown, mapping: BetterListFieldMapp
     return typeof value === 'string' || typeof value === 'number' ? value : null;
   }
   const normalized = scalar(value);
-  return typeof normalized === 'string' ? toPlainText(normalized) : normalized;
+  return normalized;
+}
+
+function normalizeRichTextValue(value: BetterListFieldValue): BetterListFieldValue {
+  if (Array.isArray(value)) {
+    return value.map((entry) => typeof entry === 'string' ? toPlainText(entry) : entry);
+  }
+  return typeof value === 'string' ? toPlainText(value) : value;
 }
 
 export function normalizeAudiencePrincipals(value: unknown): readonly IBetterListAudiencePrincipal[] {
@@ -212,7 +219,8 @@ export function normalizeItem(
   FIELD_SLOTS.forEach((slot: BetterListFieldSlot) => {
     const mapping: BetterListFieldMapping | undefined = mappings[slot];
     if (mapping) {
-      values[slot] = normalizeFieldValue(source[mapping.internalName], mapping);
+      const normalized = normalizeFieldValue(source[mapping.internalName], mapping);
+      values[slot] = slot === 'description' ? normalizeRichTextValue(normalized) : normalized;
     }
   });
 
