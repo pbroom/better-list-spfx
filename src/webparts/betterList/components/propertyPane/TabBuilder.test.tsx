@@ -16,8 +16,11 @@ describe('TabBuilder', () => {
 
     const html = renderToStaticMarkup(<TabBuilder fields={fields} showAddAction={false} tabs={tabs} onChange={() => undefined} />);
 
-    expect(html).toContain('aria-label="Collapse Tab 1"');
-    expect(html).toContain('aria-label="Collapse Tab 2"');
+    expect(html).toContain('fui-Accordion');
+    expect(html).toContain('fui-AccordionItem');
+    expect(html).toContain('fui-AccordionHeader');
+    expect(html).toContain('fui-AccordionPanel');
+    expect(html.match(/aria-expanded="true"/g)).toHaveLength(2);
     expect(html).toContain('<legend>Filter items</legend>');
     expect(html).toContain('placeholder="All items"');
     expect(html).not.toContain('Items to show');
