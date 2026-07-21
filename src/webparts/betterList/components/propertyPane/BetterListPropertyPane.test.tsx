@@ -45,5 +45,10 @@ describe('BetterListPropertyPane', () => {
     expect(html).not.toContain('aria-label="Select groups column"');
     expect(html).not.toContain('+ Add tab');
     expect(html).not.toContain('<h2>Better List</h2>');
+    expect(html.match(/>Pop out</g)).toHaveLength(1);
+    expect(html).toContain('Styles &amp; template views');
+    expect(html).toContain('>CSS/SCSS</button>');
+    expect(html).toContain('>HTML template</button>');
+    expect(html).toContain('aria-label="Split"');
   });
 });
