@@ -204,5 +204,5 @@ export function scopeBetterListStyles(source: string, scope: string): string {
   if (!normalizedScope || !source.trim()) {
     return source;
   }
-  return source.replace(/\.better-list(?=$|__|[\s,{:#.\[])/g, `${normalizedScope} .better-list`);
+  return `@scope (${normalizedScope}) {\n${source}\n}`;
 }

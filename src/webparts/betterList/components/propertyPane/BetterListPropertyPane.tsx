@@ -2,6 +2,7 @@
 import * as React from 'react';
 import {
   Button,
+  Combobox,
   Dropdown,
   FluentProvider,
   Option,
@@ -40,6 +41,7 @@ import type { ISharePointImageAssetProvider } from '../../services';
 export interface IBetterListAuthoringState {
   sourceListId: string;
   sourceListTitle: string;
+  sourceWebUrl: string;
   fieldMappings: Partial<IBetterListFieldMappings>;
   itemProperties: readonly string[];
   itemLayoutRows: BetterListItemLayoutRows;
@@ -56,6 +58,7 @@ export interface IBetterListAuthoringState {
 export interface ISharePointListOption {
   id: string;
   title: string;
+  webUrl?: string;
 }
 
 export interface ISharePointFieldOption extends IBetterListFieldDescriptor {
@@ -65,7 +68,8 @@ export interface ISharePointFieldOption extends IBetterListFieldDescriptor {
 
 export interface IBetterListPickerDataSource {
   loadLists: () => Promise<readonly ISharePointListOption[]>;
-  loadFields: (listId: string) => Promise<readonly ISharePointFieldOption[]>;
+  resolveListUrl: (value: string) => Promise<ISharePointListOption>;
+  loadFields: (list: ISharePointListOption) => Promise<readonly ISharePointFieldOption[]>;
 }
 
 export interface IBetterListPropertyPaneProps {
@@ -126,7 +130,20 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
   const [lists, setLists] = React.useState<readonly ISharePointListOption[]>([]);
   const [fields, setFields] = React.useState<readonly ISharePointFieldOption[]>([]);
   const [loadingLists, setLoadingLists] = React.useState(false);
-  const [error, setError] = React.useState('');
+  const [resolvingSource, setResolvingSource] = React.useState(false);
+  const [sourceInput, setSourceInput] = React.useState(props.value.sourceListTitle);
+  const [sourceError, setSourceError] = React.useState('');
+  const [listError, setListError] = React.useState('');
+  const [fieldError, setFieldError] = React.useState('');
+  const sourceRequest = React.useRef(0);
+
+  React.useEffect(() => () => {
+    sourceRequest.current += 1;
+  }, []);
+
+  React.useEffect(() => {
+    setSourceInput(props.value.sourceListTitle);
+  }, [props.value.sourceListId, props.value.sourceListTitle, props.value.sourceWebUrl]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -136,12 +153,12 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
       .then((nextLists) => {
         if (!cancelled) {
           setLists(nextLists);
-          setError('');
+          setListError('');
         }
       })
       .catch((loadError: Error) => {
         if (!cancelled) {
-          setError(loadError.message || 'Lists could not be loaded.');
+          setListError(loadError.message || 'Lists could not be loaded.');
         }
       })
       .then(() => {
@@ -166,22 +183,26 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
       return undefined;
     }
     props.pickerDataSource
-      .loadFields(props.value.sourceListId)
+      .loadFields({
+        id: props.value.sourceListId,
+        title: props.value.sourceListTitle,
+        webUrl: props.value.sourceWebUrl || undefined
+      })
       .then((nextFields) => {
         if (!cancelled) {
           setFields(nextFields.filter((field) => !field.hidden));
-          setError('');
+          setFieldError('');
         }
       })
       .catch((loadError: Error) => {
         if (!cancelled) {
-          setError(loadError.message || 'Fields could not be loaded.');
+          setFieldError(loadError.message || 'Fields could not be loaded.');
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [props.pickerDataSource, props.value.sourceListId]);
+  }, [props.pickerDataSource, props.value.sourceListId, props.value.sourceListTitle, props.value.sourceWebUrl]);
 
   const patchValue = (patch: Partial<IBetterListAuthoringState>): void => {
     props.onChange({ ...props.value, ...patch });
@@ -250,11 +271,11 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
     patchTabsWithDerivedMetadata(tabs);
   };
 
-  const selectList = (listId: string): void => {
-    const selected = lists.find((list) => list.id === listId);
+  const applyResolvedList = (selected: ISharePointListOption): void => {
     patchValue({
-      sourceListId: listId,
-      sourceListTitle: selected?.title || '',
+      sourceListId: selected.id,
+      sourceListTitle: selected.title,
+      sourceWebUrl: selected.webUrl || '',
       fieldMappings: {},
       itemProperties: ['Title'],
       itemLayoutRows: [],
@@ -265,6 +286,49 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
       groupIcons: { ...props.value.groupIcons, overrides: [] },
       tabs: createDefaultTabs().slice()
     });
+  };
+
+  const selectList = (listId: string): void => {
+    const selected = lists.find((list) => list.id === listId);
+    if (!selected) {
+      return;
+    }
+    sourceRequest.current += 1;
+    setResolvingSource(false);
+    setSourceError('');
+    setSourceInput(selected.title);
+    applyResolvedList(selected);
+  };
+
+  const resolveSourceInput = async (): Promise<void> => {
+    const input: string = sourceInput.trim();
+    if (!input || lists.some((list) => list.title === input && list.id === props.value.sourceListId)) {
+      setSourceInput(props.value.sourceListTitle);
+      return;
+    }
+    const requestId: number = sourceRequest.current + 1;
+    sourceRequest.current = requestId;
+    setResolvingSource(true);
+    setSourceError('');
+    try {
+      const selected: ISharePointListOption = await props.pickerDataSource.resolveListUrl(input);
+      if (sourceRequest.current !== requestId) {
+        return;
+      }
+      setLists((current) => current.some((list) => list.id === selected.id && list.webUrl === selected.webUrl)
+        ? current
+        : current.concat(selected));
+      setSourceInput(selected.title);
+      applyResolvedList(selected);
+    } catch (loadError) {
+      if (sourceRequest.current === requestId) {
+        setSourceError(loadError instanceof Error ? loadError.message : 'The SharePoint list URL could not be resolved.');
+      }
+    } finally {
+      if (sourceRequest.current === requestId) {
+        setResolvingSource(false);
+      }
+    }
   };
 
   React.useEffect(() => {
@@ -318,18 +382,35 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
         <section className="bl-pane__source-section">
         <label className="bl-pane__field">
           <span className="bl-pane__label">Source list</span>
-          <Dropdown
+          <Combobox
             aria-label="Source list"
+            aria-busy={resolvingSource}
             className="bl-pane__source-dropdown"
-            disabled={loadingLists}
+            freeform
             listbox={{
               className: 'bl-pane__source-listbox',
               style: { maxHeight: 'min(320px, 70vh)', overflowY: 'auto' }
             }}
-            placeholder={loadingLists ? 'Loading lists…' : 'Select a SharePoint list'}
+            placeholder={loadingLists ? 'Loading lists…' : 'Select a list or paste its URL'}
             positioning={{ align: 'start', autoSize: 'height', position: 'below', strategy: 'fixed' }}
             selectedOptions={props.value.sourceListId ? [props.value.sourceListId] : []}
-            value={props.value.sourceListTitle}
+            value={sourceInput}
+            onChange={(event) => {
+              setSourceInput((event.target as HTMLInputElement).value);
+              setSourceError('');
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter') {
+                return;
+              }
+              event.preventDefault();
+              const matchingList = lists.find((list) => list.title === sourceInput);
+              if (matchingList) {
+                selectList(matchingList.id);
+              } else {
+                resolveSourceInput().catch(() => undefined);
+              }
+            }}
             onOptionSelect={(_event, data) => selectList(data.optionValue || '')}
           >
             {lists.map((list) => (
@@ -337,11 +418,12 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
                 {list.title}
               </Option>
             ))}
-          </Dropdown>
+          </Combobox>
         </label>
-        {error && (
+        <p className="bl-pane__help">Choose a discovered list, or paste a same-tenant SharePoint list URL and press Enter.</p>
+        {(sourceError || listError || fieldError) && (
           <div className="bl-pane__error" role="alert">
-            {error}
+            {sourceError || fieldError || listError}
           </div>
         )}
         </section>

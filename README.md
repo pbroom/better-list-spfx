@@ -19,6 +19,26 @@ Accept the prompt to load debug scripts and use the SPFx Debug Toolbar. Replace
 the page path when the site's editable development page is not
 `/SitePages/Home.aspx`.
 
+## Source Lists
+
+The Source list combobox accepts either a list discovered by the current
+SharePoint context or a pasted same-origin SharePoint list URL. URLs are
+resolved to SharePoint list metadata before the list GUID and title are saved;
+invalid, unmatched, or cross-origin URLs do not replace the current selection.
+
+## CSS Isolation
+
+Better List previously contaminated host-page styles because its Griffel rules
+shared the host's class-name namespace and author CSS was injected into the
+document without a containment boundary. The runtime prevents both paths: a
+dedicated `RendererProvider` uses a Better List `classNameHashSalt`, and saved
+author CSS is contained by an instance-rooted `@scope` rule.
+
+Both protections are required. The renderer salt isolates generated Fluent UI
+classes, while `@scope` keeps arbitrary persisted selectors inside this web
+part. Changes to rendering or CSS authoring must retain regression coverage for
+class-name collisions and selectors outside the Better List instance.
+
 ## HTML Templates
 
 The Advanced property pane includes a valid-only HTML editor. A template is a

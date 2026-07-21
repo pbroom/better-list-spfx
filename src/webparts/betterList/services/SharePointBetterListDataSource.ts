@@ -20,6 +20,11 @@ interface IODataPage {
   nextLink?: string;
 }
 
+export interface IParsedSharePointListUrl {
+  webUrl: string;
+  serverRelativeUrl: string;
+}
+
 const INTERNAL_NAME_PATTERN: RegExp = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const GUID_PATTERN: RegExp = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -42,6 +47,45 @@ function toNumber(value: unknown, fallback: number = 0): number {
 
 export function escapeODataString(value: string): string {
   return value.replace(/'/g, "''");
+}
+
+export function parseSharePointListUrl(value: string, currentWebUrl: string): IParsedSharePointListUrl {
+  const input: string = value.trim();
+  if (!input) {
+    throw new Error('Enter a SharePoint list URL.');
+  }
+  const base: URL = new URL(currentWebUrl);
+  if (!/^https:\/\//i.test(input)) {
+    throw new Error('Enter the full HTTPS URL of a SharePoint list.');
+  }
+  let url: URL;
+  try {
+    url = new URL(input);
+  } catch {
+    throw new Error('Enter a valid SharePoint list URL.');
+  }
+  if (url.protocol !== 'https:' || url.origin !== base.origin || url.username || url.password) {
+    throw new Error('The list URL must use HTTPS and belong to this SharePoint tenant.');
+  }
+  let path: string;
+  try {
+    path = decodeURIComponent(url.pathname).replace(/\/+$/, '');
+  } catch {
+    throw new Error('The SharePoint list URL contains invalid path encoding.');
+  }
+  const listsMarker: number = path.toLocaleLowerCase().lastIndexOf('/lists/');
+  if (listsMarker < 0) {
+    throw new Error('Enter a list URL containing /Lists/<list-name>.');
+  }
+  const listName: string = path.slice(listsMarker + '/lists/'.length).split('/')[0]?.trim() || '';
+  if (!listName) {
+    throw new Error('The SharePoint list URL does not include a list name.');
+  }
+  const webPath: string = path.slice(0, listsMarker);
+  return {
+    webUrl: `${base.origin}${webPath}`.replace(/\/$/, ''),
+    serverRelativeUrl: `${webPath}/Lists/${listName}`
+  };
 }
 
 function normalizeGuid(value: string): string {
@@ -178,16 +222,47 @@ export class SharePointBetterListDataSource implements IBetterListDataSource {
   public async discoverLists(): Promise<readonly IBetterListListInfo[]> {
     const select: string = 'Id,Title,ItemCount,BaseTemplate';
     const url: string = `${this._webUrl}/_api/web/lists?$select=${select}&$filter=Hidden eq false and BaseType eq 0&$orderby=Title`;
-    const rows: readonly Record<string, unknown>[] = await this._getAllPages(url);
+    const rows: readonly Record<string, unknown>[] = await this._getAllPages(url, this._webUrl);
     return rows.map((row: Record<string, unknown>): IBetterListListInfo => ({
       id: toStringValue(row.Id),
       title: toStringValue(row.Title),
       itemCount: toNumber(row.ItemCount),
-      baseTemplate: toNumber(row.BaseTemplate)
+      baseTemplate: toNumber(row.BaseTemplate),
+      webUrl: this._webUrl
     }));
   }
 
+  public async resolveListUrl(value: string): Promise<IBetterListListInfo> {
+    const parsed: IParsedSharePointListUrl = parseSharePointListUrl(value, this._webUrl);
+    const listArgument: string = encodeURIComponent(`'${escapeODataString(parsed.serverRelativeUrl)}'`).replace(/'/g, '%27');
+    const select: string = 'Id,Title,ItemCount,BaseType,BaseTemplate,RootFolder/ServerRelativeUrl';
+    const url: string =
+      `${parsed.webUrl}/_api/web/GetList(@listUrl)` +
+      `?@listUrl=${listArgument}&$select=${select}&$expand=RootFolder`;
+    const payload: unknown = await this._getJson(url);
+    const root: Record<string, unknown> = isRecord(payload) ? payload : {};
+    const row: Record<string, unknown> = isRecord(root.d) ? root.d : root;
+    const rootFolder: Record<string, unknown> = isRecord(row.RootFolder) ? row.RootFolder : {};
+    const id: string = toStringValue(row.Id);
+    const title: string = toStringValue(row.Title);
+    if (!id || !title) {
+      throw new Error('SharePoint returned incomplete metadata for that list URL.');
+    }
+    if (toNumber(row.BaseType, -1) !== 0) {
+      throw new Error('The URL must point to a SharePoint list, not a document library.');
+    }
+    return {
+      id,
+      title,
+      itemCount: toNumber(row.ItemCount),
+      baseTemplate: toNumber(row.BaseTemplate),
+      webUrl: parsed.webUrl,
+      serverRelativeUrl: toStringValue(rootFolder.ServerRelativeUrl) || parsed.serverRelativeUrl
+    };
+  }
+
   public async discoverFields(list: IBetterListListReference): Promise<readonly IBetterListFieldInfo[]> {
+    const webUrl: string = this._webUrlFor(list);
     const select: string = [
       'Id',
       'InternalName',
@@ -201,9 +276,9 @@ export class SharePointBetterListDataSource implements IBetterListDataSource {
       'LookupField'
     ].join(',');
     const url: string =
-      `${this._webUrl}/_api/web/${listPath(list)}/fields` +
+      `${webUrl}/_api/web/${listPath(list)}/fields` +
       `?$select=${select}&$filter=Hidden eq false&$orderby=Title`;
-    const rows: readonly Record<string, unknown>[] = await this._getAllPages(url);
+    const rows: readonly Record<string, unknown>[] = await this._getAllPages(url, webUrl);
     return rows.map((row: Record<string, unknown>): IBetterListFieldInfo => ({
       id: toStringValue(row.Id),
       internalName: toStringValue(row.InternalName),
@@ -219,15 +294,16 @@ export class SharePointBetterListDataSource implements IBetterListDataSource {
   }
 
   public async loadItems(request: IBetterListLoadRequest): Promise<IBetterListLoadResult> {
+    const webUrl: string = this._webUrlFor(request.list);
     const parts: { select: readonly string[]; expand: readonly string[] } = queryParts(request.mappings);
     const query: string[] = [`$select=${parts.select.join(',')}`, '$top=5000'];
     if (parts.expand.length > 0) {
       query.push(`$expand=${parts.expand.join(',')}`);
     }
-    const url: string = `${this._webUrl}/_api/web/${listPath(request.list)}/items?${query.join('&')}`;
-    const rows: readonly Record<string, unknown>[] = await this._getAllPages(url);
+    const url: string = `${webUrl}/_api/web/${listPath(request.list)}/items?${query.join('&')}`;
+    const rows: readonly Record<string, unknown>[] = await this._getAllPages(url, webUrl);
     const identity: IBetterListAudienceIdentity = request.mappings.audience
-      ? await this._loadAudienceIdentity()
+      ? await this._loadAudienceIdentity(webUrl)
       : { groupIds: [] };
     const normalized: readonly IBetterListItem[] = rows.map((row: Record<string, unknown>) =>
       normalizeItem(row, request.mappings)
@@ -235,12 +311,12 @@ export class SharePointBetterListDataSource implements IBetterListDataSource {
     return { items: filterVisibleItems(normalized, identity), audienceIdentity: identity };
   }
 
-  private async _loadAudienceIdentity(): Promise<IBetterListAudienceIdentity> {
-    const userUrl: string = `${this._webUrl}/_api/web/currentuser?$select=Id,Title,Email,LoginName,UserPrincipalName`;
-    const groupsUrl: string = `${this._webUrl}/_api/web/currentuser/groups?$select=Id&$top=5000`;
+  private async _loadAudienceIdentity(webUrl: string): Promise<IBetterListAudienceIdentity> {
+    const userUrl: string = `${webUrl}/_api/web/currentuser?$select=Id,Title,Email,LoginName,UserPrincipalName`;
+    const groupsUrl: string = `${webUrl}/_api/web/currentuser/groups?$select=Id&$top=5000`;
     const results: [unknown, readonly Record<string, unknown>[]] = await Promise.all([
       this._getJson(userUrl),
-      this._getAllPages(groupsUrl)
+      this._getAllPages(groupsUrl, webUrl)
     ]);
     const userRoot: Record<string, unknown> = isRecord(results[0]) ? results[0] : {};
     const user: Record<string, unknown> = isRecord(userRoot.d) ? userRoot.d : userRoot;
@@ -255,7 +331,19 @@ export class SharePointBetterListDataSource implements IBetterListDataSource {
     };
   }
 
-  private async _getAllPages(initialUrl: string): Promise<readonly Record<string, unknown>[]> {
+  private _webUrlFor(list: IBetterListListReference): string {
+    if (!list.webUrl?.trim()) {
+      return this._webUrl;
+    }
+    const candidate: URL = new URL(list.webUrl);
+    const base: URL = new URL(this._webUrl);
+    if (candidate.protocol !== 'https:' || candidate.origin !== base.origin || candidate.username || candidate.password) {
+      throw new Error('The source list web must use HTTPS and belong to this SharePoint tenant.');
+    }
+    return `${candidate.origin}${candidate.pathname}`.replace(/\/$/, '');
+  }
+
+  private async _getAllPages(initialUrl: string, webUrl: string): Promise<readonly Record<string, unknown>[]> {
     const rows: Record<string, unknown>[] = [];
     let nextUrl: string | undefined = initialUrl;
     const visited: Set<string> = new Set<string>();
@@ -266,7 +354,7 @@ export class SharePointBetterListDataSource implements IBetterListDataSource {
       visited.add(nextUrl);
       const page: IODataPage = pageFromPayload(await this._getJson(nextUrl));
       rows.push(...page.values);
-      nextUrl = page.nextLink ? absoluteNextLink(page.nextLink, this._webUrl) : undefined;
+      nextUrl = page.nextLink ? absoluteNextLink(page.nextLink, webUrl) : undefined;
     }
     return rows;
   }

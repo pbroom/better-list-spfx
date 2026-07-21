@@ -223,6 +223,8 @@ export interface IBetterListTabConfig {
 export interface IBetterListListReference {
   id?: string;
   title?: string;
+  /** Absolute URL of the SharePoint web containing the list. Empty means the current page web. */
+  webUrl?: string;
 }
 
 export interface IBetterListConfiguration {
@@ -248,6 +250,8 @@ export interface IBetterListListInfo {
   title: string;
   itemCount: number;
   baseTemplate: number;
+  webUrl?: string;
+  serverRelativeUrl?: string;
 }
 
 export interface IBetterListFieldInfo {

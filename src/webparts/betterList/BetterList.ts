@@ -2,6 +2,7 @@ import '@fontsource-variable/geist-mono';
 
 import * as React from 'react';
 import * as ReactDom from 'react-dom';
+import { GriffelRenderer, RendererProvider } from '@griffel/react';
 import { FluentProvider, webDarkTheme, webLightTheme } from '@fluentui/react-components';
 import { IReadonlyTheme } from '@microsoft/sp-component-base';
 import { DisplayMode, Version } from '@microsoft/sp-core-library';
@@ -21,6 +22,7 @@ import {
   defaultBetterListScss,
   defaultBetterListHtmlTemplate,
   formatItemPropertyValue,
+  getBetterListRenderer,
   getItemPropertyUrl,
   groupItems,
   IBetterListFieldMappings,
@@ -57,9 +59,12 @@ import {
   inferBetterListFieldKind
 } from './services';
 
+const BetterListRendererProvider = RendererProvider as unknown as React.ComponentType<{ renderer: GriffelRenderer }>;
+
 export interface IBetterListWebPartProps {
   sourceListId: string;
   sourceListTitle: string;
+  sourceWebUrl: string;
   fieldMappingsJson: string;
   itemPropertiesJson: string;
   itemLayoutJson: string;
@@ -144,16 +149,20 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
 
     ReactDom.render(
       React.createElement(
-        FluentProvider,
-        {
-          className: wrapperClassName,
-          targetDocument: this.domElement.ownerDocument,
-          theme: this._isDarkTheme ? webDarkTheme : webLightTheme
-        },
-        this.properties.customCss
-          ? React.createElement('style', undefined, scopeBetterListStyles(this.properties.customCss, `.${wrapperClassName}`))
-          : undefined,
-        view
+        BetterListRendererProvider,
+        { renderer: getBetterListRenderer(this.domElement.ownerDocument) },
+        React.createElement(
+          FluentProvider,
+          {
+            className: wrapperClassName,
+            targetDocument: this.domElement.ownerDocument,
+            theme: this._isDarkTheme ? webDarkTheme : webLightTheme
+          },
+          this.properties.customCss
+            ? React.createElement('style', undefined, scopeBetterListStyles(this.properties.customCss, `.${wrapperClassName}`))
+            : undefined,
+          view
+        )
       ),
       this.domElement
     );
@@ -162,6 +171,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
   protected async onInit(): Promise<void> {
     this.properties.sourceListId = this.properties.sourceListId || '';
     this.properties.sourceListTitle = this.properties.sourceListTitle || '';
+    this.properties.sourceWebUrl = this.properties.sourceWebUrl || '';
     this.properties.fieldMappingsJson = this.properties.fieldMappingsJson || '{}';
     this.properties.itemPropertiesJson = this.properties.itemPropertiesJson || serializeItemPropertyFields(['Title']);
     this.properties.itemLayoutJson = this.properties.itemLayoutJson || '[]';
@@ -186,10 +196,15 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     this._pickerDataSource = {
       loadLists: async () => {
         const lists = await this._dataSource.discoverLists();
-        return lists.map((list) => ({ id: list.id, title: list.title }));
+        return lists.map((list) => ({ id: list.id, title: list.title, webUrl: list.webUrl }));
       },
-      loadFields: async (listId: string) => {
-        const fields = await this._dataSource.discoverFields({ id: listId });
+      resolveListUrl: async (value: string) => {
+        const list = await this._dataSource.resolveListUrl(value);
+        return { id: list.id, title: list.title, webUrl: list.webUrl };
+      },
+      loadFields: async (list) => {
+        const listReference = { id: list.id, title: list.title, webUrl: list.webUrl };
+        const fields = await this._dataSource.discoverFields(listReference);
         const lookupListIds = Array.from(
           new Set(
             fields.map((field) => field.lookupListId).filter((lookupListId): lookupListId is string => Boolean(lookupListId))
@@ -200,7 +215,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
             try {
               return {
                 lookupListId,
-                fields: await this._dataSource.discoverFields({ id: lookupListId })
+                fields: await this._dataSource.discoverFields({ id: lookupListId, webUrl: list.webUrl })
               };
             } catch {
               return { lookupListId, fields: [] };
@@ -259,18 +274,22 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
         key: 'better-list-property-pane',
         onRender: (domElement, _context, changeCallback): void => {
           ReactDom.render(
-            React.createElement(BetterListPropertyPane, {
-              activeTabId: this._activeTabKey,
-              value: this._createAuthoringState(),
-              pickerDataSource: this._pickerDataSource,
-              imageAssetProvider: this._imageAssetProvider,
-              onChange: (value): void => this._applyAuthoringState(value, changeCallback),
-              onActiveTabChange: (tabId: string): void => {
-                this._activeTabKey = tabId;
-                this.render();
-                this.context.propertyPane.refresh();
-              }
-            }),
+            React.createElement(
+              BetterListRendererProvider,
+              { renderer: getBetterListRenderer(domElement.ownerDocument) },
+              React.createElement(BetterListPropertyPane, {
+                activeTabId: this._activeTabKey,
+                value: this._createAuthoringState(),
+                pickerDataSource: this._pickerDataSource,
+                imageAssetProvider: this._imageAssetProvider,
+                onChange: (value): void => this._applyAuthoringState(value, changeCallback),
+                onActiveTabChange: (tabId: string): void => {
+                  this._activeTabKey = tabId;
+                  this.render();
+                  this.context.propertyPane.refresh();
+                }
+              })
+            ),
             domElement
           );
         },
@@ -289,6 +308,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     return {
       sourceListId: this.properties.sourceListId,
       sourceListTitle: this.properties.sourceListTitle,
+      sourceWebUrl: this.properties.sourceWebUrl,
       fieldMappings: this._readMappings(),
       itemProperties: itemLayout.itemProperties,
       itemLayoutRows: itemLayout.rows,
@@ -310,6 +330,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     const next = {
       sourceListId: value.sourceListId,
       sourceListTitle: value.sourceListTitle,
+      sourceWebUrl: value.sourceWebUrl,
       fieldMappingsJson: JSON.stringify(value.fieldMappings),
       itemPropertiesJson: serializeItemPropertyFields(value.itemProperties),
       itemLayoutJson: serializeItemLayoutConfiguration(
@@ -330,6 +351,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     const reloadRequired =
       next.sourceListId !== this.properties.sourceListId ||
       next.sourceListTitle !== this.properties.sourceListTitle ||
+      next.sourceWebUrl !== this.properties.sourceWebUrl ||
       next.fieldMappingsJson !== this.properties.fieldMappingsJson ||
       next.itemPropertiesJson !== this.properties.itemPropertiesJson ||
       next.itemLayoutJson !== this.properties.itemLayoutJson ||
@@ -391,7 +413,11 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     this.render();
     try {
       const result = await this._dataSource.loadItems({
-        list: { id: this.properties.sourceListId, title: this.properties.sourceListTitle },
+        list: {
+          id: this.properties.sourceListId,
+          title: this.properties.sourceListTitle,
+          webUrl: this.properties.sourceWebUrl || undefined
+        },
         mappings: addTabFilterMappings(this._readMappings() as IBetterListFieldMappings, this._readTabs())
       });
       this._items = result.items;

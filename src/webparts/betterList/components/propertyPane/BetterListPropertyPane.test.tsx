@@ -1,5 +1,7 @@
 import * as React from 'react';
+import * as ReactDom from 'react-dom';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { act, Simulate } from 'react-dom/test-utils';
 
 import {
   createDefaultTabs,
@@ -9,28 +11,32 @@ import {
 import { BetterListPropertyPane, IBetterListAuthoringState } from './BetterListPropertyPane';
 
 describe('BetterListPropertyPane', () => {
+  const createValue = (): IBetterListAuthoringState => ({
+    sourceListId: 'services',
+    sourceListTitle: 'Services',
+    sourceWebUrl: 'https://contoso.sharepoint.com/sites/example',
+    fieldMappings: {},
+    itemProperties: ['Title'],
+    itemLayoutRows: [],
+    itemElementLinks: {},
+    tabsColumn: '',
+    groupsColumn: '',
+    groupsCollapsible: true,
+    groupIcons: parseBetterListGroupIconsConfiguration(undefined),
+    tabs: createDefaultTabs().slice(),
+    customCss: '',
+    htmlTemplate: defaultBetterListHtmlTemplate
+  });
+
   it('owns its Fluent boundary and renders the production-compatible pane shell', () => {
-    const value: IBetterListAuthoringState = {
-      sourceListId: 'services',
-      sourceListTitle: 'Services',
-      fieldMappings: {},
-      itemProperties: ['Title'],
-      itemLayoutRows: [],
-      itemElementLinks: {},
-      tabsColumn: '',
-      groupsColumn: '',
-      groupsCollapsible: true,
-      groupIcons: parseBetterListGroupIconsConfiguration(undefined),
-      tabs: createDefaultTabs().slice(),
-      customCss: '',
-      htmlTemplate: defaultBetterListHtmlTemplate
-    };
+    const value: IBetterListAuthoringState = createValue();
 
     const html = renderToStaticMarkup(
       <BetterListPropertyPane
         pickerDataSource={{
           loadFields: async () => [],
-          loadLists: async () => [{ id: 'services', title: 'Services' }]
+          loadLists: async () => [{ id: 'services', title: 'Services' }],
+          resolveListUrl: async () => ({ id: 'services', title: 'Services' })
         }}
         value={value}
         onChange={() => undefined}
@@ -38,7 +44,7 @@ describe('BetterListPropertyPane', () => {
     );
 
     expect(html).toContain('fui-FluentProvider');
-    expect(html).toContain('fui-Dropdown');
+    expect(html).toContain('fui-Combobox');
     expect(html).toContain('bl-pane__source-dropdown');
     expect(html).toContain('--bl-font-mono: &quot;Geist Mono Variable&quot;');
     expect(html).toContain('data-property-pane-section-heading="true"');
@@ -53,5 +59,50 @@ describe('BetterListPropertyPane', () => {
     expect(html).toContain('>CSS/SCSS</button>');
     expect(html).toContain('>HTML template</button>');
     expect(html).toContain('aria-label="Split"');
+  });
+
+  it('resolves a pasted URL before replacing the selected list', async () => {
+    const container = document.createElement('div');
+    const onChange = jest.fn();
+    const listUrl = 'https://contoso.sharepoint.com/sites/example/sub/Lists/Team%20Services/AllItems.aspx';
+    await act(async () => {
+      ReactDom.render(
+        <BetterListPropertyPane
+          pickerDataSource={{
+            loadFields: async () => [],
+            loadLists: async () => [{ id: 'services', title: 'Services' }],
+            resolveListUrl: async () => ({
+              id: 'c3fa8d8c-2270-4dc4-9f7e-1f83fef461fd',
+              title: 'Team Services',
+              webUrl: 'https://contoso.sharepoint.com/sites/example/sub'
+            })
+          }}
+          value={createValue()}
+          onChange={onChange}
+        />,
+        container
+      );
+      await Promise.resolve();
+    });
+    const input = container.querySelector<HTMLInputElement>('input[aria-label="Source list"]');
+    expect(input).not.toBeNull();
+
+    await act(async () => {
+      (input as HTMLInputElement).value = listUrl;
+      Simulate.change(input as HTMLInputElement);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      Simulate.keyDown(input as HTMLInputElement, { key: 'Enter' });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
+      sourceListId: 'c3fa8d8c-2270-4dc4-9f7e-1f83fef461fd',
+      sourceListTitle: 'Team Services',
+      sourceWebUrl: 'https://contoso.sharepoint.com/sites/example/sub'
+    }));
+    ReactDom.unmountComponentAtNode(container);
   });
 });
