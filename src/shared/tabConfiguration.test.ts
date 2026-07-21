@@ -14,6 +14,7 @@ describe('Better List tab configuration', () => {
         label: 'Communications',
         filter: { kind: 'equals' as const, field: 'category' as const, value: 'Communications' },
         tabIcon: 'communications' as const,
+        tabIconOverride: { kind: 'icon' as const, library: 'solar-duotone' as const, name: 'star-bold-duotone', color: '#245a8d' },
         showItemCount: true,
         maxItems: 6,
         group: { field: 'organization' as const },
@@ -25,7 +26,39 @@ describe('Better List tab configuration', () => {
 
     const parsed = parseTabConfiguration(serializeTabConfiguration(tabs));
     expect(parsed).toHaveLength(2);
-    expect(parsed[1]).toMatchObject({ tabIcon: 'communications', showItemCount: true, maxItems: 6 });
+    expect(parsed[1]).toMatchObject({
+      tabIcon: 'communications',
+      tabIconOverride: { kind: 'icon', library: 'solar-duotone', name: 'star-bold-duotone', color: '#245a8d' },
+      showItemCount: true,
+      maxItems: 6
+    });
+  });
+
+  it('normalizes rich tab icons and drops unsafe image choices', () => {
+    const parsed = parseTabConfiguration(JSON.stringify([
+      {
+        id: 'image',
+        label: 'Image',
+        filter: { kind: 'all' },
+        tabIconOverride: { kind: 'image', url: '/sites/example/SiteAssets/icon.png' }
+      },
+      {
+        id: 'unsafe',
+        label: 'Unsafe',
+        filter: { kind: 'all' },
+        tabIconOverride: { kind: 'image', url: 'ftp://example.com/icon.png' }
+      },
+      {
+        id: 'none',
+        label: 'None',
+        filter: { kind: 'all' },
+        tabIconOverride: { kind: 'none' }
+      }
+    ]));
+
+    expect(parsed[0].tabIconOverride).toEqual({ kind: 'image', url: '/sites/example/SiteAssets/icon.png' });
+    expect(parsed[1].tabIconOverride).toBeUndefined();
+    expect(parsed[2].tabIconOverride).toEqual({ kind: 'none' });
   });
 
   it('uses defaults when no serialized configuration exists', () => {

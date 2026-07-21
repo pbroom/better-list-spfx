@@ -24,6 +24,7 @@ import {
   BetterListFieldMapping,
   BetterListFieldKind,
   BetterListFieldSlot,
+  BetterListGroupIconOverride,
   BetterListTabIcon,
   BetterListFilter,
   IBetterListQueryField,
@@ -36,6 +37,15 @@ import {
   getBetterListQuerySuggestions,
   parseBetterListFilterQuery
 } from '../../../../shared/filterQuery';
+import { BetterListIconVisual } from '../GroupIconCatalog';
+import type { ISharePointImageAssetProvider } from '../../services';
+
+const IconPickerDialog = React.lazy(async () => {
+  const module = await import(
+    /* webpackChunkName: 'better-list-group-icon-picker' */ '../GroupIconPickerDialog'
+  );
+  return { default: module.IconPickerDialog };
+});
 
 export interface IBetterListTabFilterField {
   id: string;
@@ -48,23 +58,18 @@ export interface IBetterListTabFilterField {
 
 export interface ITabBuilderProps {
   fields: readonly IBetterListTabFilterField[];
+  imageAssetProvider?: ISharePointImageAssetProvider;
   showAddAction?: boolean;
   tabs: readonly IBetterListTabConfig[];
   onChange: (tabs: readonly IBetterListTabConfig[]) => void;
 }
 
-const ICON_OPTIONS: readonly { value: BetterListTabIcon; label: string }[] = [
-  { value: 'list', label: 'List' },
-  { value: 'communications', label: 'Communications' },
-  { value: 'policy', label: 'Document' },
-  { value: 'support', label: 'Support' }
-];
-
 const reorderInstructions = 'Drag to reorder. Press Alt+Arrow Up or Alt+Arrow Down to move.';
 
-export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({ fields, showAddAction = true, tabs, onChange }) => {
+export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({ fields, imageAssetProvider, showAddAction = true, tabs, onChange }) => {
   const [closedTabIds, setClosedTabIds] = React.useState<ReadonlySet<string>>(() => new Set<string>());
   const [activeTabId, setActiveTabId] = React.useState<string>();
+  const [iconPickerTabId, setIconPickerTabId] = React.useState<string>();
   const openTabIds = tabs.filter((tab) => !closedTabIds.has(tab.id)).map((tab) => tab.id);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
@@ -178,20 +183,17 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({ fields, 
                   </label>
 
                   <div className="bl-tabs-builder__grid">
-                    <label className="bl-tabs-builder__field">
+                    <div className="bl-tabs-builder__field">
                       <span>Icon</span>
-                      <select
-                        value={tab.tabIcon || ''}
-                        onChange={(event) => patchTab(index, { tabIcon: (event.currentTarget.value || undefined) as BetterListTabIcon | undefined })}
+                      <Button
+                        appearance="secondary"
+                        className="bl-tabs-builder__icon-picker"
+                        icon={renderTabIcon(tab.tabIconOverride, tab.tabIcon)}
+                        onClick={() => setIconPickerTabId(tab.id)}
                       >
-                        <option value="">No icon</option>
-                        {ICON_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                        {tabIconLabel(tab.tabIconOverride, tab.tabIcon)}
+                      </Button>
+                    </div>
                     <label className="bl-tabs-builder__field">
                       <span>Maximum items</span>
                       <input
@@ -244,9 +246,57 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({ fields, 
           </Portal>
         ) : null}
       </DndContext>
+      {iconPickerTabId ? (
+        <React.Suspense fallback={null}>
+          <IconPickerDialog
+            current={tabIconOverride(tabs.find((tab) => tab.id === iconPickerTabId))}
+            groupTitle={tabs.find((tab) => tab.id === iconPickerTabId)?.label || 'tab'}
+            imageAssetProvider={imageAssetProvider}
+            open
+            showAutomaticAction={false}
+            onApply={(override) => {
+              onChange(tabs.map((tab) => tab.id === iconPickerTabId
+                ? { ...tab, tabIcon: undefined, tabIconOverride: override }
+                : tab));
+            }}
+            onOpenChange={(open) => {
+              if (!open) setIconPickerTabId(undefined);
+            }}
+          />
+        </React.Suspense>
+      ) : null}
     </div>
   );
 };
+
+const legacyTabIconOverrides: Record<BetterListTabIcon, BetterListGroupIconOverride> = {
+  list: { kind: 'icon', library: 'fluent', name: 'apps-list-detail' },
+  communications: { kind: 'icon', library: 'fluent', name: 'megaphone' },
+  policy: { kind: 'icon', library: 'fluent', name: 'document-text' },
+  support: { kind: 'icon', library: 'fluent', name: 'headset' }
+};
+
+function tabIconOverride(tab: IBetterListTabConfig | undefined): BetterListGroupIconOverride | undefined {
+  return tab?.tabIconOverride || (tab?.tabIcon ? legacyTabIconOverrides[tab.tabIcon] : undefined);
+}
+
+function renderTabIcon(override: BetterListGroupIconOverride | undefined, legacy?: BetterListTabIcon): React.ReactElement {
+  const current = override || (legacy ? legacyTabIconOverrides[legacy] : undefined);
+  return current && current.kind !== 'none'
+    ? <BetterListIconVisual override={current} />
+    : <DismissRegular aria-hidden="true" />;
+}
+
+function tabIconLabel(override: BetterListGroupIconOverride | undefined, legacy?: BetterListTabIcon): string {
+  const current = override || (legacy ? legacyTabIconOverrides[legacy] : undefined);
+  if (!current || current.kind === 'none') return 'No icon';
+  if (current.kind === 'image') return 'Image';
+  return current.name
+    .replace(/-(?:20|24|32)-(?:regular|filled)$/i, '')
+    .split('-')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
 
 interface ISortableTabCardProps {
   children?: React.ReactNode;
@@ -568,6 +618,8 @@ const tabBuilderCss = `
 .bl-tabs-builder .bl-tabs-builder__remove { color: ${tokens.colorNeutralForeground3}; height: 28px; min-height: 28px; min-width: 28px; padding: 0; transition: opacity 100ms ease-out; width: 28px; }
 .bl-tabs-builder__field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .bl-tabs-builder__field > span, .bl-tabs-builder__filter legend { color: #424242; font-weight: 600; }
+.bl-tabs-builder .bl-tabs-builder__icon-picker { justify-content: flex-start; min-height: 32px; width: 100%; }
+.bl-tabs-builder .bl-tabs-builder__icon-picker svg, .bl-tabs-builder .bl-tabs-builder__icon-picker img { height: 20px; object-fit: contain; width: 20px; }
 .bl-tabs-builder input:not([type="checkbox"]), .bl-tabs-builder select { background: #fff; border: 1px solid #8a8886; border-radius: 4px; color: #242424; font: inherit; min-height: 32px; padding: 5px 8px; width: 100%; }
 .bl-tabs-builder input:focus, .bl-tabs-builder select:focus { outline: 2px solid #0f6cbd; outline-offset: 1px; }
 .bl-tabs-builder__grid { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); margin-top: 8px; }

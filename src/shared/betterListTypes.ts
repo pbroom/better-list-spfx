@@ -1,5 +1,7 @@
 /* eslint-disable @rushstack/no-new-null */
 
+import type { BetterListGroupIconOverride } from './groupIconConfiguration';
+
 export type BetterListFieldSlot =
   | 'title'
   | 'description'
@@ -183,6 +185,8 @@ export interface IBetterListTabConfig {
   label: string;
   filter: BetterListFilter;
   tabIcon?: BetterListTabIcon;
+  /** Rich tab icon chosen from the shared icon picker. Takes precedence over the legacy tabIcon value. */
+  tabIconOverride?: BetterListGroupIconOverride;
   showItemCount?: boolean;
   maxItems?: number;
   group?: IBetterListGroup;

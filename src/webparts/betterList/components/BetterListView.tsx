@@ -45,7 +45,7 @@ import {
   resolveBetterListTemplate,
   substituteBetterListTokens
 } from '../../../shared';
-import { BetterListGroupIconVisual } from './GroupIconCatalog';
+import { BetterListGroupIconVisual, BetterListIconVisual } from './GroupIconCatalog';
 import type { ISharePointImageAssetProvider } from '../services';
 
 const GroupIconPickerDialog = React.lazy(async () => {
@@ -72,6 +72,7 @@ export interface IBetterListTab {
   key: string;
   label: string;
   icon?: BetterListTabIcon;
+  iconOverride?: BetterListGroupIconOverride;
   itemCount?: number;
   maxItems?: number;
   showItemCount?: boolean;
@@ -167,6 +168,11 @@ const useStyles = makeStyles({
   },
   tab: {
     minHeight: '48px'
+  },
+  tabIcon: {
+    width: '20px',
+    height: '20px',
+    objectFit: 'contain'
   },
   search: {
     width: 'min(100%, 440px)',
@@ -317,6 +323,17 @@ const TAB_ICON_BY_KIND: Record<BetterListTabIcon, FluentIcon> = {
   policy: DocumentTextRegular,
   support: HeadsetRegular
 };
+
+function renderTabIcon(tab: IBetterListTab, className: string): React.ReactElement | undefined {
+  if (tab.iconOverride) {
+    return tab.iconOverride.kind === 'none'
+      ? undefined
+      : <BetterListIconVisual className={className} override={tab.iconOverride} />;
+  }
+  return tab.icon
+    ? React.createElement(TAB_ICON_BY_KIND[tab.icon], { 'aria-hidden': true })
+    : undefined;
+}
 
 let betterListInstanceCount = 0;
 
@@ -984,7 +1001,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
             {tabs.map((tab) => (
               <Tab
                 className={mergeClasses(classes.tab, 'better-list__tab')}
-                icon={tab.icon ? React.createElement(TAB_ICON_BY_KIND[tab.icon], { 'aria-hidden': true }) : undefined}
+                icon={renderTabIcon(tab, classes.tabIcon)}
                 key={tab.key}
                 value={tab.key}
               >

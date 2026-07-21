@@ -106,7 +106,7 @@ export function parseBetterListGroupIconsConfiguration(value: string | undefined
         return;
       }
       const groupKey = entry.groupKey.trim().toLocaleLowerCase();
-      const icon = readGroupIconOverride(entry.icon);
+      const icon = normalizeBetterListIconOverride(entry.icon);
       if (!groupKey || !icon || seen.has(groupKey)) {
         return;
       }
@@ -160,7 +160,7 @@ export function updateBetterListGroupIconOverride(
   };
 }
 
-function readGroupIconOverride(value: unknown): BetterListGroupIconOverride | undefined {
+export function normalizeBetterListIconOverride(value: unknown): BetterListGroupIconOverride | undefined {
   if (!isRecord(value) || typeof value.kind !== 'string') {
     return undefined;
   }
