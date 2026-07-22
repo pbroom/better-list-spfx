@@ -9,6 +9,7 @@ import {
   DialogTitle,
   Field,
   Input,
+  PortalMountNodeProvider,
   SelectTabData,
   SelectTabEvent,
   Spinner,
@@ -18,7 +19,8 @@ import {
   makeStyles,
   mergeClasses,
   shorthands,
-  tokens
+  tokens,
+  useFluent
 } from '@fluentui/react-components';
 import { ImageRegular, SearchRegular } from '@fluentui/react-icons';
 
@@ -26,6 +28,8 @@ import {
   BetterListGroupIconLibrary,
   BetterListGroupIconOverride,
   betterListFluentSurfaceClassName,
+  ensureBetterListRuntimeStyles,
+  getBetterListPortalMountNode,
   normalizeBetterListGroupImageUrl
 } from '../../../shared';
 import {
@@ -56,13 +60,16 @@ const useStyles = makeStyles({
   surface: {
     width: 'min(760px, calc(100vw - 32px))',
     maxWidth: '760px',
-    maxHeight: 'calc(100vh - 32px)'
+    maxHeight: 'calc(100vh - 32px)',
+    overflow: 'hidden'
   },
   content: {
     display: 'flex',
     flexDirection: 'column',
     rowGap: '16px',
-    minHeight: '0'
+    minHeight: '0',
+    overflowY: 'auto',
+    overscrollBehavior: 'contain'
   },
   search: {
     width: '100%'
@@ -185,6 +192,8 @@ export const GroupIconPickerDialog: React.FunctionComponent<IGroupIconPickerDial
   showAutomaticAction = true
 }) => {
   const classes = useStyles();
+  const { targetDocument } = useFluent();
+  const portalMountNode = getBetterListPortalMountNode(targetDocument);
   const [view, setView] = React.useState<PickerView>('solar-duotone');
   const [query, setQuery] = React.useState('');
   const [draft, setDraft] = React.useState<BetterListGroupIconOverride | undefined>(current);
@@ -197,6 +206,12 @@ export const GroupIconPickerDialog: React.FunctionComponent<IGroupIconPickerDial
   const [catalogAttempt, setCatalogAttempt] = React.useState(0);
   const [visibleCount, setVisibleCount] = React.useState(80);
   const resultsRef = React.useRef<HTMLDivElement>(null);
+
+  React.useLayoutEffect(() => {
+    if (open && targetDocument) {
+      ensureBetterListRuntimeStyles(targetDocument);
+    }
+  }, [open, targetDocument]);
 
   React.useEffect(() => {
     if (!open) {
@@ -281,6 +296,7 @@ export const GroupIconPickerDialog: React.FunctionComponent<IGroupIconPickerDial
   };
 
   return (
+    <PortalMountNodeProvider value={portalMountNode}>
     <Dialog modalType="modal" open={open} onOpenChange={(_event, data) => onOpenChange(data.open)}>
       <DialogSurface className={mergeClasses(classes.surface, betterListFluentSurfaceClassName)}>
         <DialogBody>
@@ -437,6 +453,7 @@ export const GroupIconPickerDialog: React.FunctionComponent<IGroupIconPickerDial
         </DialogBody>
       </DialogSurface>
     </Dialog>
+    </PortalMountNodeProvider>
   );
 };
 

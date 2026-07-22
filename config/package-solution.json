@@ -3,7 +3,7 @@
   "solution": {
     "name": "Better List",
     "id": "f1622b36-0843-4eb0-aca9-df6ac57a15c4",
-    "version": "0.1.8.0",
+    "version": "0.1.9.0",
     "includeClientSideAssets": false,
     "skipFeatureDeployment": false,
     "isDomainIsolated": false,
@@ -12,7 +12,7 @@
         "title": "Better List Feature",
         "description": "Activates Better List.",
         "id": "9d450128-f3c7-4945-b80e-4309841074a0",
-        "version": "0.1.8.0"
+        "version": "0.1.9.0"
       }
     ]
   },

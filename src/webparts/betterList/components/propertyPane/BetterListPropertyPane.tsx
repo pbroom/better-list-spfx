@@ -7,6 +7,7 @@ import {
   FluentProvider,
   Input,
   Option,
+  PortalMountNodeProvider,
   Switch,
   tokens,
   webLightTheme
@@ -28,6 +29,8 @@ import {
   BetterListItemLayoutRows,
   BetterListItemElementLinks,
   betterListFluentSurfaceClassName,
+  createBetterListPortalPositioning,
+  getBetterListPortalMountNode,
   IBetterListFieldDescriptor,
   IBetterListFieldMappings,
   IBetterListGroupIconsConfiguration,
@@ -432,13 +435,16 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
   const tabFilterFields = createTabFilterFields(props.value.fieldMappings, fields);
   const groupFilterFields = createGroupFilterFields(fields, activeGrouping.column);
   const groupQueryFields = groupFilterFields.map(toGroupQueryField);
+  const targetDocument = props.targetDocument || (typeof document !== 'undefined' ? document : undefined);
+  const portalMountNode = getBetterListPortalMountNode(targetDocument);
 
   return (
     <FluentProvider
       className="bl-pane-provider"
-      targetDocument={props.targetDocument || document}
+      targetDocument={targetDocument}
       theme={webLightTheme}
     >
+      <PortalMountNodeProvider value={portalMountNode}>
       <div className="bl-pane">
         <style>{propertyPaneCss}</style>
         <section className="bl-pane__source-section">
@@ -468,12 +474,13 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
             aria-busy={resolvingSource}
             className="bl-pane__source-dropdown"
             freeform
+            mountNode={portalMountNode}
             listbox={{
               className: `bl-pane__source-listbox ${betterListFluentSurfaceClassName}`,
               style: { maxHeight: 'min(320px, 70vh)', overflowY: 'auto' }
             }}
             placeholder={loadingLists ? 'Loading lists…' : 'Select a list or paste its URL'}
-            positioning={{ align: 'start', autoSize: 'height', position: 'below', strategy: 'fixed' }}
+            positioning={createBetterListPortalPositioning(targetDocument)}
             selectedOptions={props.value.sourceListId ? [props.value.sourceListId] : []}
             value={sourceInput}
             onChange={(event) => {
@@ -560,7 +567,12 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
           <span className="bl-pane__label">Grouping column</span>
           <Dropdown
             aria-label="Grouping column"
-            listbox={{ className: betterListFluentSurfaceClassName }}
+            listbox={{
+              className: betterListFluentSurfaceClassName,
+              style: { maxHeight: 'min(360px, calc(100vh - 16px))', overflowY: 'auto' }
+            }}
+            mountNode={portalMountNode}
+            positioning={createBetterListPortalPositioning(targetDocument)}
             selectedOptions={[activeGrouping.column || noGroupingValue]}
             value={selectedGroupingOption?.label || 'No grouping'}
             onOptionSelect={(_event, data) =>
@@ -661,6 +673,7 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
             />
           )}
           fields={fields}
+          targetDocument={targetDocument}
           value={{
             itemProperties: activeItemLayout.itemProperties,
             rows: activeItemLayout.rows,
@@ -702,6 +715,7 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
           />
         </PropertyPaneSection>
       </div>
+      </PortalMountNodeProvider>
     </FluentProvider>
   );
 };

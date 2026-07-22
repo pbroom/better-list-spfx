@@ -38,7 +38,8 @@ import {
   Portal,
   makeStyles,
   mergeClasses,
-  tokens
+  tokens,
+  useFluent
 } from '@fluentui/react-components';
 import {
   AddRegular,
@@ -59,9 +60,11 @@ import {
   betterListMaxItemRows,
   BetterListItemElementLinks,
   BetterListItemLayoutRows,
+  createBetterListPortalPositioning,
   flattenItemLayoutRows,
   getBetterListFieldPathLabel,
   getBetterListFieldTargetFields,
+  getBetterListPortalMountNode,
   IBetterListFieldDescriptor,
   isBetterListLookupLikeField,
   normalizeItemElementLinks,
@@ -85,6 +88,7 @@ interface IItemLinkFieldOption {
 export interface IItemPropertyBuilderProps {
   context?: React.ReactNode;
   fields: readonly IBetterListFieldDescriptor[];
+  targetDocument?: Document;
   value: IItemLayoutBuilderValue;
   onChange: (value: IItemLayoutBuilderValue) => void;
 }
@@ -98,10 +102,32 @@ export interface IColumnPickerMenuProps {
   selectedPaths?: ReadonlySet<string>;
   addRowDisabled?: boolean;
   onAddRow?: () => void;
+  targetDocument?: Document;
 }
 
 const itemLayoutRowIdPrefix = 'item-layout-row-';
 const noItemLinkValue = '__no_item_link__';
+const BetterListAuthoringDocumentContext = React.createContext<Document | undefined>(undefined);
+
+function useBetterListAuthoringSurface(explicitDocument?: Document): {
+  mountNode: HTMLElement | undefined;
+  rootPositioning: ReturnType<typeof createBetterListPortalPositioning>;
+  submenuPositioning: ReturnType<typeof createBetterListPortalPositioning>;
+  targetDocument: Document | undefined;
+} {
+  const contextDocument = React.useContext(BetterListAuthoringDocumentContext);
+  const fluent = useFluent();
+  const targetDocument = explicitDocument || contextDocument || fluent.targetDocument;
+  return React.useMemo(
+    () => ({
+      mountNode: getBetterListPortalMountNode(targetDocument),
+      rootPositioning: createBetterListPortalPositioning(targetDocument),
+      submenuPositioning: createBetterListPortalPositioning(targetDocument, 'submenu'),
+      targetDocument
+    }),
+    [targetDocument]
+  );
+}
 
 function isItemLayoutRowId(id: string | number): boolean {
   return String(id).startsWith(itemLayoutRowIdPrefix);
@@ -254,6 +280,9 @@ const useStyles = makeStyles({
   menuPopover: {
     width: '260px',
     maxWidth: 'calc(100vw - 32px)',
+    maxHeight: 'min(480px, calc(100vh - 16px))',
+    overflowY: 'auto',
+    overscrollBehavior: 'contain',
     backgroundColor: tokens.colorNeutralBackground1,
     border: `1px solid ${tokens.colorNeutralStroke2}`,
     borderRadius: tokens.borderRadiusMedium,
@@ -267,6 +296,7 @@ const useStyles = makeStyles({
 export const ItemPropertyBuilder: React.FunctionComponent<IItemPropertyBuilderProps> = ({
   context,
   fields,
+  targetDocument,
   value,
   onChange
 }) => {
@@ -517,6 +547,7 @@ export const ItemPropertyBuilder: React.FunctionComponent<IItemPropertyBuilderPr
   }, []);
 
   return (
+    <BetterListAuthoringDocumentContext.Provider value={targetDocument}>
     <PropertyPaneSection
       action={
         <ColumnPickerMenu
@@ -527,6 +558,7 @@ export const ItemPropertyBuilder: React.FunctionComponent<IItemPropertyBuilderPr
           onSelect={addField}
           onAddRow={addRow}
           selectedPaths={selected}
+          targetDocument={targetDocument}
         />
       }
       divider={false}
@@ -597,6 +629,7 @@ export const ItemPropertyBuilder: React.FunctionComponent<IItemPropertyBuilderPr
           </DndContext>
         )}
     </PropertyPaneSection>
+    </BetterListAuthoringDocumentContext.Provider>
   );
 };
 
@@ -605,8 +638,9 @@ const ItemPropertyDragOverlay: React.FunctionComponent<{
   fieldPath: string | undefined;
 }> = ({ field, fieldPath }) => {
   const classes = useStyles();
+  const surface = useBetterListAuthoringSurface();
   return (
-    <Portal>
+    <Portal mountNode={surface.mountNode}>
       <DragOverlay adjustScale={false} dropAnimation={null} zIndex={1000000}>
         {fieldPath ? (
           <div
@@ -792,6 +826,7 @@ const ItemPropertyLinkMenu: React.FunctionComponent<{
   onChange: (linkFieldPath: string) => void;
 }> = ({ fieldLabel, linkFieldPath, linkFields, onChange }) => {
   const classes = useStyles();
+  const surface = useBetterListAuthoringSurface();
   const selected = linkFields.find((option) => option.fieldPath === linkFieldPath);
   const currentLinkLabel = selected?.label || linkFieldPath;
   const ariaLabel = currentLinkLabel
@@ -801,6 +836,8 @@ const ItemPropertyLinkMenu: React.FunctionComponent<{
   return (
     <Menu
       checkedValues={{ itemLink: [linkFieldPath || noItemLinkValue] }}
+      mountNode={surface.mountNode}
+      positioning={surface.rootPositioning}
       onCheckedValueChange={(_event, data) => {
         const nextValue = data.checkedItems[0];
         onChange(nextValue === noItemLinkValue ? '' : nextValue || '');
@@ -848,9 +885,11 @@ export function ColumnPickerMenu({
   onSelect,
   selectedPaths,
   addRowDisabled = false,
-  onAddRow
+  onAddRow,
+  targetDocument
 }: IColumnPickerMenuProps): React.ReactElement {
   const classes = useStyles();
+  const surface = useBetterListAuthoringSurface(targetDocument);
   const rowActionAvailable = Boolean(onAddRow) && !addRowDisabled;
 
   if (fields.length === 0 && !rowActionAvailable) {
@@ -868,7 +907,7 @@ export function ColumnPickerMenu({
   }
 
   return (
-    <Menu>
+    <Menu mountNode={surface.mountNode} positioning={surface.rootPositioning}>
       <MenuTrigger disableButtonEnhancement>
         <Button
           appearance="subtle"
@@ -891,7 +930,11 @@ export function ColumnPickerMenu({
           ) : null}
           {fields.map((field) =>
             isBetterListLookupLikeField(field) ? (
-              <Menu key={field.internalName}>
+              <Menu
+                key={field.internalName}
+                mountNode={surface.mountNode}
+                positioning={surface.submenuPositioning}
+              >
                 <MenuTrigger disableButtonEnhancement>
                   <MenuItem>{field.title}</MenuItem>
                 </MenuTrigger>
