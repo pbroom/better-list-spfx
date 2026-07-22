@@ -10,7 +10,29 @@ import {
 } from '../../../../shared';
 import { BetterListPropertyPane, IBetterListAuthoringState } from './BetterListPropertyPane';
 
+class TestResizeObserver implements ResizeObserver {
+  public disconnect(): void {
+    // No layout is measured in JSDOM.
+  }
+
+  public observe(): void {
+    // No layout is measured in JSDOM.
+  }
+
+  public unobserve(): void {
+    // No layout is measured in JSDOM.
+  }
+}
+
 describe('BetterListPropertyPane', () => {
+  beforeAll(() => {
+    Object.defineProperty(window, 'ResizeObserver', {
+      configurable: true,
+      value: TestResizeObserver,
+      writable: true
+    });
+  });
+
   const createValue = (): IBetterListAuthoringState => ({
     sourceListId: 'services',
     sourceListTitle: 'Services',
