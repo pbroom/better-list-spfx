@@ -57,6 +57,7 @@ const useStyles = makeStyles({
     }
   },
   panel: {
+    margin: 0,
     padding: '0 0 12px'
   }
 });
