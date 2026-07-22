@@ -788,6 +788,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
 
   const renderTabs = (attributes: Record<string, unknown>, key: string): React.ReactNode => {
     const wrapperAttributes = { ...attributes };
+    const wrapperClassName = String(attributes.className || '');
     delete wrapperAttributes.className;
     const tabList = tabs.length > 1 ? (
       <TabList
@@ -822,7 +823,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
     return (
       <div
         {...wrapperAttributes}
-        className={mergeClasses(classes.navigation, 'better-list__navigation')}
+        className={mergeClasses(wrapperClassName, classes.navigation, 'better-list__navigation')}
         key={key}
       >
         <h2 className={mergeClasses(classes.heading, 'better-list__heading')}>{normalizedHeading}</h2>

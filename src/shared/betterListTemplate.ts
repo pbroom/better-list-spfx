@@ -40,7 +40,7 @@ const slotsByFragment: Readonly<Record<BetterListTemplateFragmentName, readonly 
 };
 
 const tokensByFragment: Readonly<Record<BetterListTemplateFragmentName, ReadonlySet<string>>> = {
-  shell: new Set(['list.title', 'tab.label', 'results.count']),
+  shell: new Set(['list.heading', 'list.title', 'tab.label', 'results.count']),
   group: new Set(['group.title', 'group.count']),
   list: new Set(),
   item: new Set(['item.id', 'item.title', 'item.description'])

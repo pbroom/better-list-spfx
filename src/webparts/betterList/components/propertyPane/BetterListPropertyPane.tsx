@@ -151,10 +151,24 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
   const [listError, setListError] = React.useState('');
   const [fieldError, setFieldError] = React.useState('');
   const [headingInput, setHeadingInput] = React.useState(props.value.heading);
+  const headingInputRef = React.useRef(props.value.heading);
+  const latestValueRef = React.useRef(props.value);
+  const onChangeRef = React.useRef(props.onChange);
   const sourceRequest = React.useRef(0);
+
+  latestValueRef.current = props.value;
+  onChangeRef.current = props.onChange;
 
   React.useEffect(() => () => {
     sourceRequest.current += 1;
+  }, []);
+
+  React.useEffect(() => () => {
+    const latestValue = latestValueRef.current;
+    const headingDraft = headingInputRef.current;
+    if (headingDraft !== latestValue.heading) {
+      onChangeRef.current({ ...latestValue, heading: headingDraft });
+    }
   }, []);
 
   React.useEffect(() => {
@@ -162,6 +176,7 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
   }, [props.value.sourceListId, props.value.sourceListTitle, props.value.sourceWebUrl]);
 
   React.useEffect(() => {
+    headingInputRef.current = props.value.heading;
     setHeadingInput(props.value.heading);
   }, [props.value.heading]);
 
@@ -229,8 +244,12 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
   };
 
   const commitHeading = (): void => {
-    if (headingInput !== props.value.heading) {
-      patchValue({ heading: headingInput });
+    const latestValue = latestValueRef.current;
+    const headingDraft = headingInputRef.current;
+    if (headingDraft !== latestValue.heading) {
+      const nextValue = { ...latestValue, heading: headingDraft };
+      latestValueRef.current = nextValue;
+      onChangeRef.current(nextValue);
     }
   };
 
@@ -430,7 +449,10 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
               placeholder="Optional heading"
               value={headingInput}
               onBlur={commitHeading}
-              onChange={(_event, data) => setHeadingInput(data.value)}
+              onChange={(_event, data) => {
+                headingInputRef.current = data.value;
+                setHeadingInput(data.value);
+              }}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
                   event.preventDefault();

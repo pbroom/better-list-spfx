@@ -59,6 +59,36 @@ describe('BetterListView', () => {
     expect(html).not.toContain('>All items<');
   });
 
+  it('preserves an authored single-tab slot class when the heading replaces the tab strip', () => {
+    const tabs: readonly IBetterListTab[] = [
+      {
+        key: 'all',
+        label: 'All items',
+        grouped: false,
+        layout: { showSearch: false },
+        items: [item]
+      }
+    ];
+    const template = customTemplate.replace(
+      '<span data-bl-slot="tabs"></span>',
+      '<span class="authored-tabs-slot" data-bl-slot="tabs"></span>'
+    );
+
+    const html = renderToStaticMarkup(
+      <BetterListView
+        activeTabKey="all"
+        heading="Service directory"
+        htmlTemplate={template}
+        items={[item]}
+        tabs={tabs}
+      />
+    );
+
+    expect(html).toContain('authored-tabs-slot');
+    expect(html).toContain('better-list__navigation');
+    expect(html).toContain('Service directory</h2>');
+  });
+
   it('renders the optional semantic heading above a multi-tab strip', () => {
     const tabs: readonly IBetterListTab[] = [
       { key: 'featured', label: 'Featured', items: [item] },

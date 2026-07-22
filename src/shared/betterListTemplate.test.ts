@@ -69,7 +69,10 @@ describe('Better List HTML templates', () => {
 
   it('allows only context-specific tokens in text and safe display attributes', () => {
     const valid = defaultBetterListHtmlTemplate
-      .replace('<section>', '<section title="{{list.title}}" aria-label="{{tab.label}}" data-count="{{results.count}}">')
+      .replace(
+        '<section>',
+        '<section title="{{list.title}}" aria-label="{{tab.label}}" data-count="{{results.count}}">{{list.heading}}'
+      )
       .replace('<li>\n    <span data-bl-slot="title">', '<li title="{{item.title}}">{{item.id}}<span data-bl-slot="title">');
     expect(parseBetterListTemplate(valid).diagnostics).toEqual([]);
 

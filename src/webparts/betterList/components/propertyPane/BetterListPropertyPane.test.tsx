@@ -124,6 +124,46 @@ describe('BetterListPropertyPane', () => {
     ReactDom.unmountComponentAtNode(container);
   });
 
+  it('commits a focused heading draft when the property pane unmounts', async () => {
+    const container = document.createElement('div');
+    const onChange = jest.fn();
+    const value = createValue();
+
+    await act(async () => {
+      ReactDom.render(
+        <BetterListPropertyPane
+          pickerDataSource={{
+            loadFields: async () => [],
+            loadLists: async () => [{ id: 'services', title: 'Services' }],
+            resolveListUrl: async () => ({ id: 'services', title: 'Services' })
+          }}
+          value={value}
+          onChange={onChange}
+        />,
+        container
+      );
+      await Promise.resolve();
+    });
+
+    const input = container.querySelector<HTMLInputElement>('input[aria-label="Heading"]');
+    expect(input).not.toBeNull();
+    await act(async () => {
+      (input as HTMLInputElement).value = 'Service directory';
+      Simulate.change(input as HTMLInputElement);
+    });
+    expect(onChange).not.toHaveBeenCalled();
+
+    await act(async () => {
+      ReactDom.unmountComponentAtNode(container);
+    });
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith({
+      ...value,
+      heading: 'Service directory'
+    });
+  });
+
   it('resolves a pasted URL before replacing the selected list', async () => {
     const container = document.createElement('div');
     const onChange = jest.fn();
