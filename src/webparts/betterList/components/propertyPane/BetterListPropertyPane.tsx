@@ -5,6 +5,7 @@ import {
   Combobox,
   Dropdown,
   FluentProvider,
+  Input,
   Option,
   Switch,
   tokens,
@@ -50,6 +51,7 @@ import {
 import type { ISharePointImageAssetProvider } from '../../services';
 
 export interface IBetterListAuthoringState {
+  heading: string;
   sourceListId: string;
   sourceListTitle: string;
   sourceWebUrl: string;
@@ -96,6 +98,7 @@ export interface IBetterListPropertyPaneProps {
 const cssTargets: readonly ISourceEditorTarget[] = [
   { label: 'Web part', selector: '.better-list', snippet: '.better-list {\n  /* layout and theme overrides */\n}' },
   { label: 'Header', selector: '.better-list__header', snippet: '.better-list__header {\n  /* title and search area */\n}' },
+  { label: 'Heading', selector: '.better-list__heading', snippet: '.better-list__heading {\n  /* optional list heading */\n}' },
   { label: 'Tabs', selector: '.better-list__tabs', snippet: '.better-list__tabs {\n  /* tab row */\n}' },
   { label: 'Group', selector: '.better-list__group', snippet: '.better-list__group {\n  /* grouped section */\n}' },
   {
@@ -147,6 +150,7 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
   const [sourceError, setSourceError] = React.useState('');
   const [listError, setListError] = React.useState('');
   const [fieldError, setFieldError] = React.useState('');
+  const [headingInput, setHeadingInput] = React.useState(props.value.heading);
   const sourceRequest = React.useRef(0);
 
   React.useEffect(() => () => {
@@ -156,6 +160,10 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
   React.useEffect(() => {
     setSourceInput(props.value.sourceListTitle);
   }, [props.value.sourceListId, props.value.sourceListTitle, props.value.sourceWebUrl]);
+
+  React.useEffect(() => {
+    setHeadingInput(props.value.heading);
+  }, [props.value.heading]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -218,6 +226,12 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
 
   const patchValue = (patch: Partial<IBetterListAuthoringState>): void => {
     props.onChange({ ...props.value, ...patch });
+  };
+
+  const commitHeading = (): void => {
+    if (headingInput !== props.value.heading) {
+      patchValue({ heading: headingInput });
+    }
   };
 
   const activeTabId = props.value.tabs.some((tab) => tab.id === props.activeTabId)
@@ -409,9 +423,25 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
       <div className="bl-pane">
         <style>{propertyPaneCss}</style>
         <section className="bl-pane__source-section">
-        <label className="bl-pane__field">
-          <span className="bl-pane__label">Source list</span>
-          <Combobox
+          <label className="bl-pane__field">
+            <span className="bl-pane__label">Heading</span>
+            <Input
+              aria-label="Heading"
+              placeholder="Optional heading"
+              value={headingInput}
+              onBlur={commitHeading}
+              onChange={(_event, data) => setHeadingInput(data.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  event.currentTarget.blur();
+                }
+              }}
+            />
+          </label>
+          <label className="bl-pane__field">
+            <span className="bl-pane__label">Source list</span>
+            <Combobox
             aria-label="Source list"
             aria-busy={resolvingSource}
             className="bl-pane__source-dropdown"
@@ -449,14 +479,14 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
                 {list.title}
               </Option>
             ))}
-          </Combobox>
-        </label>
-        <p className="bl-pane__help">Choose a discovered list, or paste a same-tenant SharePoint list URL and press Enter.</p>
-        {(sourceError || listError || fieldError) && (
-          <div className="bl-pane__error" role="alert">
-            {sourceError || fieldError || listError}
-          </div>
-        )}
+            </Combobox>
+          </label>
+          <p className="bl-pane__help">Choose a discovered list, or paste a same-tenant SharePoint list URL and press Enter.</p>
+          {(sourceError || listError || fieldError) && (
+            <div className="bl-pane__error" role="alert">
+              {sourceError || fieldError || listError}
+            </div>
+          )}
         </section>
 
         <PropertyPaneSection

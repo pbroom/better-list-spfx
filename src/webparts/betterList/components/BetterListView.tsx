@@ -136,6 +136,7 @@ export interface IBetterListViewProps {
   groupIcons?: IBetterListGroupIconsConfiguration;
   groupImageAssetProvider?: ISharePointImageAssetProvider;
   isEditMode?: boolean;
+  heading?: string;
   listTitle?: string;
   onTabChange?: (tabKey: string) => void;
   onSearchChange?: (value: string) => void;
@@ -159,6 +160,20 @@ const useStyles = makeStyles({
     minWidth: 0
   },
   header: {},
+  heading: {
+    ...shorthands.margin(0),
+    color: 'var(--better-list-heading)',
+    fontSize: '1.5rem',
+    fontWeight: 600,
+    lineHeight: 1.25
+  },
+  navigation: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    minWidth: 0,
+    rowGap: '12px'
+  },
   toolbar: {
     display: 'flex',
     alignItems: 'flex-end',
@@ -618,6 +633,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   groupIcons = defaultBetterListGroupIconsConfiguration,
   groupImageAssetProvider,
   isEditMode = false,
+  heading = '',
   listTitle = 'Better List',
   onTabChange,
   onSearchChange,
@@ -661,6 +677,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
     '--better-list-columns': String(selectedLayout?.columns ?? 2)
   } as React.CSSProperties;
   const normalizedSearchText = normalizeSearchText(internalSearchValue);
+  const normalizedHeading = heading.trim();
 
   const visibleItems = React.useMemo(() => {
     const tabItems = selectedTab?.items ?? items;
@@ -747,6 +764,8 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   const classAliases: Readonly<Record<string, string>> = {
     'better-list': classes.root,
     'better-list__header': classes.header,
+    'better-list__heading': classes.heading,
+    'better-list__navigation': classes.navigation,
     'better-list__toolbar': classes.toolbar,
     'better-list__tabs': classes.tabs,
     'better-list__tab': classes.tab,
@@ -766,6 +785,51 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
     rootAttributes: Record<string, unknown>
   ): React.ReactElement =>
     renderTemplateElement(compiledTemplate.fragments[fragmentName], tokens, slots, classAliases, rootAttributes, fragmentName);
+
+  const renderTabs = (attributes: Record<string, unknown>, key: string): React.ReactNode => {
+    const wrapperAttributes = { ...attributes };
+    delete wrapperAttributes.className;
+    const tabList = tabs.length > 1 ? (
+      <TabList
+        {...(normalizedHeading ? {} : attributes)}
+        className={mergeClasses(
+          String(attributes.className || ''),
+          classes.tabs,
+          'better-list__tabs'
+        )}
+        key={normalizedHeading ? undefined : key}
+        selectedValue={selectedTab?.key}
+        onTabSelect={handleTabSelect}
+        aria-label="Better List views"
+      >
+        {tabs.map((tab) => (
+          <Tab
+            className={mergeClasses(classes.tab, 'better-list__tab')}
+            icon={renderTabIcon(tab, classes.tabIcon)}
+            key={tab.key}
+            value={tab.key}
+          >
+            {tab.showItemCount ? `${tab.label} (${tab.itemCount ?? 0})` : tab.label}
+          </Tab>
+        ))}
+      </TabList>
+    ) : null;
+
+    if (!normalizedHeading) {
+      return tabList ?? <span {...attributes} key={key} />;
+    }
+
+    return (
+      <div
+        {...wrapperAttributes}
+        className={mergeClasses(classes.navigation, 'better-list__navigation')}
+        key={key}
+      >
+        <h2 className={mergeClasses(classes.heading, 'better-list__heading')}>{normalizedHeading}</h2>
+        {tabList}
+      </div>
+    );
+  };
 
   const renderItemTemplate = (
     item: IBetterListItem,
@@ -998,35 +1062,13 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
       {renderFragment(
         'shell',
         {
+          'list.heading': normalizedHeading,
           'list.title': listTitle,
           'tab.label': selectedTab?.label,
           'results.count': visibleItems.length
         },
         {
-      tabs: (attributes, key) =>
-        tabs.length > 1 ? (
-          <TabList
-            {...attributes}
-            className={mergeClasses(classes.tabs, 'better-list__tabs')}
-            key={key}
-            selectedValue={selectedTab?.key}
-            onTabSelect={handleTabSelect}
-            aria-label="Better List views"
-          >
-            {tabs.map((tab) => (
-              <Tab
-                className={mergeClasses(classes.tab, 'better-list__tab')}
-                icon={renderTabIcon(tab, classes.tabIcon)}
-                key={tab.key}
-                value={tab.key}
-              >
-                {tab.showItemCount ? `${tab.label} (${tab.itemCount ?? 0})` : tab.label}
-              </Tab>
-            ))}
-          </TabList>
-        ) : (
-          <span {...attributes} key={key} />
-        ),
+      tabs: renderTabs,
       search: (attributes, key) =>
         showSearch ? (
           <Input
