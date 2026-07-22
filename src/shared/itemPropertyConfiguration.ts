@@ -243,7 +243,7 @@ function normalizeSafeUrl(value: string): string | undefined {
 }
 
 function readPath(source: Readonly<Record<string, unknown>>, fieldPath: string): unknown {
-  return fieldPath.split('.').reduce<unknown>((current, segment) => {
+  return fieldPath.split(/[/.]/).reduce<unknown>((current, segment) => {
     if (Array.isArray(current)) {
       return current
         .map((entry) => isRecord(entry) ? entry[segment] : undefined)

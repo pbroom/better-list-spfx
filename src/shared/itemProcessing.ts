@@ -96,6 +96,18 @@ export function normalizeFieldValue(value: unknown, mapping: BetterListFieldMapp
   if (mapping.kind === 'person') {
     const values: readonly unknown[] = unwrapCollection(value);
     const normalized: readonly BetterListComparableValue[] = values.map((entry: unknown) => {
+      const targetField = mapping.personValueField || mapping.relationship?.target.internalName;
+      const normalizedTarget = targetField?.toLocaleLowerCase();
+      if (
+        targetField &&
+        normalizedTarget !== 'id' &&
+        normalizedTarget !== 'title' &&
+        normalizedTarget !== 'email' &&
+        normalizedTarget !== 'loginname' &&
+        normalizedTarget !== 'name'
+      ) {
+        return scalar(property(entry, [targetField, mapping.personValueQueryName || targetField]));
+      }
       if (mapping.valueProperty === 'id') {
         return scalar(property(entry, ['Id', 'ID', 'id']));
       }
