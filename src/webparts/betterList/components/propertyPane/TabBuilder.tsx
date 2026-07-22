@@ -4,6 +4,7 @@ import {
   closestCenter,
   DndContext,
   DragOverlay,
+  KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors
@@ -11,13 +12,23 @@ import {
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import {
   arrayMove,
+  sortableKeyboardCoordinates,
   SortableContext,
   useSortable,
   verticalListSortingStrategy
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Accordion, AccordionHeader, AccordionItem, AccordionPanel, Button, Portal, Switch, tokens } from '@fluentui/react-components';
-import { AddRegular, DismissRegular, ReOrderDotsVerticalRegular } from '@fluentui/react-icons';
+import {
+  Accordion,
+  AccordionHeader,
+  AccordionItem,
+  AccordionPanel,
+  Button,
+  Portal,
+  Switch,
+  tokens
+} from '@fluentui/react-components';
+import { AddRegular, DismissRegular } from '@fluentui/react-icons';
 
 import {
   BetterListComparableValue,
@@ -41,9 +52,7 @@ import { BetterListIconVisual } from '../GroupIconCatalog';
 import type { ISharePointImageAssetProvider } from '../../services';
 
 const IconPickerDialog = React.lazy(async () => {
-  const module = await import(
-    /* webpackChunkName: 'better-list-group-icon-picker' */ '../GroupIconPickerDialog'
-  );
+  const module = await import(/* webpackChunkName: 'better-list-group-icon-picker' */ '../GroupIconPickerDialog');
   return { default: module.IconPickerDialog };
 });
 
@@ -66,7 +75,7 @@ export interface ITabBuilderProps {
   onSelectedTabChange?: (tabId: string) => void;
 }
 
-const reorderInstructions = 'Drag to reorder. Press Alt+Arrow Up or Alt+Arrow Down to move.';
+const reorderInstructions = 'Drag to reorder. For keyboard sorting, focus this row and press Space.';
 
 export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({
   fields,
@@ -80,9 +89,17 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({
   const [closedTabIds, setClosedTabIds] = React.useState<ReadonlySet<string>>(() => new Set<string>());
   const [activeTabId, setActiveTabId] = React.useState<string>();
   const [iconPickerTabId, setIconPickerTabId] = React.useState<string>();
+  const keyboardSortingRef = React.useRef(false);
   const openTabIds = tabs.filter((tab) => !closedTabIds.has(tab.id)).map((tab) => tab.id);
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+      keyboardCodes: tabSortKeyboardCodes,
+      onActivation: () => {
+        keyboardSortingRef.current = true;
+      }
+    })
   );
 
   React.useEffect(() => {
@@ -133,10 +150,12 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({
 
   const cancelDrag = (): void => {
     setActiveTabId(undefined);
+    deferKeyboardSortingReset(keyboardSortingRef);
   };
 
   const finishDrag = (event: DragEndEvent): void => {
     setActiveTabId(undefined);
+    deferKeyboardSortingReset(keyboardSortingRef);
     const overId = event.over?.id;
     if (overId === undefined || event.active.id === overId) {
       return;
@@ -178,6 +197,9 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({
             multiple
             openItems={openTabIds}
             onToggle={(_event, data) => {
+              if (!shouldToggleTabAccordion(keyboardSortingRef.current)) {
+                return;
+              }
               const nextOpenTabIds = new Set(data.openItems);
               setClosedTabIds(new Set(tabs.filter((tab) => !nextOpenTabIds.has(tab.id)).map((tab) => tab.id)));
               const newlyOpened = data.openItems.find((tabId) => closedTabIds.has(tabId));
@@ -203,75 +225,64 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({
                   tabsLength={tabs.length}
                   onSelect={() => onSelectedTabChange?.(tab.id)}
                   onRemove={() => removeTab(index)}
-                  onMove={(offset) => {
-                    const nextIndex = index + offset;
-                    if (nextIndex >= 0 && nextIndex < tabs.length) {
-                      onChange(arrayMove([...tabs], index, nextIndex));
-                    }
-                  }}
                 >
                   {open ? (
                     <AccordionPanel aria-labelledby={headerId} className="bl-tabs-builder__card-body" id={panelId}>
-                  <label className="bl-tabs-builder__field">
-                    <span>Name</span>
-                    <input
-                      required
-                      value={tab.label}
-                      onChange={(event) => {
-                        if (event.currentTarget.value.trim()) {
-                          patchTab(index, { label: event.currentTarget.value });
-                        }
-                      }}
-                    />
-                  </label>
+                      <TabNameField value={tab.label} onCommit={(label) => patchTab(index, { label })} />
 
-                  <div className="bl-tabs-builder__grid">
-                    <div className="bl-tabs-builder__field">
-                      <span>Icon</span>
-                      <Button
-                        appearance="secondary"
-                        className="bl-tabs-builder__icon-picker"
-                        icon={renderTabIcon(tab.tabIconOverride, tab.tabIcon)}
-                        onClick={() => setIconPickerTabId(tab.id)}
-                      >
-                        {tabIconLabel(tab.tabIconOverride, tab.tabIcon)}
-                      </Button>
-                    </div>
-                    <label className="bl-tabs-builder__field">
-                      <span>Maximum items</span>
-                      <input
-                        min={1}
-                        placeholder="No limit"
-                        type="number"
-                        value={tab.maxItems ?? ''}
-                        onChange={(event) => {
-                          const value = event.currentTarget.valueAsNumber;
-                          patchTab(index, { maxItems: Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined });
+                      <div className="bl-tabs-builder__grid">
+                        <div className="bl-tabs-builder__field">
+                          <span>Icon</span>
+                          <Button
+                            appearance="secondary"
+                            className="bl-tabs-builder__icon-picker"
+                            icon={renderTabIcon(tab.tabIconOverride, tab.tabIcon)}
+                            onClick={() => setIconPickerTabId(tab.id)}
+                          >
+                            {tabIconLabel(tab.tabIconOverride, tab.tabIcon)}
+                          </Button>
+                        </div>
+                        <label className="bl-tabs-builder__field">
+                          <span>Maximum items</span>
+                          <input
+                            min={1}
+                            placeholder="No limit"
+                            type="number"
+                            value={tab.maxItems ?? ''}
+                            onChange={(event) => {
+                              const value = event.currentTarget.valueAsNumber;
+                              patchTab(index, {
+                                maxItems: Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined
+                              });
+                            }}
+                          />
+                        </label>
+                      </div>
+
+                      <Switch
+                        checked={tab.showItemCount === true}
+                        className="bl-tabs-builder__switch"
+                        label="Show item count"
+                        onChange={(_event, data) => patchTab(index, { showItemCount: data.checked })}
+                      />
+
+                      <FilterQueryEditor
+                        expression={expression}
+                        fields={queryFields}
+                        id={`tab-filter-${safeId(tab.id)}`}
+                        onChange={(nextExpression) => {
+                          const trimmed = nextExpression.trim();
+                          patchTab(index, {
+                            filter: trimmed
+                              ? {
+                                  kind: 'query',
+                                  expression: nextExpression,
+                                  fields: collectBetterListQueryFields(nextExpression, queryFields)
+                                }
+                              : { kind: 'all' }
+                          });
                         }}
                       />
-                    </label>
-                  </div>
-
-                  <Switch
-                    checked={tab.showItemCount === true}
-                    className="bl-tabs-builder__switch"
-                    label="Show item count"
-                    onChange={(_event, data) => patchTab(index, { showItemCount: data.checked })}
-                  />
-
-                  <FilterQueryEditor
-                    expression={expression}
-                    fields={queryFields}
-                    id={`tab-filter-${safeId(tab.id)}`}
-                    onChange={(nextExpression) => {
-                      const trimmed = nextExpression.trim();
-                      patchTab(index, {
-                        filter: trimmed
-                          ? { kind: 'query', expression: nextExpression, fields: collectBetterListQueryFields(nextExpression, queryFields) }
-                          : { kind: 'all' }
-                      });
-                    }}
-                  />
                     </AccordionPanel>
                   ) : null}
                 </SortableTabCard>
@@ -298,9 +309,11 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({
             open
             showAutomaticAction={false}
             onApply={(override) => {
-              onChange(tabs.map((tab) => tab.id === iconPickerTabId
-                ? { ...tab, tabIcon: undefined, tabIconOverride: override }
-                : tab));
+              onChange(
+                tabs.map((tab) =>
+                  tab.id === iconPickerTabId ? { ...tab, tabIcon: undefined, tabIconOverride: override } : tab
+                )
+              );
             }}
             onOpenChange={(open) => {
               if (!open) setIconPickerTabId(undefined);
@@ -323,11 +336,16 @@ function tabIconOverride(tab: IBetterListTabConfig | undefined): BetterListGroup
   return tab?.tabIconOverride || (tab?.tabIcon ? legacyTabIconOverrides[tab.tabIcon] : undefined);
 }
 
-function renderTabIcon(override: BetterListGroupIconOverride | undefined, legacy?: BetterListTabIcon): React.ReactElement {
+function renderTabIcon(
+  override: BetterListGroupIconOverride | undefined,
+  legacy?: BetterListTabIcon
+): React.ReactElement {
   const current = override || (legacy ? legacyTabIconOverrides[legacy] : undefined);
-  return current && current.kind !== 'none'
-    ? <BetterListIconVisual override={current} />
-    : <DismissRegular aria-hidden="true" />;
+  return current && current.kind !== 'none' ? (
+    <BetterListIconVisual override={current} />
+  ) : (
+    <DismissRegular aria-hidden="true" />
+  );
 }
 
 function tabIconLabel(override: BetterListGroupIconOverride | undefined, legacy?: BetterListTabIcon): string {
@@ -351,7 +369,6 @@ interface ISortableTabCardProps {
   tabsLength: number;
   onSelect: () => void;
   onRemove: () => void;
-  onMove: (offset: -1 | 1) => void;
 }
 
 const SortableTabCard: React.FunctionComponent<ISortableTabCardProps> = ({
@@ -363,18 +380,11 @@ const SortableTabCard: React.FunctionComponent<ISortableTabCardProps> = ({
   tab,
   tabsLength,
   onSelect,
-  onRemove,
-  onMove
+  onRemove
 }) => {
-  const {
-    attributes,
-    isDragging,
-    listeners,
-    setActivatorNodeRef,
-    setNodeRef,
-    transform,
-    transition
-  } = useSortable({ id: tab.id });
+  const { attributes, isDragging, listeners, setActivatorNodeRef, setNodeRef, transform, transition } = useSortable({
+    id: tab.id
+  });
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition
@@ -392,13 +402,21 @@ const SortableTabCard: React.FunctionComponent<ISortableTabCardProps> = ({
       value={tab.id}
     >
       <div className="bl-tabs-builder__card-heading">
+        <span className="bl-tabs-builder__sr-only" id={reorderHelpId}>
+          {reorderInstructions}
+        </span>
         <AccordionHeader
           as="h4"
           button={
             {
+              ...attributes,
+              ...listeners,
               'aria-controls': panelId,
+              'aria-describedby': reorderHelpId,
+              'aria-label': `Tab ${index + 1}: ${tab.label}. ${reorderInstructions}`,
               className: 'bl-tabs-builder__accordion-button',
-              id: headerId
+              id: headerId,
+              ref: setActivatorNodeRef
             } as unknown as NonNullable<React.ComponentProps<typeof AccordionHeader>['button']>
           }
           className="bl-tabs-builder__accordion-header"
@@ -408,27 +426,6 @@ const SortableTabCard: React.FunctionComponent<ISortableTabCardProps> = ({
           <strong>Tab {index + 1}</strong>
         </AccordionHeader>
         <div aria-label={`Actions for ${tab.label}`} className="bl-tabs-builder__actions" role="group">
-          <span className="bl-tabs-builder__sr-only" id={reorderHelpId}>{reorderInstructions}</span>
-          <Button
-            {...attributes}
-            {...listeners}
-            appearance="subtle"
-            aria-describedby={reorderHelpId}
-            aria-label={`Reorder ${tab.label}`}
-            className="bl-tabs-builder__drag-handle"
-            data-tab-drag-handle
-            icon={<ReOrderDotsVerticalRegular />}
-            ref={setActivatorNodeRef}
-            size="small"
-            title={reorderInstructions}
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => {
-              if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
-                event.preventDefault();
-                onMove(event.key === 'ArrowUp' ? -1 : 1);
-              }
-            }}
-          />
           <Button
             appearance="subtle"
             aria-label={`Remove ${tab.label}`}
@@ -441,12 +438,73 @@ const SortableTabCard: React.FunctionComponent<ISortableTabCardProps> = ({
               event.stopPropagation();
               onRemove();
             }}
+            onPointerDown={(event) => event.stopPropagation()}
           />
         </div>
       </div>
       {children}
     </AccordionItem>
   );
+};
+
+export const TabNameField: React.FunctionComponent<{
+  value: string;
+  onCommit: (value: string) => void;
+}> = ({ value, onCommit }) => {
+  const [draft, setDraft] = React.useState(value);
+  const cancelBlur = React.useRef(false);
+
+  React.useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  const commit = (): void => {
+    if (cancelBlur.current) {
+      cancelBlur.current = false;
+      return;
+    }
+    const resolved = resolveTabNameDraft(draft, value);
+    if (resolved.commit) {
+      onCommit(resolved.commit);
+    }
+    if (resolved.draft !== draft) {
+      setDraft(resolved.draft);
+    }
+  };
+
+  return (
+    <label className="bl-tabs-builder__field">
+      <span>Name</span>
+      <input
+        required
+        value={draft}
+        onBlur={commit}
+        onChange={(event) => setDraft(event.currentTarget.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            event.currentTarget.blur();
+          } else if (event.key === 'Escape') {
+            event.preventDefault();
+            cancelBlur.current = true;
+            setDraft(value);
+            event.currentTarget.blur();
+          }
+        }}
+      />
+    </label>
+  );
+};
+
+export const resolveTabNameDraft = (
+  draft: string,
+  currentValue: string
+): { readonly draft: string; readonly commit?: string } => {
+  const next = draft.trim();
+  if (!next) {
+    return { draft: currentValue };
+  }
+  return next === currentValue ? { draft: next } : { draft: next, commit: next };
 };
 
 const FilterQueryEditor: React.FunctionComponent<{
@@ -472,13 +530,14 @@ const FilterQueryEditor: React.FunctionComponent<{
   const listboxId = `${id}-suggestions`;
   const helpId = `${id}-help`;
   const showSuggestions = open && suggestions.length > 0 && fields.length > 0;
-  const helpText = fields.length === 0
-    ? 'Map a list column before adding a filter.'
-    : diagnostic
-      ? diagnostic.message
-      : draft.trim()
-        ? 'Use AND, OR, NOT, and parentheses to combine conditions.'
-        : '';
+  const helpText =
+    fields.length === 0
+      ? 'Map a list column before adding a filter.'
+      : diagnostic
+        ? diagnostic.message
+        : draft.trim()
+          ? 'Use AND, OR, NOT, and parentheses to combine conditions.'
+          : '';
 
   const updateCursor = (input: HTMLInputElement): void => {
     setCursor(input.selectionStart ?? input.value.length);
@@ -560,7 +619,13 @@ const FilterQueryEditor: React.FunctionComponent<{
               }
             }}
             onKeyUp={(event) => {
-              if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Enter' && event.key !== 'Tab' && event.key !== 'Escape') {
+              if (
+                event.key !== 'ArrowDown' &&
+                event.key !== 'ArrowUp' &&
+                event.key !== 'Enter' &&
+                event.key !== 'Tab' &&
+                event.key !== 'Escape'
+              ) {
                 updateCursor(event.currentTarget);
               }
             }}
@@ -627,8 +692,17 @@ function filterExpression(filter: BetterListFilter, fields: readonly IBetterList
   const queryField: IBetterListQueryField = field
     ? toQueryField(field)
     : filter.kind === 'equals'
-      ? { name: filter.field, kind: typeof filter.value === 'boolean' ? 'boolean' : typeof filter.value === 'number' ? 'number' : 'text', field: filter.field }
-      : { name: filter.fieldPath, kind: filter.mapping.kind, fieldPath: filter.fieldPath, mapping: filter.mapping };
+      ? {
+          name: filter.field,
+          kind: typeof filter.value === 'boolean' ? 'boolean' : typeof filter.value === 'number' ? 'number' : 'text',
+          field: filter.field
+        }
+      : {
+          name: filter.fieldPath,
+          kind: filter.mapping.kind,
+          fieldPath: filter.fieldPath,
+          mapping: filter.mapping
+        };
   return `${filterQueryFieldName(queryField)} = ${filterValueText(filter.value)}`;
 }
 
@@ -653,18 +727,18 @@ const tabBuilderCss = `
 .bl-tabs-builder__heading { justify-content: flex-end; }
 .bl-tabs-builder__card-heading { align-items: center; display: grid; grid-template-columns: minmax(0, 1fr) auto; }
 .bl-tabs-builder__heading { color: #616161; margin-bottom: 8px; }
-.bl-tabs-builder__card { background: transparent; border: 0; border-radius: 0; margin: 0 0 4px; padding: 0; }
+.bl-tabs-builder__card { background: transparent; border: 0; border-radius: 0; margin: 0 0 4px; padding: 0; position: relative; }
+.bl-tabs-builder__card:focus-within { z-index: 2; }
 .bl-tabs-builder__card[data-tab-selected="true"] > .bl-tabs-builder__card-heading { background: ${tokens.colorNeutralBackground1Hover}; }
 .bl-tabs-builder__card.is-dragging { opacity: .35; }
 .bl-tabs-builder__card-heading { border-bottom: 0; min-height: 38px; }
 .bl-tabs-builder__card-heading:hover > .bl-tabs-builder__actions [data-tab-remove], .bl-tabs-builder__card-heading:focus-within > .bl-tabs-builder__actions [data-tab-remove] { opacity: 1; pointer-events: auto; }
 .bl-tabs-builder__card-body { padding: 8px 0 6px; }
 .bl-tabs-builder__accordion-header { margin: 0; min-width: 0; }
-.bl-tabs-builder__accordion-button { justify-content: flex-start !important; padding-left: 0 !important; width: 100%; }
+.bl-tabs-builder__accordion-button { cursor: grab; justify-content: flex-start !important; padding-left: 0 !important; touch-action: none; width: 100%; }
+.bl-tabs-builder__accordion-button:active { cursor: grabbing; }
 .bl-tabs-builder__drag-overlay { background: ${tokens.colorNeutralBackground1}; border: 1px solid ${tokens.colorNeutralStroke2}; border-radius: ${tokens.borderRadiusMedium}; box-shadow: ${tokens.shadow16}; color: ${tokens.colorNeutralForeground1}; font: 600 12px/1.4 "Segoe UI", sans-serif; min-width: 180px; padding: 10px 12px; }
 .bl-tabs-builder__actions { gap: 2px; }
-.bl-tabs-builder .bl-tabs-builder__drag-handle { cursor: grab; height: 28px; min-height: 28px; min-width: 28px; padding: 0; touch-action: none; width: 28px; }
-.bl-tabs-builder .bl-tabs-builder__drag-handle:active { cursor: grabbing; }
 .bl-tabs-builder__sr-only { clip: rect(0, 0, 0, 0); clip-path: inset(50%); height: 1px; overflow: hidden; position: absolute; white-space: nowrap; width: 1px; }
 .bl-tabs-builder .bl-tabs-builder__remove { color: ${tokens.colorNeutralForeground3}; height: 28px; min-height: 28px; min-width: 28px; padding: 0; transition: opacity 100ms ease-out; width: 28px; }
 .bl-tabs-builder__field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
@@ -690,8 +764,24 @@ const tabBuilderCss = `
 @media (forced-colors: active) { .bl-query-editor__suggestions, .bl-query-editor__suggestions li.is-active { outline: 1px solid CanvasText; } }
 @media (hover: hover) { .bl-tabs-builder .bl-tabs-builder__remove { opacity: 0; pointer-events: none; } }
 @media (prefers-reduced-motion: reduce) { .bl-tabs-builder .bl-tabs-builder__remove { transition-duration: 0ms; } }
-@container (max-width: 360px) { .bl-tabs-builder__grid { grid-template-columns: minmax(0, 1fr); } }
+@container (max-width: 260px) { .bl-tabs-builder__grid { grid-template-columns: minmax(0, 1fr); } }
 `;
+
+export const tabSortKeyboardCodes = {
+  start: ['Space'],
+  cancel: ['Escape'],
+  end: ['Space']
+};
+
+export function shouldToggleTabAccordion(keyboardSorting: boolean): boolean {
+  return !keyboardSorting;
+}
+
+function deferKeyboardSortingReset(ref: React.MutableRefObject<boolean>): void {
+  window.setTimeout(() => {
+    ref.current = false;
+  }, 0);
+}
 
 export function appendNewTab(tabs: readonly IBetterListTabConfig[]): readonly IBetterListTabConfig[] {
   return [

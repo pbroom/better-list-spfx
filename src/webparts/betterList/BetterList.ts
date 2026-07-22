@@ -16,10 +16,12 @@ import {
   BetterListFieldValue,
   BetterListGroupIconOverride,
   BetterListItemElementLinks,
+  BetterListRequestEpoch,
   betterListStylePresetVersion,
   createDefaultTabs,
   createBetterListGroupingOverride,
   createBetterListFieldCatalog,
+  createBetterListLoadSignature,
   defaultBetterListScss,
   defaultBetterListHtmlTemplate,
   formatItemPropertyValue,
@@ -60,7 +62,9 @@ import {
   inferBetterListFieldKind
 } from './services';
 
-const BetterListRendererProvider = RendererProvider as unknown as React.ComponentType<{ renderer: GriffelRenderer }>;
+const BetterListRendererProvider = RendererProvider as unknown as React.ComponentType<{
+  renderer: GriffelRenderer;
+}>;
 
 export interface IBetterListWebPartProps {
   sourceListId: string;
@@ -98,26 +102,23 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
   private _errorMessage = '';
   private _activeTabKey = '';
   private _isDarkTheme = false;
+  private readonly _loadRequestEpoch = new BetterListRequestEpoch();
 
   public render(): void {
     const tabs = this._createEffectiveTabConfigurations();
     const fieldMappings = this._readMappings();
     const descriptionFieldPath = fieldMappings.description?.internalName;
     const richTextFieldPaths = new Set(
-      (fieldMappings.metadata || [])
-        .filter((entry) => entry.mapping.richText)
-        .map((entry) => entry.key)
+      (fieldMappings.metadata || []).filter((entry) => entry.mapping.richText).map((entry) => entry.key)
     );
     const itemLayout = parseItemLayoutConfiguration(
       this.properties.itemLayoutJson,
       parseItemPropertyFields(this.properties.itemPropertiesJson)
     );
     const groupIcons = parseBetterListGroupIconsConfiguration(this.properties.groupIconsJson);
-    const presentationTabs = tabs.map((tab) => this._createPresentationTab(
-      tab,
-      descriptionFieldPath,
-      richTextFieldPaths
-    ));
+    const presentationTabs = tabs.map((tab) =>
+      this._createPresentationTab(tab, descriptionFieldPath, richTextFieldPaths)
+    );
     const firstTab = presentationTabs[0];
     if (!this._activeTabKey || !presentationTabs.some((tab) => tab.key === this._activeTabKey)) {
       this._activeTabKey = firstTab?.key || '';
@@ -170,7 +171,11 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
             theme: this._isDarkTheme ? webDarkTheme : webLightTheme
           },
           this.properties.customCss
-            ? React.createElement('style', undefined, scopeBetterListStyles(this.properties.customCss, `.${wrapperClassName}`))
+            ? React.createElement(
+                'style',
+                undefined,
+                scopeBetterListStyles(this.properties.customCss, `.${wrapperClassName}`)
+              )
             : undefined,
           view
         )
@@ -199,7 +204,10 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       this.properties.stylePresetVersion = betterListStylePresetVersion;
     }
 
-    this._dataSource = new SharePointBetterListDataSource(this.context.spHttpClient, this.context.pageContext.web.absoluteUrl);
+    this._dataSource = new SharePointBetterListDataSource(
+      this.context.spHttpClient,
+      this.context.pageContext.web.absoluteUrl
+    );
     this._imageAssetProvider = new SharePointImageAssetProvider(
       this.context.spHttpClient,
       this.context.pageContext.web.absoluteUrl
@@ -207,18 +215,28 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     this._pickerDataSource = {
       loadLists: async () => {
         const lists = await this._dataSource.discoverLists();
-        return lists.map((list) => ({ id: list.id, title: list.title, webUrl: list.webUrl }));
+        return lists.map((list) => ({
+          id: list.id,
+          title: list.title,
+          webUrl: list.webUrl
+        }));
       },
       resolveListUrl: async (value: string) => {
         const list = await this._dataSource.resolveListUrl(value);
         return { id: list.id, title: list.title, webUrl: list.webUrl };
       },
       loadFields: async (list) => {
-        const listReference = { id: list.id, title: list.title, webUrl: list.webUrl };
+        const listReference = {
+          id: list.id,
+          title: list.title,
+          webUrl: list.webUrl
+        };
         const fields = await this._dataSource.discoverFields(listReference);
         const lookupListIds = Array.from(
           new Set(
-            fields.map((field) => field.lookupListId).filter((lookupListId): lookupListId is string => Boolean(lookupListId))
+            fields
+              .map((field) => field.lookupListId)
+              .filter((lookupListId): lookupListId is string => Boolean(lookupListId))
           )
         );
         const lookupFieldEntries = await Promise.all(
@@ -226,7 +244,10 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
             try {
               return {
                 lookupListId,
-                fields: await this._dataSource.discoverFields({ id: lookupListId, webUrl: list.webUrl })
+                fields: await this._dataSource.discoverFields({
+                  id: lookupListId,
+                  webUrl: list.webUrl
+                })
               };
             } catch {
               return { lookupListId, fields: [] };
@@ -239,10 +260,12 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
             entry.fields.filter(isSupportedLookupTargetField).map(toFieldDescriptor)
           ])
         );
-        return createBetterListFieldCatalog(fields.map((field) => ({
-          ...toFieldDescriptor(field),
-          lookupFields: field.lookupListId ? lookupFieldsByListId.get(field.lookupListId) : undefined
-        })));
+        return createBetterListFieldCatalog(
+          fields.map((field) => ({
+            ...toFieldDescriptor(field),
+            lookupFields: field.lookupListId ? lookupFieldsByListId.get(field.lookupListId) : undefined
+          }))
+        );
       }
     };
     await this._reloadItems();
@@ -253,6 +276,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
   }
 
   protected onDispose(): void {
+    this._loadRequestEpoch.invalidate();
     ReactDom.unmountComponentAtNode(this.domElement);
   }
 
@@ -339,6 +363,23 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     value: IBetterListAuthoringState,
     changeCallback?: (targetProperty?: string, newValue?: unknown, isValidEntry?: boolean) => void
   ): void {
+    const nextTabs = coerceTabFilterValues(value.tabs.length ? value.tabs : [createFallbackTab()], value.fieldMappings);
+    const currentLoadSignature = createBetterListLoadSignature(
+      {
+        id: this.properties.sourceListId,
+        title: this.properties.sourceListTitle,
+        webUrl: this.properties.sourceWebUrl || undefined
+      },
+      addTabFilterMappings(this._readMappings() as IBetterListFieldMappings, this._readTabs())
+    );
+    const nextLoadSignature = createBetterListLoadSignature(
+      {
+        id: value.sourceListId,
+        title: value.sourceListTitle,
+        webUrl: value.sourceWebUrl || undefined
+      },
+      addTabFilterMappings(value.fieldMappings as IBetterListFieldMappings, nextTabs)
+    );
     const next = {
       sourceListId: value.sourceListId,
       sourceListTitle: value.sourceListTitle,
@@ -354,23 +395,11 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       groupsColumn: value.groupsColumn,
       groupsCollapsible: value.groupsCollapsible,
       groupIconsJson: serializeBetterListGroupIconsConfiguration(value.groupIcons),
-      tabsJson: serializeTabConfiguration(
-        coerceTabFilterValues(value.tabs.length ? value.tabs : [createFallbackTab()], value.fieldMappings)
-      ),
+      tabsJson: serializeTabConfiguration(nextTabs),
       customCss: value.customCss,
       htmlTemplate: value.htmlTemplate
     };
-    const reloadRequired =
-      next.sourceListId !== this.properties.sourceListId ||
-      next.sourceListTitle !== this.properties.sourceListTitle ||
-      next.sourceWebUrl !== this.properties.sourceWebUrl ||
-      next.fieldMappingsJson !== this.properties.fieldMappingsJson ||
-      next.itemPropertiesJson !== this.properties.itemPropertiesJson ||
-      next.itemLayoutJson !== this.properties.itemLayoutJson ||
-      next.tabsColumn !== this.properties.tabsColumn ||
-      next.groupsColumn !== this.properties.groupsColumn ||
-      next.groupsCollapsible !== this.properties.groupsCollapsible ||
-      next.tabsJson !== this.properties.tabsJson;
+    const reloadRequired = currentLoadSignature !== nextLoadSignature;
 
     const properties = this.properties as unknown as Record<string, string | boolean | number | undefined>;
     (Object.keys(next) as Array<keyof typeof next>).forEach((propertyPath) => {
@@ -393,25 +422,26 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     if (!active || !active.grouping.column) {
       return;
     }
-    const icons = updateBetterListGroupIconOverride(
-      active.grouping.icons,
-      active.grouping.column,
-      groupKey,
-      override
-    );
+    const icons = updateBetterListGroupIconOverride(active.grouping.icons, active.grouping.column, groupKey, override);
     this.properties.tabsJson = serializeTabConfiguration(
-      this._readTabs().map((tab) => tab.id === active.tab.id
-        ? {
-            ...tab,
-            groupingOverride: createBetterListGroupingOverride({ ...active.grouping, icons })
-          }
-        : tab)
+      this._readTabs().map((tab) =>
+        tab.id === active.tab.id
+          ? {
+              ...tab,
+              groupingOverride: createBetterListGroupingOverride({
+                ...active.grouping,
+                icons
+              })
+            }
+          : tab
+      )
     );
     this.context.propertyPane.refresh();
     this.render();
   }
 
   private async _reloadItems(): Promise<void> {
+    const requestEpoch = this._loadRequestEpoch.begin();
     if (!this._hasCompleteConfiguration()) {
       this._items = [];
       this._status = 'ready';
@@ -432,9 +462,15 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
         },
         mappings: addTabFilterMappings(this._readMappings() as IBetterListFieldMappings, this._readTabs())
       });
+      if (!this._loadRequestEpoch.isCurrent(requestEpoch)) {
+        return;
+      }
       this._items = result.items;
       this._status = 'ready';
     } catch (error) {
+      if (!this._loadRequestEpoch.isCurrent(requestEpoch)) {
+        return;
+      }
       this._items = [];
       this._status = 'error';
       this._errorMessage = error instanceof Error ? error.message : strings.ErrorMessage;
@@ -448,7 +484,11 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     richTextFieldPaths: ReadonlySet<string>
   ): IBetterListTab {
     const group = configuration.grouping.column
-      ? { field: 'group' as const, direction: 'ascending' as const, ungroupedLabel: 'Other' }
+      ? {
+          field: 'group' as const,
+          direction: 'ascending' as const,
+          ungroupedLabel: 'Other'
+        }
       : undefined;
     const tab = {
       ...configuration.tab,
@@ -471,20 +511,28 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     const processed = processItems(sourceItems, tab);
     const groups: readonly IBetterListGroupResult[] = group
       ? groupItems(processed, group)
-      : [{ key: 'all', label: this.properties.sourceListTitle || 'Items', items: processed }];
+      : [
+          {
+            key: 'all',
+            label: this.properties.sourceListTitle || 'Items',
+            items: processed
+          }
+        ];
     const items: IBetterListItem[] = [];
     groups.forEach((group, groupIndex) => {
       group.items.forEach((item) => {
-        items.push(this._createPresentationItem(
-          item,
-          group,
-          groupIndex,
-          tab,
-          configuration.itemLayout.itemProperties,
-          configuration.itemLayout.links,
-          descriptionFieldPath,
-          richTextFieldPaths
-        ));
+        items.push(
+          this._createPresentationItem(
+            item,
+            group,
+            groupIndex,
+            tab,
+            configuration.itemLayout.itemProperties,
+            configuration.itemLayout.links,
+            descriptionFieldPath,
+            richTextFieldPaths
+          )
+        );
       });
     });
     return {
@@ -535,18 +583,23 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
             }
           : undefined;
       })
-      .filter((element): element is {
-        key: string;
-        kind: 'description' | 'metadata';
-        value: string;
-        href: string | undefined;
-      } => Boolean(element));
+      .filter(
+        (
+          element
+        ): element is {
+          key: string;
+          kind: 'description' | 'metadata';
+          value: string;
+          href: string | undefined;
+        } => Boolean(element)
+      );
     const metadata = elements.filter((element) => element.kind === 'metadata').map((element) => element.value);
     return {
       id: String(item.id),
       title: item.title,
       href: itemElementLinks.Title ? getItemPropertyUrl(item.source, itemElementLinks.Title) : undefined,
-      description: descriptionFieldPath && itemProperties.indexOf(descriptionFieldPath) >= 0 ? item.description : undefined,
+      description:
+        descriptionFieldPath && itemProperties.indexOf(descriptionFieldPath) >= 0 ? item.description : undefined,
       metadata,
       elements,
       groupId: group.key,
@@ -560,7 +613,9 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
   private _readMappings(): Partial<IBetterListFieldMappings> {
     try {
       const parsed = JSON.parse(this.properties.fieldMappingsJson || '{}') as unknown;
-      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Partial<IBetterListFieldMappings>) : {};
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Partial<IBetterListFieldMappings>)
+        : {};
     } catch {
       return {};
     }
@@ -625,7 +680,12 @@ function isSupportedLookupTargetField(field: IBetterListFieldInfo): boolean {
 }
 
 function createFallbackTab(): IBetterListTabConfig {
-  return { id: 'all', label: 'All items', filter: { kind: 'all' }, icon: { mode: 'none' } };
+  return {
+    id: 'all',
+    label: 'All items',
+    filter: { kind: 'all' },
+    icon: { mode: 'none' }
+  };
 }
 
 function coerceTabFilterValues(
@@ -660,7 +720,10 @@ function getGroupIcon(tab: IBetterListTabConfig, firstItem?: ICoreBetterListItem
         ? toDisplayString(firstItem.values[tab.icon.field])
         : '') || '';
   const normalized = raw.toLocaleLowerCase();
-  return normalized === 'general' || normalized === 'communications' || normalized === 'policy' || normalized === 'support'
+  return normalized === 'general' ||
+    normalized === 'communications' ||
+    normalized === 'policy' ||
+    normalized === 'support'
     ? normalized
     : undefined;
 }
