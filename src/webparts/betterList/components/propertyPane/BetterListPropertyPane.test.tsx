@@ -82,7 +82,7 @@ describe('BetterListPropertyPane', () => {
     expect(html).toContain('Styles &amp; template views');
     expect(html).toContain('>CSS/SCSS</button>');
     expect(html).toContain('>HTML template</button>');
-    expect(html).toContain('aria-label="Split"');
+    expect(html).not.toContain('aria-label="Split"');
   });
 
   it('authors an optional heading without changing the source-list selection', async () => {
