@@ -271,20 +271,31 @@ describe('SourceEditorField', () => {
       const toolbar = document.body.querySelector<HTMLElement>(
         '.bt-source-workspace--floating .bt-floating-editor__toolbar'
       );
+      const workspace = document.body.querySelector<HTMLElement>('.bt-source-workspace--floating');
       const items = toolbar?.querySelector<HTMLElement>('.bt-floating-editor__toolbar-items');
+      expect(workspace).not.toBeNull();
       expect(toolbar).not.toBeNull();
       expect(items).not.toBeNull();
       Object.defineProperty(toolbar as HTMLElement, 'clientWidth', { configurable: true, value: 100 });
       Object.defineProperty(items as HTMLElement, 'scrollWidth', { configurable: true, value: 200 });
 
-      act(() => {
-        window.dispatchEvent(new Event('resize'));
+      await act(async () => {
+        (workspace as HTMLElement).style.width = '100px';
+        await settleMutationObserver();
       });
 
-      const trigger = toolbar?.querySelector<HTMLButtonElement>('[aria-label="Open SCSS editor shortcuts"]');
-      expect(trigger).not.toBeNull();
-      act(() => Simulate.click(trigger as HTMLButtonElement));
+      const collapsedTrigger = toolbar?.querySelector<HTMLButtonElement>('[aria-label="Open SCSS editor shortcuts"]');
+      expect(collapsedTrigger).not.toBeNull();
+      act(() => Simulate.click(collapsedTrigger as HTMLButtonElement));
       expect(document.body.querySelector('[role="menu"][aria-label="SCSS editor shortcuts"]')).not.toBeNull();
+
+      Object.defineProperty(toolbar as HTMLElement, 'clientWidth', { configurable: true, value: 400 });
+      await act(async () => {
+        (workspace as HTMLElement).style.width = '400px';
+        await settleMutationObserver();
+      });
+      const expandedTrigger = toolbar?.querySelector<HTMLButtonElement>('[aria-label="Open SCSS editor shortcuts"]');
+      expect(expandedTrigger).toBeNull();
     } finally {
       restoreWindowProperty('ResizeObserver', resizeObserverDescriptor);
     }
@@ -305,6 +316,11 @@ function changeTextarea(textarea: HTMLTextAreaElement, value: string): void {
 async function settleEditorFallback(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
+}
+
+async function settleMutationObserver(): Promise<void> {
+  await new Promise((resolve) => window.setTimeout(resolve, 0));
+  await settleEditorFallback();
 }
 
 function restoreWindowProperty(key: 'ResizeObserver', descriptor?: PropertyDescriptor): void {
