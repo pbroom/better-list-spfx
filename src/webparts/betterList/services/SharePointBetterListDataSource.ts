@@ -187,12 +187,13 @@ function richTextModeFromSchema(schemaXml: string): string | undefined {
 }
 
 function mappingsNeedSchemaResolution(mappings: IBetterListFieldMappings): boolean {
-  const legacyDescriptionNeedsSchema = Boolean(
-    mappings.description && mappings.description.richText === undefined
-  );
-  return legacyDescriptionNeedsSchema || allMappings(mappings).some((mapping) => {
+  return allMappings(mappings).some((mapping) => {
     const source = mapping.sourceInternalName || mapping.internalName;
-    return source.startsWith('_') ||
+    const legacyTextMapping = mapping !== mappings.title &&
+      mapping.richText === undefined &&
+      (mapping.kind === 'text' || mapping.kind === 'lookup');
+    return legacyTextMapping ||
+      source.startsWith('_') ||
       Boolean(mapping.queryName && mapping.queryName !== source) ||
       (mapping.kind === 'person' && (
         mapping.valueProperty === 'loginName' ||

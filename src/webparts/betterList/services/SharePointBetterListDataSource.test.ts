@@ -81,6 +81,50 @@ describe('SharePointBetterListDataSource', () => {
     expect(result.items[0].metadata[0].value).toBe('Use <code> literally');
   });
 
+  it('hydrates legacy rich-text metadata without requiring a description mapping', async () => {
+    const client: SPHttpClient = {
+      get: (url: string) => url.indexOf('/fields?') >= 0
+        ? Promise.resolve(response({ value: [
+            {
+              Id: 'title',
+              InternalName: 'Title',
+              EntityPropertyName: 'Title',
+              Title: 'Title',
+              TypeAsString: 'Text',
+              SchemaXml: '<Field Type="Text" Name="Title" />'
+            },
+            {
+              Id: 'summary',
+              InternalName: 'Summary',
+              EntityPropertyName: 'Summary',
+              Title: 'Summary',
+              TypeAsString: 'Note',
+              SchemaXml: '<Field Type="Note" Name="Summary" RichText="TRUE" RichTextMode="FullHtml" />'
+            }
+          ] }))
+        : Promise.resolve(response({ value: [{
+            Id: 1,
+            Title: 'Service',
+            Summary: '<p>Readable&nbsp;summary</p>'
+          }] }))
+    } as unknown as SPHttpClient;
+    const source = new SharePointBetterListDataSource(client, 'https://contoso.sharepoint.com/sites/example');
+
+    const result = await source.loadItems({
+      list: { title: 'Services' },
+      mappings: {
+        title: { internalName: 'Title', kind: 'text' },
+        metadata: [{
+          key: 'Summary',
+          label: 'Summary',
+          mapping: { internalName: 'Summary', kind: 'text' }
+        }]
+      }
+    });
+
+    expect(result.items[0].metadata[0].value).toBe('Readable summary');
+  });
+
   it('escapes list titles and follows absolute or relative OData pagination links', async () => {
     const urls: string[] = [];
     const client: SPHttpClient = {
@@ -156,7 +200,8 @@ describe('SharePointBetterListDataSource', () => {
             mapping: {
               internalName: 'Category',
               kind: 'lookup',
-              lookupValueField: 'Description'
+              lookupValueField: 'Description',
+              richText: false
             }
           }
         ]
@@ -361,7 +406,7 @@ describe('SharePointBetterListDataSource', () => {
         metadata: [{
           key: 'LegacyField',
           label: 'Legacy field',
-          mapping: { internalName: 'LegacyField', kind: 'text' }
+          mapping: { internalName: 'LegacyField', kind: 'text', richText: false }
         }]
       }
     });

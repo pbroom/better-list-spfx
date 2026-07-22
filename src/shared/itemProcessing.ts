@@ -480,7 +480,8 @@ export function groupItemsBySourceField(
   items: readonly IBetterListItem[],
   fieldPath: string,
   filter: BetterListFilter = { kind: 'all' },
-  ungroupedLabel: string = 'Other'
+  ungroupedLabel: string = 'Other',
+  richText: boolean = false
 ): readonly IBetterListGroupResult[] {
   const root = parseBetterListFieldPath(fieldPath).source;
   const buckets = new Map<string, {
@@ -494,11 +495,18 @@ export function groupItemsBySourceField(
     const rootValue = readItemPropertyValue(item.source, root);
     const memberships = unwrapCollection(rootValue);
     const effectiveMemberships = memberships.length > 0 ? memberships : [undefined];
+    const normalizedGroupValue = item.metadata.find((entry) => entry.key === fieldPath)?.value;
+    const normalizedMemberships = normalizedGroupValue === undefined ? [] : unwrapCollection(normalizedGroupValue);
     const itemMemberships = new Set<string>();
 
-    effectiveMemberships.forEach((membership) => {
+    effectiveMemberships.forEach((membership, membershipIndex) => {
       const source = { [root]: membership } as Readonly<Record<string, unknown>>;
-      const sortLabel = formatItemPropertyValue(source, fieldPath) || ungroupedLabel;
+      const normalizedMembership = normalizedMemberships[membershipIndex];
+      const sortLabel = (
+        normalizedMembership === undefined
+          ? formatItemPropertyValue(source, fieldPath, richText)
+          : formatItemPropertyValue({ value: normalizedMembership }, 'value')
+      ) || ungroupedLabel;
       const label = stripSortPrefix(sortLabel);
       const key = groupMembershipKey(root, membership, label);
       if (itemMemberships.has(key)) {

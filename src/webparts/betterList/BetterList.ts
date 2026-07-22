@@ -29,6 +29,7 @@ import {
   createBetterListLoadSignature,
   defaultBetterListScss,
   defaultBetterListHtmlTemplate,
+  formatItemPropertyDisplayValue,
   formatItemPropertyValue,
   getRichTextItemPropertyPaths,
   getBetterListRenderer,
@@ -518,7 +519,8 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
           processed,
           configuration.grouping.column,
           configuration.grouping.filter,
-          group.ungroupedLabel
+          group.ungroupedLabel,
+          richTextFieldPaths.has(configuration.grouping.column)
         )
       : [{ key: 'all', label: this.properties.sourceListTitle || 'Items', items: processed }];
     const items: IBetterListItem[] = [];
@@ -570,11 +572,12 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       .filter((fieldPath) => fieldPath !== 'Title')
       .map((fieldPath) => {
         const isDescription = fieldPath === descriptionFieldPath;
-        const value = formatItemPropertyValue(
-          item.source,
-          fieldPath,
-          richTextFieldPaths.has(fieldPath)
-        );
+        const normalizedMetadata = item.metadata.find((entry) => entry.key === fieldPath);
+        const value = isDescription
+          ? item.description
+          : normalizedMetadata
+            ? formatItemPropertyDisplayValue(normalizedMetadata.value)
+            : formatItemPropertyValue(item.source, fieldPath, richTextFieldPaths.has(fieldPath));
         return value
           ? {
               key: fieldPath,

@@ -10,6 +10,7 @@ import {
   createBetterListGroupingOverride,
   defaultBetterListHtmlTemplate,
   defaultBetterListScss,
+  formatItemPropertyDisplayValue,
   formatItemPropertyValue,
   getRichTextItemPropertyPaths,
   getBetterListRenderer,
@@ -363,11 +364,17 @@ function createPresentationTab(
       const elements = itemProperties
         .filter((fieldPath) => fieldPath !== 'Title')
         .map((fieldPath) => {
-          const value = formatItemPropertyValue(item.source, fieldPath, richTextFieldPaths.has(fieldPath));
+          const isDescription = fieldPath === descriptionFieldPath;
+          const normalizedMetadata = item.metadata.find((entry) => entry.key === fieldPath);
+          const value = isDescription
+            ? item.description
+            : normalizedMetadata
+              ? formatItemPropertyDisplayValue(normalizedMetadata.value)
+              : formatItemPropertyValue(item.source, fieldPath, richTextFieldPaths.has(fieldPath));
           return value
             ? {
                 key: fieldPath,
-                kind: fieldPath === descriptionFieldPath ? ('description' as const) : ('metadata' as const),
+                kind: isDescription ? ('description' as const) : ('metadata' as const),
                 value,
                 href: itemElementLinks[fieldPath]
                   ? getItemPropertyUrl(item.source, itemElementLinks[fieldPath])

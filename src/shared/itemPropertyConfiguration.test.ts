@@ -1,6 +1,7 @@
 import {
   betterListMaxItemRows,
   flattenItemLayoutRows,
+  formatItemPropertyDisplayValue,
   formatItemPropertyValue,
   getRichTextItemPropertyPaths,
   getItemPropertyUrl,
@@ -43,6 +44,11 @@ describe('item property configuration', () => {
       'Description'
     ]);
     expect(paths.has('Literal')).toBe(false);
+  });
+
+  it('formats normalized rich-text metadata without re-reading its raw source value', () => {
+    expect(formatItemPropertyDisplayValue('Readable rich text')).toBe('Readable rich text');
+    expect(formatItemPropertyDisplayValue(['First', 'Second'])).toBe('First, Second');
   });
 
   it('preserves authored order, permits an empty selection, and defaults invalid legacy data to Title', () => {

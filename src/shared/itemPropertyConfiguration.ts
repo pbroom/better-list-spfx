@@ -230,6 +230,11 @@ export function formatItemPropertyValue(
   return formatValue(value, richText);
 }
 
+/** Formats an already-normalized field value for item-layout display. */
+export function formatItemPropertyDisplayValue(value: unknown): string | undefined {
+  return formatValue(value, false);
+}
+
 export function readItemPropertyValue(
   source: Readonly<Record<string, unknown>>,
   fieldPath: string
