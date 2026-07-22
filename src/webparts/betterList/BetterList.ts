@@ -35,6 +35,7 @@ import {
   getBetterListRenderer,
   getItemPropertyUrl,
   groupItemsBySourceField,
+  itemPropertyFieldPathsEqual,
   IBetterListFieldMappings,
   IBetterListFieldInfo,
   IBetterListGroupResult,
@@ -571,8 +572,10 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     const elements = itemProperties
       .filter((fieldPath) => fieldPath !== 'Title')
       .map((fieldPath) => {
-        const isDescription = fieldPath === descriptionFieldPath;
-        const normalizedMetadata = item.metadata.find((entry) => entry.key === fieldPath);
+        const isDescription = Boolean(
+          descriptionFieldPath && itemPropertyFieldPathsEqual(fieldPath, descriptionFieldPath)
+        );
+        const normalizedMetadata = item.metadata.find((entry) => itemPropertyFieldPathsEqual(entry.key, fieldPath));
         const value = isDescription
           ? item.description
           : normalizedMetadata

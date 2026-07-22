@@ -471,6 +471,37 @@ describe('Better List item processing', () => {
       .toBe('General services');
   });
 
+  it('keeps normalized multi-lookup group labels aligned when an earlier target value is empty', () => {
+    const item = normalizeItem(
+      {
+        Id: 15,
+        Title: 'Lookup groups',
+        Category: [
+          { Id: 1, Description: '' },
+          { Id: 2, Description: '<p>Second&nbsp;group</p>' }
+        ]
+      },
+      {
+        title: { internalName: 'Title', kind: 'text' },
+        metadata: [{
+          key: 'Category/Description',
+          label: 'Category description',
+          mapping: {
+            internalName: 'Category',
+            fieldPath: 'Category/Description',
+            kind: 'lookup',
+            lookupValueField: 'Description',
+            richText: true,
+            multi: true
+          }
+        }]
+      }
+    );
+
+    expect(groupItemsBySourceField([item], 'Category.Description', { kind: 'all' }, 'Other', true)
+      .map((group) => group.label)).toEqual(['Other', 'Second group']);
+  });
+
   it('treats missing relationship properties as null in group filters', () => {
     expect(sourceMatchesFilter(
       { PoC: { Id: 7, Title: 'Ada' } },

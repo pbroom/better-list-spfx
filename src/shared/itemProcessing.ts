@@ -19,7 +19,11 @@ import {
 } from './betterListTypes';
 import { compileBetterListFilterQuery } from './filterQuery';
 import { parseBetterListFieldPath } from './fieldMappingAuthoring';
-import { formatItemPropertyValue, readItemPropertyValue } from './itemPropertyConfiguration';
+import {
+  formatItemPropertyValue,
+  itemPropertyFieldPathsEqual,
+  readItemPropertyValue
+} from './itemPropertyConfiguration';
 import { toPlainText } from './plainText';
 
 const FIELD_SLOTS: readonly BetterListFieldSlot[] = [
@@ -495,13 +499,17 @@ export function groupItemsBySourceField(
     const rootValue = readItemPropertyValue(item.source, root);
     const memberships = unwrapCollection(rootValue);
     const effectiveMemberships = memberships.length > 0 ? memberships : [undefined];
-    const normalizedGroupValue = item.metadata.find((entry) => entry.key === fieldPath)?.value;
+    const normalizedGroupValue = item.metadata.find((entry) => itemPropertyFieldPathsEqual(entry.key, fieldPath))?.value;
     const normalizedMemberships = normalizedGroupValue === undefined ? [] : unwrapCollection(normalizedGroupValue);
+    let normalizedMembershipIndex = 0;
     const itemMemberships = new Set<string>();
 
-    effectiveMemberships.forEach((membership, membershipIndex) => {
+    effectiveMemberships.forEach((membership) => {
       const source = { [root]: membership } as Readonly<Record<string, unknown>>;
-      const normalizedMembership = normalizedMemberships[membershipIndex];
+      const rawMembership = formatItemPropertyValue(source, fieldPath);
+      const normalizedMembership = rawMembership === undefined
+        ? undefined
+        : normalizedMemberships[normalizedMembershipIndex++];
       const sortLabel = (
         normalizedMembership === undefined
           ? formatItemPropertyValue(source, fieldPath, richText)

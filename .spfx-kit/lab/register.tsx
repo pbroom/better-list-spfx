@@ -22,6 +22,7 @@ import {
   IBetterListEffectiveTabConfiguration,
   IBetterListItem as ICoreBetterListItem,
   IBetterListTabConfig,
+  itemPropertyFieldPathsEqual,
   parseItemLayoutConfiguration,
   parseItemPropertyFields,
   parseTabConfiguration,
@@ -364,8 +365,10 @@ function createPresentationTab(
       const elements = itemProperties
         .filter((fieldPath) => fieldPath !== 'Title')
         .map((fieldPath) => {
-          const isDescription = fieldPath === descriptionFieldPath;
-          const normalizedMetadata = item.metadata.find((entry) => entry.key === fieldPath);
+          const isDescription = Boolean(
+            descriptionFieldPath && itemPropertyFieldPathsEqual(fieldPath, descriptionFieldPath)
+          );
+          const normalizedMetadata = item.metadata.find((entry) => itemPropertyFieldPathsEqual(entry.key, fieldPath));
           const value = isDescription
             ? item.description
             : normalizedMetadata

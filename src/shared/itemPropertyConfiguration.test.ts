@@ -5,6 +5,7 @@ import {
   formatItemPropertyValue,
   getRichTextItemPropertyPaths,
   getItemPropertyUrl,
+  itemPropertyFieldPathsEqual,
   parseItemLayoutConfiguration,
   parseItemLayoutRows,
   parseItemPropertyFields,
@@ -49,6 +50,11 @@ describe('item property configuration', () => {
   it('formats normalized rich-text metadata without re-reading its raw source value', () => {
     expect(formatItemPropertyDisplayValue('Readable rich text')).toBe('Readable rich text');
     expect(formatItemPropertyDisplayValue(['First', 'Second'])).toBe('First, Second');
+  });
+
+  it('treats legacy dotted and canonical slash item-property paths as equivalent', () => {
+    expect(itemPropertyFieldPathsEqual('Category.Description', 'Category/Description')).toBe(true);
+    expect(itemPropertyFieldPathsEqual('Category.Title', 'Category/Description')).toBe(false);
   });
 
   it('preserves authored order, permits an empty selection, and defaults invalid legacy data to Title', () => {
