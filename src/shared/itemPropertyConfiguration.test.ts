@@ -119,10 +119,24 @@ describe('item property configuration', () => {
 
     expect(formatItemPropertyValue(source, 'Active')).toBe('Yes');
     expect(formatItemPropertyValue(source, 'Category.Title')).toBe('General');
+    expect(formatItemPropertyValue(source, 'Category/Title')).toBe('General');
     expect(formatItemPropertyValue(source, 'Audience')).toBe('Alex, Morgan');
     expect(formatItemPropertyValue(source, 'Organizations.Title')).toBe('Consular Affairs, Management');
+    expect(formatItemPropertyValue(source, 'Organizations/Title')).toBe('Consular Affairs, Management');
     expect(formatItemPropertyValue(source, 'URL')).toBe('Open service');
     expect(getItemPropertyUrl(source, 'URL')).toBe('https://contoso.example');
+  });
+
+  it('formats SharePoint results wrappers for multi lookup and Person values', () => {
+    const source = {
+      Categories: { results: [{ Title: 'General' }, null, { Title: 'Policy' }] },
+      Owners: { results: [{ Title: 'Ada' }, { EMail: 'grace@example.test' }] },
+      Empty: { results: [] }
+    };
+
+    expect(formatItemPropertyValue(source, 'Categories')).toBe('General, Policy');
+    expect(formatItemPropertyValue(source, 'Owners')).toBe('Ada, grace@example.test');
+    expect(formatItemPropertyValue(source, 'Empty')).toBeUndefined();
   });
 
   it('formats explicitly rich-text item properties as decoded plain text', () => {

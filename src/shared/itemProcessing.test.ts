@@ -6,6 +6,7 @@ import {
 import {
   filterVisibleItems,
   groupItems,
+  normalizeFieldValue,
   normalizeItem,
   processItems,
   searchItems
@@ -86,7 +87,7 @@ describe('Better List item processing', () => {
       }
     );
 
-    expect(item.metadata[0].value).toEqual(['State', null]);
+    expect(item.metadata[0].value).toEqual(['State']);
   });
 
   it('normalizes SharePoint rich text and hyperlink descriptions to plain text', () => {
@@ -100,7 +101,7 @@ describe('Better List item processing', () => {
       },
       {
         title: { internalName: 'Title', kind: 'text' },
-        description: { internalName: 'Description', kind: 'text' },
+        description: { internalName: 'Description', kind: 'text', richText: true },
         urlLabel: { internalName: 'LabelLink', kind: 'url', valueProperty: 'description' }
       }
     );
@@ -108,6 +109,68 @@ describe('Better List item processing', () => {
     expect(item.description).toBe('First paragraph Second & final');
     expect(item.urlLabel).toBe('Open service');
     expect(item.values.description).toBe('First paragraph Second & final');
+  });
+
+  it('uses schema-authored rich-text metadata for any item element', () => {
+    const item = normalizeItem(
+      {
+        Id: 11,
+        Title: 'Metadata item',
+        Summary: '<div class="ExternalClass123">First&nbsp;summary</div><p>Final</p>',
+        Category: {
+          Description: '<p>General&nbsp;services</p><script>ignored()</script>'
+        },
+        Literal: 'Use <code> literally'
+      },
+      {
+        title: { internalName: 'Title', kind: 'text' },
+        metadata: [
+          {
+            key: 'Summary',
+            label: 'Summary',
+            mapping: { internalName: 'Summary', kind: 'text', richText: true }
+          },
+          {
+            key: 'Category.Description',
+            label: 'Category → Description',
+            mapping: {
+              internalName: 'Category',
+              kind: 'lookup',
+              lookupValueField: 'Description',
+              richText: true
+            }
+          },
+          {
+            key: 'Literal',
+            label: 'Literal',
+            mapping: { internalName: 'Literal', kind: 'text' }
+          }
+        ]
+      }
+    );
+
+    expect(item.metadata.map((entry) => entry.value)).toEqual([
+      'First summary Final',
+      'General services',
+      'Use <code> literally'
+    ]);
+  });
+
+  it('normalizes empty, single, and multi lookup and Person shapes consistently', () => {
+    const singleLookup = { internalName: 'Category', kind: 'lookup' as const, lookupValueField: 'Title' };
+    const multiLookup = { ...singleLookup, multi: true };
+    const singlePerson = { internalName: 'Owner', kind: 'person' as const, valueProperty: 'title' as const };
+    const multiPerson = { ...singlePerson, multi: true };
+
+    expect(normalizeFieldValue(undefined, singleLookup)).toBeNull();
+    expect(normalizeFieldValue({ results: [] }, multiLookup)).toEqual([]);
+    expect(normalizeFieldValue({ Title: 'General' }, singleLookup)).toBe('General');
+    expect(normalizeFieldValue({ results: [{ Title: 'General' }, null, { Title: '' }] }, multiLookup))
+      .toEqual(['General']);
+    expect(normalizeFieldValue(null, singlePerson)).toBeNull();
+    expect(normalizeFieldValue({ Title: 'Ada Lovelace' }, singlePerson)).toBe('Ada Lovelace');
+    expect(normalizeFieldValue({ results: [{ Title: 'Ada' }, { Title: 'Grace' }] }, multiPerson))
+      .toEqual(['Ada', 'Grace']);
   });
 
   it('preserves tag-like substrings in ordinary text and lookup values', () => {
@@ -126,6 +189,23 @@ describe('Better List item processing', () => {
     expect(item.title).toBe('Use <code> literally');
     expect(item.values.category).toBe('Policy <draft>');
     expect(searchItems([item], '<code>')).toEqual([item]);
+  });
+
+  it('preserves markup-looking content in an ordinary description field', () => {
+    const item = normalizeItem(
+      {
+        Id: 12,
+        Title: 'Literal description',
+        Description: '<div class="example">Keep this literal</div>'
+      },
+      {
+        title: { internalName: 'Title', kind: 'text' },
+        description: { internalName: 'Description', kind: 'text', richText: false }
+      }
+    );
+
+    expect(item.description).toBe('<div class="example">Keep this literal</div>');
+    expect(item.values.description).toBe('<div class="example">Keep this literal</div>');
   });
 
   it('normalizes a selected column from the lookup target row', () => {
