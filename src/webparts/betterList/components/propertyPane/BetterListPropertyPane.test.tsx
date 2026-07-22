@@ -73,8 +73,8 @@ describe('BetterListPropertyPane', () => {
     expect(html).toContain('--bl-font-mono: &quot;Geist Mono Variable&quot;');
     expect(html.match(/bl-property-pane-section/g)).toHaveLength(4);
     expect(html).toContain('data-property-pane-section-heading="true"');
-    expect(html.match(/data-property-pane-section-divider="before"/g)).toHaveLength(3);
-    expect(html.match(/data-property-pane-section-divider="none"/g)).toHaveLength(1);
+    expect(html.match(/data-property-pane-section-divider="before"/g)).toHaveLength(4);
+    expect(html).not.toContain('data-property-pane-section-divider="none"');
     expect(html).toContain('aria-label="Add tab"');
     expect(html).not.toContain('aria-label="Select groups column"');
     expect(html).not.toContain('+ Add tab');
