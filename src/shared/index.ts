@@ -1,4 +1,5 @@
 export * from './betterListTypes';
+export * from './authoringLoadSignature';
 export * from './betterListStyles';
 export * from './betterListRenderer';
 export * from './betterListTemplate';

@@ -2,7 +2,15 @@ import * as React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { IBetterListTabConfig } from '../../../../shared';
-import { appendNewTab, IBetterListTabFilterField, reorderTabsById, TabBuilder } from './TabBuilder';
+import {
+  appendNewTab,
+  IBetterListTabFilterField,
+  reorderTabsById,
+  resolveTabNameDraft,
+  shouldToggleTabAccordion,
+  tabSortKeyboardCodes,
+  TabBuilder
+} from './TabBuilder';
 
 describe('TabBuilder', () => {
   it('renders compact, accessible tab disclosures and the simplified filter copy', () => {
@@ -19,7 +27,9 @@ describe('TabBuilder', () => {
       { id: 'all-services', label: 'All Services', filter: { kind: 'all' } }
     ];
 
-    const html = renderToStaticMarkup(<TabBuilder fields={fields} showAddAction={false} tabs={tabs} onChange={() => undefined} />);
+    const html = renderToStaticMarkup(
+      <TabBuilder fields={fields} showAddAction={false} tabs={tabs} onChange={() => undefined} />
+    );
 
     expect(html).toContain('fui-Accordion');
     expect(html).toContain('fui-AccordionItem');
@@ -34,11 +44,12 @@ describe('TabBuilder', () => {
     expect(html.match(/data-tab-remove="true"/g)).toHaveLength(2);
     expect(html).toContain('aria-label="Remove Featured"');
     expect(html).toContain('aria-label="Remove All Services"');
-    expect(html.match(/data-tab-drag-handle="true"/g)).toHaveLength(2);
-    expect(html).toContain('aria-label="Reorder Featured"');
+    expect(html).not.toContain('data-tab-drag-handle');
+    expect(html).toContain(
+      'aria-label="Tab 1: Featured. Drag to reorder. For keyboard sorting, focus this row and press Space."'
+    );
     expect(html).toContain('aria-describedby="tab-featured-header-reorder-help"');
-    expect(html).toContain('Drag to reorder. Press Alt+Arrow Up or Alt+Arrow Down to move.');
-    expect(html).toContain('title="Drag to reorder. Press Alt+Arrow Up or Alt+Arrow Down to move."');
+    expect(html).toContain('Drag to reorder. For keyboard sorting, focus this row and press Space.');
     expect(html).toContain('aria-roledescription="sortable"');
     expect(html).toContain('fui-Switch');
     expect(html).toContain('Show item count');
@@ -52,6 +63,30 @@ describe('TabBuilder', () => {
       'font-family: var(--bl-font-mono, &quot;Geist Mono Variable&quot;, &quot;Geist Mono&quot;, ui-monospace, SFMono-Regular, Consolas, &quot;Liberation Mono&quot;, monospace) !important;'
     );
     expect(html).not.toContain('>×<');
+  });
+
+  it('commits accepted tab-name drafts once and reverts empty drafts', () => {
+    expect(resolveTabNameDraft(' Renamed tab ', 'All items')).toEqual({
+      draft: 'Renamed tab',
+      commit: 'Renamed tab'
+    });
+    expect(resolveTabNameDraft('All items', 'All items')).toEqual({
+      draft: 'All items'
+    });
+    expect(resolveTabNameDraft('   ', 'All items')).toEqual({
+      draft: 'All items'
+    });
+  });
+
+  it('reserves Enter for disclosure while Space controls keyboard sorting', () => {
+    expect(tabSortKeyboardCodes).toEqual({
+      start: ['Space'],
+      cancel: ['Escape'],
+      end: ['Space']
+    });
+    expect(tabSortKeyboardCodes.start).not.toContain('Enter');
+    expect(shouldToggleTabAccordion(true)).toBe(false);
+    expect(shouldToggleTabAccordion(false)).toBe(true);
   });
 
   it('reorders tabs by stable id without mutating the source', () => {
@@ -73,7 +108,11 @@ describe('TabBuilder', () => {
         id: 'featured',
         label: 'Featured',
         filter: { kind: 'all' },
-        groupingOverride: { mode: 'custom', column: 'Category.Title', collapsible: true },
+        groupingOverride: {
+          mode: 'custom',
+          column: 'Category.Title',
+          collapsible: true
+        },
         itemLayoutOverride: {
           itemProperties: ['Title', 'Description'],
           rows: [['Title'], ['Description']],
@@ -85,7 +124,11 @@ describe('TabBuilder', () => {
     const added = appendNewTab(tabs);
 
     expect(added).toHaveLength(2);
-    expect(added[1]).toMatchObject({ id: 'tab-2', label: 'Tab 2', filter: { kind: 'all' } });
+    expect(added[1]).toMatchObject({
+      id: 'tab-2',
+      label: 'Tab 2',
+      filter: { kind: 'all' }
+    });
     expect(added[1]?.groupingOverride).toBeUndefined();
     expect(added[1]?.itemLayoutOverride).toBeUndefined();
   });
