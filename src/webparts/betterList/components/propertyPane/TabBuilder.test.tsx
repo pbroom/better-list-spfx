@@ -51,6 +51,11 @@ describe('TabBuilder', () => {
     expect(html).toContain('aria-describedby="tab-featured-header-reorder-help"');
     expect(html).toContain('Drag to reorder. For keyboard sorting, focus this row and press Space.');
     expect(html).toContain('aria-roledescription="sortable"');
+    expect(html).toContain('bl-tabs-builder__tab-label');
+    expect(html).toContain('.bl-tabs-builder__tab-label { padding-left: 4px; }');
+    expect(html.indexOf('fui-AccordionHeader__expandIcon')).toBeGreaterThan(
+      html.indexOf('bl-tabs-builder__tab-label')
+    );
     expect(html).toContain('fui-Switch');
     expect(html).toContain('Show item count');
     expect(html).toContain('Megaphone');
