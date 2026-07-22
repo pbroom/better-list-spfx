@@ -2,6 +2,7 @@ import {
   betterListMaxItemRows,
   flattenItemLayoutRows,
   formatItemPropertyValue,
+  getRichTextItemPropertyPaths,
   getItemPropertyUrl,
   parseItemLayoutConfiguration,
   parseItemLayoutRows,
@@ -13,6 +14,37 @@ import {
 } from './itemPropertyConfiguration';
 
 describe('item property configuration', () => {
+  it('identifies only schema-authored rich-text item properties', () => {
+    const paths = getRichTextItemPropertyPaths({
+      title: { internalName: 'Title', kind: 'text', richText: false },
+      description: { internalName: 'Description', kind: 'text', richText: true },
+      metadata: [
+        {
+          key: 'Category.Description',
+          label: 'Category description',
+          mapping: {
+            internalName: 'Category',
+            fieldPath: 'Category/Description',
+            kind: 'lookup',
+            richText: true
+          }
+        },
+        {
+          key: 'Literal',
+          label: 'Literal',
+          mapping: { internalName: 'Literal', kind: 'text', richText: false }
+        }
+      ]
+    });
+
+    expect(Array.from(paths).sort()).toEqual([
+      'Category.Description',
+      'Category/Description',
+      'Description'
+    ]);
+    expect(paths.has('Literal')).toBe(false);
+  });
+
   it('preserves authored order, permits an empty selection, and defaults invalid legacy data to Title', () => {
     expect(parseItemPropertyFields('["Description","Title","Description"]')).toEqual([
       'Description',

@@ -1,4 +1,5 @@
 import { toPlainText } from './plainText';
+import { IBetterListFieldMappings } from './betterListTypes';
 
 const REQUIRED_TITLE_FIELD = 'Title';
 export const betterListMaxItemRows = 5;
@@ -11,6 +12,26 @@ export interface IBetterListItemLayoutConfiguration {
   itemProperties: readonly string[];
   rows: BetterListItemLayoutRows;
   links: BetterListItemElementLinks;
+}
+
+/** Returns item-layout field paths whose SharePoint schema marks them as rich text. */
+export function getRichTextItemPropertyPaths(mappings: Partial<IBetterListFieldMappings>): ReadonlySet<string> {
+  const paths = new Set<string>();
+  const description = mappings.description;
+  if (description?.richText) {
+    paths.add(description.internalName);
+    if (description.fieldPath) {
+      paths.add(description.fieldPath);
+    }
+  }
+  (mappings.metadata || []).forEach((entry) => {
+    if (!entry.mapping.richText) {
+      return;
+    }
+    paths.add(entry.key);
+    paths.add(entry.mapping.fieldPath || entry.mapping.internalName);
+  });
+  return paths;
 }
 
 interface IBetterListItemLayoutConfigurationV2 {

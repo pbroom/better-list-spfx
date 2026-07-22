@@ -20,6 +20,67 @@ function response(payload: unknown, ok: boolean = true, status: number = 200): S
 }
 
 describe('SharePointBetterListDataSource', () => {
+  it('hydrates legacy field mappings and converts only schema-authored rich text', async () => {
+    const urls: string[] = [];
+    const client: SPHttpClient = {
+      get: (url: string) => {
+        urls.push(url);
+        if (url.indexOf('/fields?') >= 0) {
+          return Promise.resolve(response({ value: [
+            {
+              Id: 'title',
+              InternalName: 'Title',
+              EntityPropertyName: 'Title',
+              Title: 'Title',
+              TypeAsString: 'Text',
+              SchemaXml: '<Field Type="Text" Name="Title" />'
+            },
+            {
+              Id: 'description',
+              InternalName: 'Description',
+              EntityPropertyName: 'Description',
+              Title: 'Description',
+              TypeAsString: 'Note',
+              SchemaXml: '<Field Type="Note" Name="Description" RichText="TRUE" RichTextMode="FullHtml" />'
+            },
+            {
+              Id: 'plain-notes',
+              InternalName: 'PlainNotes',
+              EntityPropertyName: 'PlainNotes',
+              Title: 'Plain notes',
+              TypeAsString: 'Note',
+              SchemaXml: '<Field Type="Note" Name="PlainNotes" RichText="FALSE" />'
+            }
+          ] }));
+        }
+        return Promise.resolve(response({ value: [{
+          Id: 1,
+          Title: 'Acquisition Request',
+          Description: '<div class="ExternalClassFixture"><p>Create and submit&nbsp;an acquisition request.</p></div>',
+          PlainNotes: 'Use <code> literally'
+        }] }));
+      }
+    } as unknown as SPHttpClient;
+    const source = new SharePointBetterListDataSource(client, 'https://contoso.sharepoint.com/sites/example');
+
+    const result = await source.loadItems({
+      list: { title: 'Services' },
+      mappings: {
+        title: { internalName: 'Title', kind: 'text' },
+        description: { internalName: 'Description', kind: 'text' },
+        metadata: [{
+          key: 'PlainNotes',
+          label: 'Plain notes',
+          mapping: { internalName: 'PlainNotes', kind: 'text' }
+        }]
+      }
+    });
+
+    expect(urls[0]).toContain('/fields?');
+    expect(result.items[0].description).toBe('Create and submit an acquisition request.');
+    expect(result.items[0].metadata[0].value).toBe('Use <code> literally');
+  });
+
   it('escapes list titles and follows absolute or relative OData pagination links', async () => {
     const urls: string[] = [];
     const client: SPHttpClient = {

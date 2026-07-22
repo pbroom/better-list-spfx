@@ -187,7 +187,10 @@ function richTextModeFromSchema(schemaXml: string): string | undefined {
 }
 
 function mappingsNeedSchemaResolution(mappings: IBetterListFieldMappings): boolean {
-  return allMappings(mappings).some((mapping) => {
+  const legacyDescriptionNeedsSchema = Boolean(
+    mappings.description && mappings.description.richText === undefined
+  );
+  return legacyDescriptionNeedsSchema || allMappings(mappings).some((mapping) => {
     const source = mapping.sourceInternalName || mapping.internalName;
     return source.startsWith('_') ||
       Boolean(mapping.queryName && mapping.queryName !== source) ||
@@ -591,8 +594,8 @@ export class SharePointBetterListDataSource implements IBetterListDataSource {
 
   public async loadItems(request: IBetterListLoadRequest): Promise<IBetterListLoadResult> {
     const webUrl: string = this._webUrlFor(request.list);
-    // Hydrate any authored/stale alias and relationship mappings against the
-    // live schema. Plain fields without an alias retain the zero-discovery path.
+    // Hydrate legacy mappings that predate schema-authored rich-text metadata,
+    // plus any authored/stale alias and relationship mappings, against the live schema.
     const fields = mappingsNeedSchemaResolution(request.mappings)
       ? await this.discoverFields(request.list)
       : undefined;

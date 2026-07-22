@@ -30,6 +30,7 @@ import {
   defaultBetterListScss,
   defaultBetterListHtmlTemplate,
   formatItemPropertyValue,
+  getRichTextItemPropertyPaths,
   getBetterListRenderer,
   getItemPropertyUrl,
   groupItemsBySourceField,
@@ -113,10 +114,8 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
   public render(): void {
     const tabs = this._createEffectiveTabConfigurations();
     const fieldMappings = this._readMappings();
-    const descriptionFieldPath = fieldMappings.description?.internalName;
-    const richTextFieldPaths = new Set(
-      (fieldMappings.metadata || []).filter((entry) => entry.mapping.richText).map((entry) => entry.key)
-    );
+    const descriptionFieldPath = fieldMappings.description?.fieldPath || fieldMappings.description?.internalName;
+    const richTextFieldPaths = getRichTextItemPropertyPaths(fieldMappings);
     const itemLayout = parseItemLayoutConfiguration(
       this.properties.itemLayoutJson,
       parseItemPropertyFields(this.properties.itemPropertiesJson)
@@ -574,7 +573,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
         const value = formatItemPropertyValue(
           item.source,
           fieldPath,
-          isDescription || richTextFieldPaths.has(fieldPath)
+          richTextFieldPaths.has(fieldPath)
         );
         return value
           ? {
