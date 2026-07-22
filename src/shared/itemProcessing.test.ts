@@ -6,10 +6,12 @@ import {
 import {
   filterVisibleItems,
   groupItems,
+  groupItemsBySourceField,
   normalizeFieldValue,
   normalizeItem,
   processItems,
-  searchItems
+  searchItems,
+  sourceMatchesFilter
 } from './itemProcessing';
 
 const mappings: IBetterListFieldMappings = {
@@ -354,5 +356,128 @@ describe('Better List item processing', () => {
       'General',
       'Communications'
     ]);
+  });
+
+  it('matches any member of multi-value Person and lookup item filters', () => {
+    const items = [
+      normalizeItem({
+        Id: 1,
+        Title: 'Shared service',
+        PoC: { results: [{ Title: 'Ada' }, { Title: 'Grace' }] },
+        Topics: { results: [{ Title: 'Policy' }, { Title: 'Travel' }] }
+      }, { title: mappings.title }),
+      normalizeItem({ Id: 2, Title: 'Other service', PoC: { results: [{ Title: 'Linus' }] } }, { title: mappings.title })
+    ];
+    const filtered = processItems(items, {
+      id: 'relations',
+      label: 'Relations',
+      filter: {
+        kind: 'query',
+        expression: 'PoC = Grace AND Topics = Travel',
+        fields: [
+          {
+            name: 'PoC',
+            kind: 'person',
+            fieldPath: 'PoC/Title',
+            mapping: {
+              kind: 'person',
+              internalName: 'PoC',
+              fieldPath: 'PoC/Title',
+              personValueField: 'Title',
+              multi: true
+            }
+          },
+          {
+            name: 'Topics',
+            kind: 'lookup',
+            fieldPath: 'Topics.Title',
+            mapping: { kind: 'lookup', internalName: 'Topics', lookupValueField: 'Title', multi: true }
+          }
+        ]
+      }
+    });
+
+    expect(filtered.map((item) => item.title)).toEqual(['Shared service']);
+  });
+
+  it('expands multi-value grouping into distinct memberships and filters relationship groups', () => {
+    const shared = normalizeItem({
+      Id: 1,
+      Title: 'Shared service',
+      PoC: {
+        results: [
+          { Id: 7, Title: 'Ada', Department: 'Engineering' },
+          { Id: 8, Title: 'Grace', Department: 'Research' },
+          { Id: 8, Title: 'Grace', Department: 'Research' }
+        ]
+      }
+    }, { title: mappings.title });
+    const researchOnly = {
+      kind: 'query' as const,
+      expression: 'Department = Research',
+      fields: [{
+        name: 'Department',
+        kind: 'person' as const,
+        fieldPath: 'PoC/Department',
+        mapping: {
+          kind: 'person' as const,
+          internalName: 'PoC',
+          fieldPath: 'PoC/Department',
+          personValueField: 'Department',
+          relationship: {
+            kind: 'person' as const,
+            target: {
+              internalName: 'Department',
+              label: 'Department',
+              kind: 'text' as const,
+              queryable: false,
+              resolution: 'userInfoBatch' as const
+            }
+          },
+          multi: true
+        }
+      }]
+    };
+
+    const allGroups = groupItemsBySourceField([shared], 'PoC/Title');
+    const filteredGroups = groupItemsBySourceField([shared], 'PoC/Title', researchOnly);
+
+    expect(allGroups.map((group) => [group.label, group.items.length])).toEqual([
+      ['Ada', 1],
+      ['Grace', 1]
+    ]);
+    expect(filteredGroups.map((group) => group.label)).toEqual(['Grace']);
+    expect(filteredGroups[0].source).toEqual({ PoC: { Id: 8, Title: 'Grace', Department: 'Research' } });
+  });
+
+  it('treats missing relationship properties as null in group filters', () => {
+    expect(sourceMatchesFilter(
+      { PoC: { Id: 7, Title: 'Ada' } },
+      {
+        kind: 'query',
+        expression: 'Department IS EMPTY',
+        fields: [{
+          name: 'Department',
+          kind: 'person',
+          fieldPath: 'PoC/Department',
+          mapping: {
+            kind: 'person',
+            internalName: 'PoC',
+            fieldPath: 'PoC/Department',
+            personValueField: 'Department',
+            relationship: {
+              kind: 'person',
+              target: {
+                internalName: 'Department',
+                label: 'Department',
+                kind: 'text',
+                queryable: false,
+                resolution: 'userInfoBatch'
+              }
+            }
+          }
+        }]
+      }
+    )).toBe(true);
   });
 });

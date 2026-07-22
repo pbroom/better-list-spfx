@@ -507,7 +507,7 @@ export const resolveTabNameDraft = (
   return next === currentValue ? { draft: next } : { draft: next, commit: next };
 };
 
-const FilterQueryEditor: React.FunctionComponent<{
+export const FilterQueryEditor: React.FunctionComponent<{
   expression: string;
   fields: readonly IBetterListQueryField[];
   id: string;
@@ -679,7 +679,7 @@ function toQueryField(field: IBetterListTabFilterField): IBetterListQueryField {
   };
 }
 
-function filterExpression(filter: BetterListFilter, fields: readonly IBetterListTabFilterField[]): string {
+export function filterExpression(filter: BetterListFilter, fields: readonly IBetterListTabFilterField[]): string {
   if (filter.kind === 'all') {
     return '';
   }

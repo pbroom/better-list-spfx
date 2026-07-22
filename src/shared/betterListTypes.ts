@@ -94,6 +94,10 @@ export interface IBetterListPersonFieldMapping extends IBetterListBaseFieldMappi
   valueProperty?: 'id' | 'title' | 'email' | 'loginName';
   personValueField?: string;
   personValueQueryName?: string;
+  /** Legacy alias retained for serialized relationship mappings authored before personValueField. */
+  lookupValueField?: string;
+  /** Legacy query-name alias paired with lookupValueField. */
+  lookupValueQueryName?: string;
   multi?: boolean;
 }
 
@@ -229,6 +233,8 @@ export interface IBetterListTabGroupingOverride {
   column?: string;
   collapsible?: boolean;
   icons?: IBetterListGroupIconsConfiguration;
+  /** Optional query evaluated against each distinct grouping relationship. */
+  filter?: BetterListFilter;
 }
 
 export interface IBetterListTabItemLayoutOverride {
@@ -279,6 +285,8 @@ export interface IBetterListGroupResult {
   key: string;
   label: string;
   items: readonly IBetterListItem[];
+  /** Synthetic source that preserves the relationship entity behind this group. */
+  source?: Readonly<Record<string, unknown>>;
 }
 
 export interface IBetterListListInfo {

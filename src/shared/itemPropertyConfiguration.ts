@@ -209,6 +209,13 @@ export function formatItemPropertyValue(
   return formatValue(value, richText);
 }
 
+export function readItemPropertyValue(
+  source: Readonly<Record<string, unknown>>,
+  fieldPath: string
+): unknown {
+  return readPath(source, fieldPath);
+}
+
 export function getItemPropertyUrl(
   source: Readonly<Record<string, unknown>>,
   fieldPath: string

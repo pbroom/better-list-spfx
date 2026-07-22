@@ -5,6 +5,8 @@ import {
   parseTabConfiguration,
   serializeTabConfiguration
 } from './tabConfiguration';
+import { createBetterListLoadSignature } from './authoringLoadSignature';
+import { IBetterListTabConfig } from './betterListTypes';
 
 describe('Better List tab configuration', () => {
   it('parses and serializes tab-scoped grouping and item-layout overrides', () => {
@@ -15,9 +17,38 @@ describe('Better List tab configuration', () => {
         filter: { kind: 'all' },
         groupingOverride: {
           mode: 'custom',
-          column: 'Organization.Title',
+          column: 'Organization/Title',
           collapsible: false,
-          icons: { version: 1, showIcons: false, overrides: [] }
+          icons: { version: 1, showIcons: false, overrides: [] },
+          filter: {
+            kind: 'query',
+            expression: 'Department = Research',
+            fields: [{
+              name: 'Department',
+              kind: 'person',
+              fieldPath: 'Organization/Department',
+              mapping: {
+                kind: 'person',
+                internalName: 'Organization',
+                fieldPath: 'Organization/Department',
+                sourceInternalName: 'Organization',
+                queryName: 'OrganizationEntity',
+                personValueField: 'Department',
+                personValueQueryName: 'DepartmentAlias',
+                relationship: {
+                  kind: 'person',
+                  target: {
+                    internalName: 'Department',
+                    label: 'Department',
+                    kind: 'text',
+                    queryName: 'DepartmentAlias',
+                    queryable: false,
+                    resolution: 'userInfoBatch'
+                  }
+                }
+              }
+            }]
+          }
         },
         itemLayoutOverride: {
           itemProperties: ['Title', 'Description'],
@@ -37,8 +68,30 @@ describe('Better List tab configuration', () => {
 
     expect(tabs[0].groupingOverride).toMatchObject({
       mode: 'custom',
-      column: 'Organization.Title',
-      collapsible: false
+      column: 'Organization/Title',
+      collapsible: false,
+      filter: {
+        kind: 'query',
+        expression: 'Department = Research',
+        fields: [{
+          fieldPath: 'Organization/Department',
+          mapping: {
+            fieldPath: 'Organization/Department',
+            sourceInternalName: 'Organization',
+            queryName: 'OrganizationEntity',
+            personValueField: 'Department',
+            personValueQueryName: 'DepartmentAlias',
+            relationship: {
+              kind: 'person',
+              target: {
+                internalName: 'Department',
+                queryName: 'DepartmentAlias',
+                resolution: 'userInfoBatch'
+              }
+            }
+          }
+        }]
+      }
     });
     expect(tabs[0].itemLayoutOverride).toEqual({
       itemProperties: ['Title', 'Description'],
@@ -53,6 +106,37 @@ describe('Better List tab configuration', () => {
     const [tab] = parseTabConfiguration('[{"id":"all","label":"All","filter":{"kind":"all"}}]');
     expect(tab.groupingOverride).toBeUndefined();
     expect(tab.itemLayoutOverride).toBeUndefined();
+  });
+
+  it('upgrades legacy Person target aliases while parsing saved filters', () => {
+    const [tab] = parseTabConfiguration(JSON.stringify([{
+      id: 'legacy-person',
+      label: 'Legacy person',
+      filter: {
+        kind: 'query',
+        expression: 'Department = Research',
+        fields: [{
+          name: 'Department',
+          kind: 'person',
+          fieldPath: 'PoC.Department',
+          mapping: {
+            kind: 'person',
+            internalName: 'PoC',
+            lookupValueField: 'Department',
+            lookupValueQueryName: 'DepartmentAlias'
+          }
+        }]
+      }
+    }]));
+
+    expect(tab.filter).toMatchObject({
+      fields: [{
+        mapping: {
+          personValueField: 'Department',
+          personValueQueryName: 'DepartmentAlias'
+        }
+      }]
+    });
   });
 
   it('round trips an unlimited tab array', () => {
@@ -197,6 +281,53 @@ describe('Better List tab configuration', () => {
       }
     }, { sortOrder: { kind: 'number', internalName: 'Priority' } });
     expect(semanticTab.filter).toMatchObject({ fields: [{ kind: 'number' }] });
+  });
+
+  it('reloads only when a filter references a new relationship target', () => {
+    const mappings = { title: { kind: 'text' as const, internalName: 'Title' } };
+    const makeTab = (expression: string, target: string): IBetterListTabConfig => ({
+      id: 'people',
+      label: 'People',
+      filter: {
+        kind: 'query' as const,
+        expression,
+        fields: [{
+          name: target,
+          kind: 'person' as const,
+          fieldPath: `PoC/${target}`,
+          mapping: {
+            kind: 'person' as const,
+            internalName: 'PoC',
+            fieldPath: `PoC/${target}`,
+            personValueField: target,
+            personValueQueryName: target,
+            relationship: {
+              kind: 'person' as const,
+              target: {
+                internalName: target,
+                label: target,
+                kind: 'text' as const,
+                queryName: target,
+                queryable: false,
+                resolution: 'userInfoBatch' as const
+              }
+            }
+          }
+        }]
+      }
+    });
+
+    const list = { id: 'services', title: 'Services' };
+    const signature = (tab: IBetterListTabConfig): string => createBetterListLoadSignature(
+      list,
+      addTabFilterMappings(mappings, [tab])
+    );
+    const engineering = signature(makeTab('Department = Engineering', 'Department'));
+    const research = signature(makeTab('Department = Research', 'Department'));
+    const location = signature(makeTab('Location = HQ', 'Location'));
+
+    expect(research).toBe(engineering);
+    expect(location).not.toBe(engineering);
   });
 
   it('rejects duplicate ids and multi-condition rule shapes', () => {

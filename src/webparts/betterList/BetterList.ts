@@ -27,7 +27,7 @@ import {
   formatItemPropertyValue,
   getBetterListRenderer,
   getItemPropertyUrl,
-  groupItems,
+  groupItemsBySourceField,
   IBetterListFieldMappings,
   IBetterListFieldInfo,
   IBetterListGroupResult,
@@ -499,25 +499,15 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
         collapsible: group ? configuration.grouping.collapsible : false
       }
     };
-    const sourceItems = configuration.grouping.column
-      ? this._items.map((item) => ({
-          ...item,
-          values: {
-            ...item.values,
-            group: formatItemPropertyValue(item.source, configuration.grouping.column)
-          }
-        }))
-      : this._items;
-    const processed = processItems(sourceItems, tab);
+    const processed = processItems(this._items, tab);
     const groups: readonly IBetterListGroupResult[] = group
-      ? groupItems(processed, group)
-      : [
-          {
-            key: 'all',
-            label: this.properties.sourceListTitle || 'Items',
-            items: processed
-          }
-        ];
+      ? groupItemsBySourceField(
+          processed,
+          configuration.grouping.column,
+          configuration.grouping.filter,
+          group.ungroupedLabel
+        )
+      : [{ key: 'all', label: this.properties.sourceListTitle || 'Items', items: processed }];
     const items: IBetterListItem[] = [];
     groups.forEach((group, groupIndex) => {
       group.items.forEach((item) => {
@@ -638,7 +628,8 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       grouping: {
         column: this.properties.groupsColumn,
         collapsible: this.properties.groupsCollapsible,
-        icons: parseBetterListGroupIconsConfiguration(this.properties.groupIconsJson)
+        icons: parseBetterListGroupIconsConfiguration(this.properties.groupIconsJson),
+        filter: { kind: 'all' }
       },
       itemLayout
     });

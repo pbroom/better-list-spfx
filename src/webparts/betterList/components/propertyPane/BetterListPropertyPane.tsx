@@ -18,6 +18,8 @@ import {
   createBetterListGroupingOverride,
   createBetterListItemLayoutOverride,
   createBetterListMetadataMappings,
+  parseBetterListFieldPath,
+  collectBetterListQueryFields,
   createDefaultTabs,
   betterListSemanticSlots,
   defaultBetterListHtmlTemplate,
@@ -28,6 +30,7 @@ import {
   IBetterListFieldDescriptor,
   IBetterListFieldMappings,
   IBetterListGroupIconsConfiguration,
+  IBetterListQueryField,
   IBetterListTabConfig,
   resolveBetterListTabConfigurations,
   validateBetterListTemplateStructure
@@ -37,7 +40,13 @@ import { SourceWorkspaceField } from '../../../../vendor/source-editor/SourceWor
 import { GroupIconColorField } from '../GroupIconColorField';
 import { ItemPropertyBuilder } from './ItemPropertyBuilder';
 import { PropertyPaneSection } from './PropertyPaneSection';
-import { appendNewTab, IBetterListTabFilterField, TabBuilder } from './TabBuilder';
+import {
+  appendNewTab,
+  filterExpression,
+  FilterQueryEditor,
+  IBetterListTabFilterField,
+  TabBuilder
+} from './TabBuilder';
 import type { ISharePointImageAssetProvider } from '../../services';
 
 export interface IBetterListAuthoringState {
@@ -218,7 +227,8 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
     grouping: {
       column: props.value.groupsColumn,
       collapsible: props.value.groupsCollapsible,
-      icons: props.value.groupIcons
+      icons: props.value.groupIcons,
+      filter: { kind: 'all' }
     },
     itemLayout: {
       itemProperties: props.value.itemProperties,
@@ -231,7 +241,8 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
   const activeGrouping = activeConfiguration?.grouping ?? {
     column: '',
     collapsible: false,
-    icons: props.value.groupIcons
+    icons: props.value.groupIcons,
+    filter: { kind: 'all' as const }
   };
   const activeItemLayout = activeConfiguration?.itemLayout ?? {
     itemProperties: props.value.itemProperties,
@@ -247,7 +258,8 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
       grouping: {
         column: props.value.groupsColumn,
         collapsible: props.value.groupsCollapsible,
-        icons: props.value.groupIcons
+        icons: props.value.groupIcons,
+        filter: { kind: 'all' }
       },
       itemLayout: {
         itemProperties: props.value.itemProperties,
@@ -262,6 +274,13 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
         paths.push(...Object.keys(entry.itemLayout.links).map((fieldPath) => entry.itemLayout.links[fieldPath]));
         if (entry.grouping.column) {
           paths.push(entry.grouping.column);
+        }
+        if (entry.grouping.filter.kind === 'sourceEquals') {
+          paths.push(entry.grouping.filter.fieldPath);
+        } else if (entry.grouping.filter.kind === 'query') {
+          paths.push(...entry.grouping.filter.fields
+            .map((field) => field.fieldPath)
+            .filter((fieldPath): fieldPath is string => Boolean(fieldPath)));
         }
         return paths;
       }, [])
@@ -368,6 +387,7 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
     patchActiveGrouping({
       column: fieldPath,
       collapsible: fieldPath ? activeGrouping.collapsible : false,
+      filter: fieldPath === activeGrouping.column ? activeGrouping.filter : { kind: 'all' },
       icons: fieldPath === activeGrouping.column
         ? activeGrouping.icons
         : { ...activeGrouping.icons, overrides: [] }
@@ -377,6 +397,8 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
   const groupingOptions = createGroupingColumnOptions(groupingFields);
   const selectedGroupingOption = groupingOptions.find((option) => option.value === activeGrouping.column);
   const tabFilterFields = createTabFilterFields(props.value.fieldMappings, fields);
+  const groupFilterFields = createGroupFilterFields(fields, activeGrouping.column);
+  const groupQueryFields = groupFilterFields.map(toGroupQueryField);
 
   return (
     <FluentProvider
@@ -508,6 +530,24 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
               className="bl-pane__switch"
               label="Allow groups to collapse"
               onChange={(_event, data) => patchActiveGrouping({ ...activeGrouping, collapsible: data.checked })}
+            />
+            <FilterQueryEditor
+              expression={filterExpression(activeGrouping.filter, groupFilterFields)}
+              fields={groupQueryFields}
+              id={`group-filter-${activeTabId.replace(/[^A-Za-z0-9_-]/g, '-')}`}
+              onChange={(expression) => {
+                const trimmed = expression.trim();
+                patchActiveGrouping({
+                  ...activeGrouping,
+                  filter: trimmed
+                    ? {
+                        kind: 'query',
+                        expression,
+                        fields: collectBetterListQueryFields(expression, groupQueryFields)
+                      }
+                    : { kind: 'all' }
+                });
+              }}
             />
             <Switch
               checked={activeGrouping.icons.showIcons}
@@ -644,6 +684,41 @@ function createTabFilterFields(
       };
     });
   return semanticFields.concat(sourceFields);
+}
+
+function createGroupFilterFields(
+  fields: readonly ISharePointFieldOption[],
+  groupingColumn: string
+): readonly IBetterListTabFilterField[] {
+  const root = parseBetterListFieldPath(groupingColumn).source;
+  if (!root) {
+    return [];
+  }
+  return createBetterListFieldPathCatalog(fields)
+    .filter((option) => option.field.internalName === root)
+    .map((option) => {
+      const mapping = createBetterListFieldMapping(
+        option.field,
+        undefined,
+        option.targetField?.internalName
+      );
+      return {
+        id: `group:${option.fieldPath}`,
+        fieldPath: option.fieldPath,
+        kind: mapping.kind,
+        label: option.label,
+        mapping
+      };
+    });
+}
+
+function toGroupQueryField(field: IBetterListTabFilterField): IBetterListQueryField {
+  return {
+    name: field.label,
+    kind: field.kind,
+    fieldPath: field.fieldPath,
+    mapping: field.mapping
+  };
 }
 
 interface IGroupingColumnOption {

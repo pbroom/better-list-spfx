@@ -18,6 +18,8 @@ import {
   IBetterListTabConfig
 } from './betterListTypes';
 import { compileBetterListFilterQuery } from './filterQuery';
+import { parseBetterListFieldPath } from './fieldMappingAuthoring';
+import { formatItemPropertyValue, readItemPropertyValue } from './itemPropertyConfiguration';
 import { toPlainText } from './plainText';
 
 const FIELD_SLOTS: readonly BetterListFieldSlot[] = [
@@ -101,7 +103,9 @@ function normalizeRawFieldValue(value: unknown, mapping: BetterListFieldMapping)
   if (mapping.kind === 'person') {
     const values: readonly unknown[] = unwrapCollection(value);
     const normalized: readonly BetterListComparableValue[] = values.map((entry: unknown) => {
-      const targetField = mapping.personValueField || mapping.relationship?.target.internalName;
+      const targetField = mapping.personValueField ||
+        mapping.relationship?.target.internalName ||
+        mapping.lookupValueField;
       const normalizedTarget = targetField?.toLocaleLowerCase();
       if (
         targetField &&
@@ -111,7 +115,10 @@ function normalizeRawFieldValue(value: unknown, mapping: BetterListFieldMapping)
         normalizedTarget !== 'loginname' &&
         normalizedTarget !== 'name'
       ) {
-        return scalar(property(entry, [targetField, mapping.personValueQueryName || targetField]));
+        return scalar(property(entry, [
+          targetField,
+          mapping.personValueQueryName || mapping.lookupValueQueryName || targetField
+        ]));
       }
       if (mapping.valueProperty === 'id') {
         return scalar(property(entry, ['Id', 'ID', 'id']));
@@ -290,6 +297,25 @@ export function itemMatchesFilter(item: IBetterListItem, filter: BetterListFilte
   return createFilterMatcher(filter)(item);
 }
 
+export function sourceMatchesFilter(
+  source: Readonly<Record<string, unknown>>,
+  filter: BetterListFilter
+): boolean {
+  if (filter.kind === 'all') {
+    return true;
+  }
+  if (filter.kind === 'query') {
+    const query = compileBetterListFilterQuery(filter.expression, filter.fields);
+    return Boolean(query?.((field) =>
+      field.mapping ? normalizeFieldValue(source[field.mapping.internalName], field.mapping) : undefined
+    ));
+  }
+  if (filter.kind === 'sourceEquals') {
+    return equals(normalizeFieldValue(source[filter.mapping.internalName], filter.mapping), filter.value);
+  }
+  return false;
+}
+
 function queryFieldValue(item: IBetterListItem, field: IBetterListQueryField): BetterListFieldValue | undefined {
   if (field.field) {
     return item.values[field.field];
@@ -448,6 +474,68 @@ export function groupItems(
   return Array.from(buckets.entries())
     .sort((left, right) => direction * left[1].sortLabel.localeCompare(right[1].sortLabel, undefined, { numeric: true, sensitivity: 'base' }))
     .map(([key, bucket]) => ({ key, label: bucket.label, items: bucket.items }));
+}
+
+export function groupItemsBySourceField(
+  items: readonly IBetterListItem[],
+  fieldPath: string,
+  filter: BetterListFilter = { kind: 'all' },
+  ungroupedLabel: string = 'Other'
+): readonly IBetterListGroupResult[] {
+  const root = parseBetterListFieldPath(fieldPath).source;
+  const buckets = new Map<string, {
+    label: string;
+    sortLabel: string;
+    source: Readonly<Record<string, unknown>>;
+    items: IBetterListItem[];
+  }>();
+
+  items.forEach((item) => {
+    const rootValue = readItemPropertyValue(item.source, root);
+    const memberships = unwrapCollection(rootValue);
+    const effectiveMemberships = memberships.length > 0 ? memberships : [undefined];
+    const itemMemberships = new Set<string>();
+
+    effectiveMemberships.forEach((membership) => {
+      const source = { [root]: membership } as Readonly<Record<string, unknown>>;
+      const sortLabel = formatItemPropertyValue(source, fieldPath) || ungroupedLabel;
+      const label = stripSortPrefix(sortLabel);
+      const key = groupMembershipKey(root, membership, label);
+      if (itemMemberships.has(key)) {
+        return;
+      }
+      itemMemberships.add(key);
+      const bucket = buckets.get(key);
+      if (bucket) {
+        bucket.items.push(item);
+      } else {
+        buckets.set(key, { label, sortLabel, source, items: [item] });
+      }
+    });
+  });
+
+  return Array.from(buckets.entries())
+    .filter(([, bucket]) => sourceMatchesFilter(bucket.source, filter))
+    .sort((left, right) => left[1].sortLabel.localeCompare(right[1].sortLabel, undefined, {
+      numeric: true,
+      sensitivity: 'base'
+    }))
+    .map(([key, bucket]) => ({
+      key,
+      label: bucket.label,
+      items: bucket.items,
+      source: bucket.source
+    }));
+}
+
+function groupMembershipKey(root: string, membership: unknown, label: string): string {
+  if (isRecord(membership)) {
+    const identity = property(membership, ['Id', 'ID', 'id', 'LookupId']);
+    if (identity !== undefined && identity !== null && identity !== '') {
+      return `${root.toLocaleLowerCase()}:${String(identity).toLocaleLowerCase()}`;
+    }
+  }
+  return label.trim().toLocaleLowerCase() || '__ungrouped__';
 }
 
 function stripSortPrefix(value: string): string {
