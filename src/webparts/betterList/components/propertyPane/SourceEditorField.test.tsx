@@ -148,6 +148,7 @@ describe('SourceEditorField', () => {
   });
 
   it('preserves invalid drafts when the workspace moves into and out of the portal', async () => {
+    const onDraftChange = jest.fn();
     const validate = (value: string): SourceEditorDiagnostic[] =>
       value.includes('<script>') ? [{ level: 'error', message: 'Scripts are not allowed.' }] : [];
 
@@ -164,7 +165,8 @@ describe('SourceEditorField', () => {
               language: 'html',
               validate,
               value: '<section>valid</section>',
-              onChange: jest.fn()
+              onChange: jest.fn(),
+              onDraftChange
             }
           ]}
         />,
@@ -174,6 +176,7 @@ describe('SourceEditorField', () => {
     });
 
     changeTextarea(getTextareas(container)[0], '<script>draft</script>');
+    expect(onDraftChange).toHaveBeenLastCalledWith('<script>draft</script>');
     const popOut = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Pop out');
     await act(async () => {
       Simulate.click(popOut as HTMLButtonElement);
@@ -224,6 +227,74 @@ describe('SourceEditorField', () => {
     expect(document.body.querySelectorAll('[role="dialog"]')).toHaveLength(1);
     expect(document.body.querySelector<HTMLInputElement>('input[aria-label="Edit .card"]')).toBeNull();
   });
+
+  it('remeasures floating shortcuts when the workspace resizes without ResizeObserver', async () => {
+    const resizeObserverDescriptor = Object.getOwnPropertyDescriptor(window, 'ResizeObserver');
+    const mutationObserverDescriptor = Object.getOwnPropertyDescriptor(window, 'MutationObserver');
+    let notifyMutation: (() => void) | undefined;
+
+    class TestMutationObserver implements MutationObserver {
+      public constructor(callback: MutationCallback) {
+        notifyMutation = () => callback([], this);
+      }
+
+      public disconnect(): void {}
+
+      public observe(): void {}
+
+      public takeRecords(): MutationRecord[] {
+        return [];
+      }
+    }
+
+    Object.defineProperty(window, 'ResizeObserver', { configurable: true, value: undefined });
+    Object.defineProperty(window, 'MutationObserver', { configurable: true, value: TestMutationObserver });
+
+    try {
+      await act(async () => {
+        ReactDom.render(
+          <SourceWorkspaceField
+            label="Styles & template"
+            documents={[
+              {
+                config: { monacoAdapter: unavailableMonaco },
+                id: 'scss',
+                label: 'CSS/SCSS',
+                language: 'scss',
+                targets: [{ label: 'Card', selector: '.card', snippet: '.card {}' }],
+                value: '.card {}',
+                onChange: jest.fn()
+              }
+            ]}
+          />,
+          container
+        );
+        await settleEditorFallback();
+      });
+
+      const popOut = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Pop out');
+      await act(async () => {
+        Simulate.click(popOut as HTMLButtonElement);
+        await settleEditorFallback();
+      });
+
+      const toolbar = document.body.querySelector<HTMLElement>(
+        '.bt-source-workspace--floating .bt-floating-editor__toolbar'
+      );
+      const items = toolbar?.querySelector<HTMLElement>('.bt-floating-editor__toolbar-items');
+      expect(toolbar).not.toBeNull();
+      expect(items).not.toBeNull();
+      Object.defineProperty(toolbar as HTMLElement, 'clientWidth', { configurable: true, value: 100 });
+      Object.defineProperty(items as HTMLElement, 'scrollWidth', { configurable: true, value: 200 });
+
+      act(() => notifyMutation?.());
+
+      expect(toolbar?.querySelector('.bt-floating-editor__shortcut-menu')).not.toBeNull();
+    } finally {
+      restoreWindowProperty('ResizeObserver', resizeObserverDescriptor);
+      restoreWindowProperty('MutationObserver', mutationObserverDescriptor);
+    }
+  });
 });
 
 function getTextareas(root: ParentNode): HTMLTextAreaElement[] {
@@ -240,4 +311,12 @@ function changeTextarea(textarea: HTMLTextAreaElement, value: string): void {
 async function settleEditorFallback(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
+}
+
+function restoreWindowProperty(key: 'MutationObserver' | 'ResizeObserver', descriptor?: PropertyDescriptor): void {
+  if (descriptor) {
+    Object.defineProperty(window, key, descriptor);
+    return;
+  }
+  delete (window as unknown as Record<string, unknown>)[key];
 }

@@ -11,7 +11,7 @@ import type { FloatingRect, ResizeDirection, SourceEditorFieldProps } from './So
 
 export interface SourceWorkspaceDocument extends Omit<
   SourceEditorFieldProps,
-  'embedded' | 'fillHeight' | 'onDraftChange' | 'showShortcuts'
+  'embedded' | 'fillHeight' | 'showShortcuts'
 > {
   id: string;
 }
@@ -344,7 +344,10 @@ export const SourceWorkspaceField: React.FunctionComponent<SourceWorkspaceFieldP
                   height={document.height || 190}
                   showShortcuts={floating}
                   value={workspaceState.drafts[document.id] ?? document.value}
-                  onDraftChange={(value) => dispatchWorkspaceAction({ type: 'update-draft', documentId: document.id, value })}
+                  onDraftChange={(value) => {
+                    dispatchWorkspaceAction({ type: 'update-draft', documentId: document.id, value });
+                    document.onDraftChange?.(value);
+                  }}
                 />
               </section>
             );
