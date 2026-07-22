@@ -14,6 +14,7 @@ import { AddRegular } from '@fluentui/react-icons';
 
 import {
   createBetterListFieldMapping,
+  createBetterListFieldPathCatalog,
   createBetterListGroupingOverride,
   createBetterListItemLayoutOverride,
   createBetterListMetadataMappings,
@@ -606,15 +607,6 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
   );
 };
 
-function getFieldPathLabel(field: ISharePointFieldOption, fieldPath: string): string {
-  const targetInternalName = fieldPath.split('.')[1];
-  if (!targetInternalName) {
-    return field.title;
-  }
-  const targetField = field.lookupFields?.find((candidate) => candidate.internalName === targetInternalName);
-  return `${field.title} → ${targetField?.title || targetInternalName}`;
-}
-
 function createTabFilterFields(
   mappings: Partial<IBetterListFieldMappings>,
   fields: readonly ISharePointFieldOption[]
@@ -628,15 +620,19 @@ function createTabFilterFields(
     })
     .filter((field): field is IBetterListTabFilterField => Boolean(field));
   const mappedInternalNames = new Set(semanticFields.map((field) => mappings[field.key || 'title']?.internalName));
-  const sourceFields = fields
-    .filter((field) => !mappedInternalNames.has(field.internalName))
-    .map((field): IBetterListTabFilterField => {
-      const mapping = createBetterListFieldMapping(field);
+  const sourceFields = createBetterListFieldPathCatalog(fields)
+    .filter((option) => !mappedInternalNames.has(option.field.internalName))
+    .map((option): IBetterListTabFilterField => {
+      const mapping = createBetterListFieldMapping(
+        option.field,
+        undefined,
+        option.targetField?.internalName
+      );
       return {
-        id: `source:${field.internalName}`,
-        fieldPath: field.internalName,
+        id: `source:${option.fieldPath}`,
+        fieldPath: option.fieldPath,
         kind: mapping.kind,
-        label: field.title,
+        label: option.label,
         mapping
       };
     });
@@ -684,21 +680,10 @@ function getTabLabel(tabs: readonly IBetterListTabConfig[], tabId: string | unde
 function createGroupingColumnOptions(
   fields: readonly ISharePointFieldOption[]
 ): readonly IGroupingColumnOption[] {
-  return fields.reduce<IGroupingColumnOption[]>((options, field) => {
-    const isLookup = field.typeAsString.toLocaleLowerCase().indexOf('lookup') >= 0;
-    if (!isLookup) {
-      options.push({ label: field.title, value: field.internalName });
-      return options;
-    }
-    const lookupFields = field.lookupFields?.length
-      ? field.lookupFields
-      : [{ internalName: field.lookupField || 'Title', title: field.lookupField || 'Title', typeAsString: 'Text' }];
-    lookupFields.forEach((lookupField) => {
-      const value = `${field.internalName}.${lookupField.internalName}`;
-      options.push({ label: getFieldPathLabel(field, value), value });
-    });
-    return options;
-  }, []);
+  return createBetterListFieldPathCatalog(fields).map((option) => ({
+    label: option.label,
+    value: option.fieldPath
+  }));
 }
 
 function isGroupingColumn(field: ISharePointFieldOption): boolean {
@@ -707,6 +692,8 @@ function isGroupingColumn(field: ISharePointFieldOption): boolean {
     type.indexOf('text') >= 0 ||
     type.indexOf('choice') >= 0 ||
     type.indexOf('lookup') >= 0 ||
+    type.indexOf('user') >= 0 ||
+    type.indexOf('person') >= 0 ||
     type.indexOf('boolean') >= 0 ||
     type.indexOf('date') >= 0
   );

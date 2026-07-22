@@ -59,7 +59,10 @@ import {
   BetterListItemElementLinks,
   BetterListItemLayoutRows,
   flattenItemLayoutRows,
+  getBetterListFieldPathLabel,
+  getBetterListFieldTargetFields,
   IBetterListFieldDescriptor,
+  isBetterListLookupLikeField,
   normalizeItemElementLinks,
   normalizeItemLayoutRows,
   normalizeItemPropertyFields,
@@ -354,8 +357,8 @@ export const ItemPropertyBuilder: React.FunctionComponent<IItemPropertyBuilderPr
   const availableFields = React.useMemo(
     () =>
       fields.filter((field) => {
-        if (isLookupField(field)) {
-          return getLookupTargetFields(field).some(
+        if (isBetterListLookupLikeField(field)) {
+          return getBetterListFieldTargetFields(field).some(
             (targetField) => !selected.has(createLookupFieldPath(field, targetField))
           );
         }
@@ -886,14 +889,14 @@ export function ColumnPickerMenu({
             </>
           ) : null}
           {fields.map((field) =>
-            isLookupField(field) ? (
+            isBetterListLookupLikeField(field) ? (
               <Menu key={field.internalName}>
                 <MenuTrigger disableButtonEnhancement>
                   <MenuItem>{field.title}</MenuItem>
                 </MenuTrigger>
                 <MenuPopover className={classes.menuPopover}>
                   <MenuList>
-                    {getLookupTargetFields(field)
+                    {getBetterListFieldTargetFields(field)
                       .filter(
                         (targetField) =>
                           !selectedPaths?.has(createLookupFieldPath(field, targetField))
@@ -910,7 +913,10 @@ export function ColumnPickerMenu({
                             onSelect(createLookupFieldPath(field, targetField))
                           }
                         >
-                          {targetField.title}
+                          {getBetterListFieldPathLabel(
+                            field,
+                            createLookupFieldPath(field, targetField)
+                          )}
                           {targetField.internalName === (field.lookupField || 'Title')
                             ? ' (default)'
                             : ''}
@@ -939,38 +945,24 @@ export function ColumnPickerMenu({
   );
 }
 
-function isLookupField(field: IBetterListFieldDescriptor): boolean {
-  return field.typeAsString.toLocaleLowerCase().indexOf('lookup') >= 0;
-}
-
-function getLookupTargetFields(
-  field: IBetterListFieldDescriptor
-): readonly IBetterListFieldDescriptor[] {
-  if (field.lookupFields && field.lookupFields.length > 0) {
-    return field.lookupFields;
-  }
-  const internalName = field.lookupField || 'Title';
-  return [{ internalName, title: internalName, typeAsString: 'Text' }];
-}
-
 function createLookupFieldPath(
   field: IBetterListFieldDescriptor,
   targetField: IBetterListFieldDescriptor
 ): string {
-  return `${field.internalName}.${targetField.internalName}`;
+  return `${field.internalName}/${targetField.internalName}`;
 }
 
 function getItemLinkFieldOptions(
   fields: readonly IBetterListFieldDescriptor[]
 ): readonly IItemLinkFieldOption[] {
   return fields.reduce<IItemLinkFieldOption[]>((result, field) => {
-    if (isLookupField(field)) {
-      getLookupTargetFields(field)
+    if (isBetterListLookupLikeField(field)) {
+      getBetterListFieldTargetFields(field)
         .filter((targetField) => isHyperlinkField(targetField))
         .forEach((targetField) => {
           result.push({
             fieldPath: createLookupFieldPath(field, targetField),
-            label: `${field.title} → ${targetField.title}`
+            label: getBetterListFieldPathLabel(field, createLookupFieldPath(field, targetField))
           });
         });
     } else if (isHyperlinkField(field)) {
@@ -989,7 +981,7 @@ function findField(
   fields: readonly IBetterListFieldDescriptor[],
   fieldPath: string
 ): IBetterListFieldDescriptor | undefined {
-  const internalName = fieldPath.split('.')[0];
+  const internalName = fieldPath.split(/[/.]/)[0];
   return fields.find((field) => field.internalName === internalName);
 }
 
@@ -997,11 +989,8 @@ function getSelectedFieldLabel(field: IBetterListFieldDescriptor | undefined, fi
   if (!field) {
     return fieldPath;
   }
-  const [, nestedField] = fieldPath.split('.');
-  const targetField = nestedField
-    ? field.lookupFields?.find((candidate) => candidate.internalName === nestedField)
-    : undefined;
-  return nestedField ? `${field.title} → ${targetField?.title || nestedField}` : field.title;
+  const [, nestedField] = fieldPath.split(/[/.]/);
+  return nestedField ? getBetterListFieldPathLabel(field, fieldPath) : field.title;
 }
 
 function renderFieldIcon(typeAsString: string | undefined): React.ReactNode {

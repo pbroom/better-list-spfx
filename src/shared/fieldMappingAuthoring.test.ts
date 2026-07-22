@@ -1,5 +1,7 @@
 import {
+  createBetterListFieldCatalog,
   createBetterListFieldMapping,
+  createBetterListFieldPathCatalog,
   createBetterListMetadataMappings,
   IBetterListFieldDescriptor,
   updateBetterListFieldMapping
@@ -52,6 +54,89 @@ describe('createBetterListFieldMapping', () => {
       internalName: 'Category',
       lookupValueField: 'Description'
     });
+  });
+
+  it('keeps the stable internal path while persisting the SharePoint query alias', () => {
+    expect(createBetterListFieldMapping({
+      ...field('_UIVersionString', 'Computed'),
+      queryName: 'OData__UIVersionString'
+    })).toMatchObject({
+      internalName: '_UIVersionString',
+      queryName: 'OData__UIVersionString'
+    });
+  });
+
+  it('authors Person fields through safe lookup-like target properties', () => {
+    const person = field('PoC', 'User');
+    expect(createBetterListFieldPathCatalog([person]).map((option) => option.fieldPath)).toEqual([
+      'PoC/Title',
+      'PoC/EMail',
+      'PoC/Id'
+    ]);
+    expect(createBetterListFieldMapping(person, undefined, 'EMail')).toMatchObject({
+      kind: 'person',
+      internalName: 'PoC',
+      valueProperty: 'email'
+    });
+    expect(createBetterListFieldMapping(person)).toMatchObject({
+      kind: 'person',
+      valueProperty: 'title'
+    });
+  });
+
+  it('canonicalizes legacy dotted Person paths without changing their meaning', () => {
+    const person = field('PoC', 'User');
+    expect(createBetterListMetadataMappings([person], ['PoC.EMail'])).toEqual([
+      expect.objectContaining({
+        key: 'PoC/EMail',
+        label: 'PoC → Email',
+        mapping: expect.objectContaining({
+          fieldPath: 'PoC/EMail',
+          personValueField: 'EMail',
+          valueProperty: 'email'
+        })
+      })
+    ]);
+  });
+
+  it('authors discovered Person properties for batch resolution through the user information list', () => {
+    const person: IBetterListFieldDescriptor = {
+      ...field('PoC', 'User'),
+      lookupListId: '26b8db39-7a13-4fe5-9a88-bdbfe54676a4',
+      lookupFields: [{
+        ...field('Department', 'Text'),
+        title: 'Department',
+        queryName: 'DepartmentAlias'
+      }]
+    };
+
+    expect(createBetterListFieldMapping(person, undefined, 'Department')).toMatchObject({
+      fieldPath: 'PoC/Department',
+      personValueField: 'Department',
+      relationship: {
+        kind: 'person',
+        lookupListId: '26b8db39-7a13-4fe5-9a88-bdbfe54676a4',
+        target: {
+          internalName: 'Department',
+          queryName: 'DepartmentAlias',
+          queryable: false,
+          resolution: 'userInfoBatch'
+        }
+      }
+    });
+  });
+
+  it('deduplicates exact field identities and disambiguates repeated display titles', () => {
+    const catalog = createBetterListFieldCatalog([
+      { ...field('Title', 'Text'), title: 'Title' },
+      { ...field('Title', 'Text'), title: 'Title duplicate row' },
+      { ...field('Title0', 'Text'), title: 'Title' }
+    ]);
+    expect(catalog.map((entry) => entry.internalName)).toEqual(['Title', 'Title0']);
+    expect(createBetterListFieldPathCatalog(catalog).map((entry) => entry.label)).toEqual([
+      'Title (Title)',
+      'Title (Title0)'
+    ]);
   });
 
   it.each([

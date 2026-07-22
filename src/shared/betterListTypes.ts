@@ -34,9 +34,41 @@ export type BetterListFieldKind =
   | 'lookup'
   | 'person';
 
+export type BetterListRelationshipKind = 'lookup' | 'person';
+export type BetterListRelationshipResolution = 'expanded' | 'userInfoBatch';
+
+export interface IBetterListRelationshipTarget {
+  /** Stable internal name authored after the relationship slash. */
+  internalName: string;
+  label: string;
+  kind: Exclude<BetterListFieldKind, 'lookup' | 'person'>;
+  /** Entity property used when SharePoint exposes a different OData alias. */
+  queryName?: string;
+  queryable: boolean;
+  resolution: BetterListRelationshipResolution;
+  richText?: boolean;
+}
+
+export interface IBetterListRelationshipDescriptor {
+  kind: BetterListRelationshipKind;
+  lookupListId?: string;
+  target: IBetterListRelationshipTarget;
+  targets?: readonly IBetterListRelationshipTarget[];
+}
+
 interface IBetterListBaseFieldMapping {
   internalName: string;
+  /** Canonical authored identity, for example PoC/EMail. */
+  fieldPath?: string;
+  /** Root SharePoint field internal name. Defaults to internalName. */
+  sourceInternalName?: string;
   displayName?: string;
+  /** SharePoint list-item entity property used in OData queries. Defaults to internalName. */
+  queryName?: string;
+  /** True when the selected field value contains SharePoint rich-text markup. */
+  richText?: boolean;
+  fieldType?: string;
+  relationship?: IBetterListRelationshipDescriptor;
 }
 
 export interface IBetterListScalarFieldMapping extends IBetterListBaseFieldMapping {
@@ -52,12 +84,16 @@ export interface IBetterListLookupFieldMapping extends IBetterListBaseFieldMappi
   kind: 'lookup';
   valueProperty?: 'id' | 'title';
   lookupValueField?: string;
+  /** Entity property name for the selected lookup-list field. */
+  lookupValueQueryName?: string;
   multi?: boolean;
 }
 
 export interface IBetterListPersonFieldMapping extends IBetterListBaseFieldMapping {
   kind: 'person';
   valueProperty?: 'id' | 'title' | 'email' | 'loginName';
+  personValueField?: string;
+  personValueQueryName?: string;
   multi?: boolean;
 }
 
@@ -263,8 +299,14 @@ export interface IBetterListFieldInfo {
   readOnly: boolean;
   required: boolean;
   allowMultipleValues: boolean;
+  entityPropertyName?: string;
+  richText?: boolean;
+  richTextMode?: string;
   lookupListId?: string;
   lookupField?: string;
+  fieldPath?: string;
+  sourceInternalName?: string;
+  relationship?: IBetterListRelationshipDescriptor;
 }
 
 export interface IBetterListLoadRequest {

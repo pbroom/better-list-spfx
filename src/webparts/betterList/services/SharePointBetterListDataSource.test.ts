@@ -107,6 +107,317 @@ describe('SharePointBetterListDataSource', () => {
     expect(result.items[0].metadata[0].value).toBe('General services and resources');
   });
 
+  it('resolves Version through its list-item entity property alias', async () => {
+    const urls: string[] = [];
+    const client: SPHttpClient = {
+      get: (url: string) => {
+        urls.push(url);
+        return Promise.resolve(url.indexOf('/fields?') >= 0
+          ? response({ value: [
+              {
+                Id: 'title',
+                InternalName: 'Title',
+                EntityPropertyName: 'Title',
+                Title: 'Title',
+                TypeAsString: 'Text'
+              },
+              {
+                Id: 'version',
+                InternalName: '_UIVersionString',
+                EntityPropertyName: 'OData__UIVersionString',
+                Title: 'Version',
+                TypeAsString: 'Computed'
+              }
+            ] })
+          : response({ value: [{ Id: 1, Title: 'One', OData__UIVersionString: '3.0' }] }));
+      }
+    } as unknown as SPHttpClient;
+    const source = new SharePointBetterListDataSource(client, 'https://contoso.sharepoint.com/sites/example');
+
+    const result = await source.loadItems({
+      list: { title: 'Services' },
+      mappings: {
+        title: { internalName: 'Title', kind: 'text' },
+        metadata: [{
+          key: '_UIVersionString',
+          label: 'Version',
+          mapping: {
+            internalName: '_UIVersionString',
+            queryName: 'StaleVersionAlias',
+            kind: 'text'
+          }
+        }]
+      }
+    });
+
+    expect(urls[1]).toContain('$select=Id,Title,OData__UIVersionString');
+    expect(urls[1]).not.toContain('$select=Id,Title,_UIVersionString');
+    expect(result.items[0].metadata[0].value).toBe('3.0');
+  });
+
+  it('projects only safe properties for Person fields and handles missing or multi values', async () => {
+    const urls: string[] = [];
+    const client: SPHttpClient = {
+      get: (url: string) => {
+        urls.push(url);
+        return Promise.resolve(response({ value: [
+          { Id: 1, Title: 'Missing', PoC: null },
+          { Id: 2, Title: 'Single', PoC: { Title: 'Alex' } },
+          { Id: 3, Title: 'Multi', PoC: { results: [{ Title: 'Alex' }, { Title: 'Morgan' }] } }
+        ] }));
+      }
+    } as unknown as SPHttpClient;
+    const source = new SharePointBetterListDataSource(client, 'https://contoso.sharepoint.com/sites/example');
+
+    const result = await source.loadItems({
+      list: { title: 'Services' },
+      mappings: {
+        title: { internalName: 'Title', kind: 'text' },
+        metadata: [{
+          key: 'PoC.Title',
+          label: 'PoC → Display name',
+          mapping: { internalName: 'PoC', kind: 'person', valueProperty: 'title', multi: true }
+        }]
+      }
+    });
+
+    expect(urls[0]).toContain('$select=Id,Title,PoC/Title');
+    expect(urls[0]).toContain('$expand=PoC');
+    expect(urls[0]).not.toContain('LoginName');
+    expect(urls[0]).not.toContain('PrincipalType');
+    expect(result.items.map((item) => item.metadata[0].value)).toEqual([[], ['Alex'], ['Alex', 'Morgan']]);
+  });
+
+  it('batch-resolves discovered Person properties by unique id and tolerates deleted users', async () => {
+    const urls: string[] = [];
+    const userInfoListId = '26b8db39-7a13-4fe5-9a88-bdbfe54676a4';
+    const client: SPHttpClient = {
+      get: (url: string) => {
+        urls.push(url);
+        if (url.indexOf(`lists(guid'${userInfoListId}')/fields?`) >= 0) {
+          return Promise.resolve(response({ value: [{
+            Id: 'department',
+            InternalName: 'Department',
+            EntityPropertyName: 'DepartmentAlias',
+            Title: 'Department',
+            TypeAsString: 'Text'
+          }] }));
+        }
+        if (url.indexOf(`lists(guid'${userInfoListId}')/items?`) >= 0) {
+          return Promise.resolve(response({ value: [{ Id: 7, DepartmentAlias: 'State' }] }));
+        }
+        if (url.indexOf('/fields?') >= 0) {
+          return Promise.resolve(response({ value: [
+            {
+              Id: 'title',
+              InternalName: 'Title',
+              EntityPropertyName: 'Title',
+              Title: 'Title',
+              TypeAsString: 'Text'
+            },
+            {
+              Id: 'poc',
+              InternalName: 'PoC',
+              EntityPropertyName: 'PoCEntity',
+              Title: 'Point of contact',
+              TypeAsString: 'UserMulti',
+              AllowMultipleValues: true,
+              LookupList: `{${userInfoListId}}`,
+              LookupField: 'Title'
+            }
+          ] }));
+        }
+        return Promise.resolve(response({ value: [
+          { Id: 1, Title: 'Known and deleted', PoCEntity: { results: [{ Id: 7 }, { Id: 99 }] } },
+          { Id: 2, Title: 'Missing', PoCEntity: null }
+        ] }));
+      }
+    } as unknown as SPHttpClient;
+    const source = new SharePointBetterListDataSource(client, 'https://contoso.sharepoint.com/sites/example');
+
+    const result = await source.loadItems({
+      list: { title: 'Services' },
+      mappings: {
+        title: { internalName: 'Title', kind: 'text' },
+        metadata: [{
+          key: 'PoC/Department',
+          label: 'PoC → Department',
+          mapping: {
+            internalName: 'PoC',
+            sourceInternalName: 'PoC',
+            fieldPath: 'PoC/Department',
+            queryName: 'StalePoCAlias',
+            kind: 'person',
+            personValueField: 'Department',
+            personValueQueryName: 'StaleDepartmentAlias',
+            multi: true,
+            relationship: {
+              kind: 'person',
+              lookupListId: userInfoListId,
+              target: {
+                internalName: 'Department',
+                label: 'Department',
+                kind: 'text',
+                queryName: 'StaleDepartmentAlias',
+                queryable: false,
+                resolution: 'userInfoBatch'
+              }
+            }
+          }
+        }]
+      }
+    });
+
+    expect(urls[1]).toContain('$select=Id,Title,PoCEntity/Id');
+    expect(urls[1]).toContain('$expand=PoCEntity');
+    expect(urls[1]).not.toContain('StalePoCAlias');
+    expect(urls[1]).not.toContain('Department');
+    expect(urls[3]).toContain('$select=Id,DepartmentAlias');
+    expect(urls[3]).toContain('$filter=Id eq 7 or Id eq 99');
+    expect(urls[3].match(/Id eq 7/g)).toHaveLength(1);
+    expect(result.items.map((item) => item.metadata[0].value)).toEqual([
+      ['State', null],
+      []
+    ]);
+  });
+
+  it('recovers when SharePoint rejects an optional configured field', async () => {
+    const urls: string[] = [];
+    const client: SPHttpClient = {
+      get: (url: string) => {
+        urls.push(url);
+        return Promise.resolve(urls.length === 1
+          ? response({ error: { message: { value: "The field or property 'LegacyField' does not exist." } } }, false, 400)
+          : response({ value: [{ Id: 1, Title: 'Still visible' }] }));
+      }
+    } as unknown as SPHttpClient;
+    const source = new SharePointBetterListDataSource(client, 'https://contoso.sharepoint.com/sites/example');
+
+    const result = await source.loadItems({
+      list: { title: 'Services' },
+      mappings: {
+        title: { internalName: 'Title', kind: 'text' },
+        metadata: [{
+          key: 'LegacyField',
+          label: 'Legacy field',
+          mapping: { internalName: 'LegacyField', kind: 'text' }
+        }]
+      }
+    });
+
+    expect(urls[0]).toContain('LegacyField');
+    expect(urls[1]).not.toContain('LegacyField');
+    expect(result.items[0].title).toBe('Still visible');
+    expect(result.items[0].metadata[0].value).toBeNull();
+  });
+
+  it('prunes a rejected optional relationship projection and its matching expand', async () => {
+    const urls: string[] = [];
+    const client: SPHttpClient = {
+      get: (url: string) => {
+        urls.push(url);
+        return Promise.resolve(url.indexOf('$expand=LegacyOwner') >= 0
+          ? response({
+              error: { message: { value: "The field or property 'LegacyOwner' does not exist." } }
+            }, false, 400)
+          : response({ value: [{ Id: 1, Title: 'Core data survives' }] }));
+      }
+    } as unknown as SPHttpClient;
+    const source = new SharePointBetterListDataSource(client, 'https://contoso.sharepoint.com/sites/example');
+
+    const result = await source.loadItems({
+      list: { title: 'Services' },
+      mappings: {
+        title: { internalName: 'Title', kind: 'text' },
+        metadata: [{
+          key: 'LegacyOwner/Title',
+          label: 'Legacy owner',
+          mapping: {
+            internalName: 'LegacyOwner',
+            fieldPath: 'LegacyOwner/Title',
+            kind: 'person',
+            valueProperty: 'title'
+          }
+        }]
+      }
+    });
+
+    expect(urls.length).toBeGreaterThan(1);
+    expect(urls[0]).toContain('$expand=LegacyOwner');
+    expect(urls[urls.length - 1]).not.toContain('LegacyOwner');
+    expect(urls[urls.length - 1]).toContain('$select=Id,Title');
+    expect(result.items[0].title).toBe('Core data survives');
+    expect(result.items[0].metadata[0].value).toBeNull();
+  });
+
+  it('does not retry without the required title field when SharePoint rejects it', async () => {
+    const urls: string[] = [];
+    const client: SPHttpClient = {
+      get: (url: string) => {
+        urls.push(url);
+        return Promise.resolve(response({
+          error: { message: { value: "The field or property 'Title' does not exist." } }
+        }, false, 400));
+      }
+    } as unknown as SPHttpClient;
+    const source = new SharePointBetterListDataSource(client, 'https://contoso.sharepoint.com/sites/example');
+
+    await expect(source.loadItems({
+      list: { title: 'Services' },
+      mappings: { title: { internalName: 'Title', kind: 'text' } }
+    })).rejects.toThrow("The field or property 'Title' does not exist.");
+
+    expect(urls).toHaveLength(1);
+  });
+
+  it('does not retry without a configured active field, including during schema resolution', async () => {
+    const urls: string[] = [];
+    const client: SPHttpClient = {
+      get: (url: string) => {
+        urls.push(url);
+        if (url.indexOf('/fields?') >= 0) {
+          return Promise.resolve(response({ value: [
+            {
+              Id: 'title',
+              InternalName: 'Title',
+              EntityPropertyName: 'Title',
+              Title: 'Title',
+              TypeAsString: 'Text'
+            },
+            {
+              Id: 'version',
+              InternalName: '_UIVersionString',
+              EntityPropertyName: 'OData__UIVersionString',
+              Title: 'Version',
+              TypeAsString: 'Computed'
+            }
+          ] }));
+        }
+        return Promise.resolve(response({
+          error: { message: { value: "The field or property 'Published' does not exist." } }
+        }, false, 400));
+      }
+    } as unknown as SPHttpClient;
+    const source = new SharePointBetterListDataSource(client, 'https://contoso.sharepoint.com/sites/example');
+
+    await expect(source.loadItems({
+      list: { title: 'Services' },
+      mappings: {
+        title: { internalName: 'Title', kind: 'text' },
+        active: { internalName: 'Published', kind: 'boolean' },
+        metadata: [{
+          key: '_UIVersionString',
+          label: 'Version',
+          mapping: { internalName: '_UIVersionString', kind: 'text' }
+        }]
+      }
+    })).rejects.toThrow("The field or property 'Published' does not exist.");
+
+    expect(urls).toHaveLength(2);
+    expect(urls[1]).toContain('Published');
+    expect(urls[1]).toContain('OData__UIVersionString');
+  });
+
   it('queries an authored active column and omits items that are not active', async () => {
     const urls: string[] = [];
     const client: SPHttpClient = {

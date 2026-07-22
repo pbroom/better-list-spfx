@@ -19,6 +19,7 @@ import {
   betterListStylePresetVersion,
   createDefaultTabs,
   createBetterListGroupingOverride,
+  createBetterListFieldCatalog,
   defaultBetterListScss,
   defaultBetterListHtmlTemplate,
   formatItemPropertyValue,
@@ -228,10 +229,10 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
             entry.fields.filter(isSupportedLookupTargetField).map(toFieldDescriptor)
           ])
         );
-        return fields.map((field) => ({
+        return createBetterListFieldCatalog(fields.map((field) => ({
           ...toFieldDescriptor(field),
           lookupFields: field.lookupListId ? lookupFieldsByListId.get(field.lookupListId) : undefined
-        }));
+        })));
       }
     };
     await this._reloadItems();
@@ -586,8 +587,11 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
 function toFieldDescriptor(field: IBetterListFieldInfo): ISharePointFieldOption {
   return {
     internalName: field.internalName,
+    queryName: field.entityPropertyName,
     title: field.title,
     typeAsString: field.typeAsString,
+    richText: field.richText,
+    richTextMode: field.richTextMode,
     allowMultipleValues: field.allowMultipleValues,
     lookupListId: field.lookupListId,
     lookupField: field.lookupField,

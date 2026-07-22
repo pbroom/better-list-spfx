@@ -53,6 +53,42 @@ describe('Better List item processing', () => {
     expect(item.metadata[0].value).toBe('Ada Lovelace');
   });
 
+  it('normalizes a discovered Person target property and preserves missing users as null', () => {
+    const item = normalizeItem(
+      {
+        Id: 8,
+        Title: 'Relationship targets',
+        PoC: { results: [{ Id: 3, Department: 'State' }, { Id: 9, Department: null }] }
+      },
+      {
+        title: { internalName: 'Title', kind: 'text' },
+        metadata: [{
+          key: 'PoC/Department',
+          label: 'PoC → Department',
+          mapping: {
+            internalName: 'PoC',
+            fieldPath: 'PoC/Department',
+            kind: 'person',
+            personValueField: 'Department',
+            multi: true,
+            relationship: {
+              kind: 'person',
+              target: {
+                internalName: 'Department',
+                label: 'Department',
+                kind: 'text',
+                queryable: false,
+                resolution: 'userInfoBatch'
+              }
+            }
+          }
+        }]
+      }
+    );
+
+    expect(item.metadata[0].value).toEqual(['State', null]);
+  });
+
   it('normalizes SharePoint rich text and hyperlink descriptions to plain text', () => {
     const richText = '<div class="ExternalClass123">First&nbsp;paragraph</div><p>Second &amp; final</p>';
     const item = normalizeItem(
