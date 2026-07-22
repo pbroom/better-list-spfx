@@ -216,7 +216,10 @@ function resolveFieldMappings(
     const relationshipKind = mapping.kind === 'person' || mapping.kind === 'lookup' ? mapping.kind : undefined;
     let targetInternalName: string | undefined;
     if (mapping.kind === 'person') {
-      targetInternalName = mapping.personValueField || mapping.relationship?.target.internalName || legacyPersonTarget(mapping);
+      targetInternalName = mapping.personValueField ||
+        mapping.relationship?.target.internalName ||
+        mapping.lookupValueField ||
+        legacyPersonTarget(mapping);
     } else if (mapping.kind === 'lookup') {
       targetInternalName = mapping.lookupValueField || mapping.relationship?.target.internalName || field.lookupField || 'Title';
     }
@@ -297,7 +300,13 @@ function resolveRelationshipTarget(
     internalName: targetInternalName,
     label: current?.label || targetInternalName,
     kind: current?.kind || 'text',
-    queryName: current?.queryName || (mapping.kind === 'lookup' ? mapping.lookupValueQueryName : mapping.kind === 'person' ? mapping.personValueQueryName : undefined) || targetInternalName,
+    queryName: current?.queryName ||
+      (mapping.kind === 'lookup'
+        ? mapping.lookupValueQueryName
+        : mapping.kind === 'person'
+          ? mapping.personValueQueryName || mapping.lookupValueQueryName
+          : undefined) ||
+      targetInternalName,
     queryable: kind === 'lookup' || safePersonProjection,
     resolution,
     richText: current?.richText
@@ -314,9 +323,17 @@ function materializeQueryAliases(
     const value = result[queryName];
     let materialized = value;
     const targetInternalName = mapping.relationship?.target.internalName ||
-      (mapping.kind === 'lookup' ? mapping.lookupValueField : mapping.kind === 'person' ? mapping.personValueField : undefined);
+      (mapping.kind === 'lookup'
+        ? mapping.lookupValueField
+        : mapping.kind === 'person'
+          ? mapping.personValueField || mapping.lookupValueField
+          : undefined);
     const targetQueryName = mapping.relationship?.target.queryName ||
-      (mapping.kind === 'lookup' ? mapping.lookupValueQueryName : mapping.kind === 'person' ? mapping.personValueQueryName : undefined);
+      (mapping.kind === 'lookup'
+        ? mapping.lookupValueQueryName
+        : mapping.kind === 'person'
+          ? mapping.personValueQueryName || mapping.lookupValueQueryName
+          : undefined);
     if (
       (mapping.kind === 'lookup' || mapping.kind === 'person') &&
       targetInternalName &&
@@ -333,7 +350,9 @@ function materializeQueryAliases(
       if (result === row) {
         result = { ...row };
       }
-      if (result[mapping.internalName] === undefined) {
+      if (queryName === mapping.internalName && materialized !== value) {
+        result[mapping.internalName] = materialized;
+      } else if (result[mapping.internalName] === undefined) {
         result[mapping.internalName] = materialized;
       }
     }

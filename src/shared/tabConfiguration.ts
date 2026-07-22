@@ -8,6 +8,8 @@ import {
   IBetterListIconOverride,
   IBetterListLayoutOverride,
   IBetterListQueryField,
+  IBetterListRelationshipDescriptor,
+  IBetterListRelationshipTarget,
   IBetterListSort,
   IBetterListTabConfig,
   IBetterListTabGroupingOverride,
@@ -114,7 +116,15 @@ function readSourceMapping(value: unknown): BetterListFieldMapping {
     throw new Error('A source-field tab filter must include a valid field mapping.');
   }
   const displayName = typeof value.displayName === 'string' ? value.displayName : undefined;
-  const common = { internalName: value.internalName.trim(), displayName };
+  const common = {
+    internalName: value.internalName.trim(),
+    displayName,
+    fieldPath: typeof value.fieldPath === 'string' ? value.fieldPath : undefined,
+    sourceInternalName: typeof value.sourceInternalName === 'string' ? value.sourceInternalName : undefined,
+    queryName: typeof value.queryName === 'string' ? value.queryName : undefined,
+    richText: typeof value.richText === 'boolean' ? value.richText : undefined,
+    fieldType: typeof value.fieldType === 'string' ? value.fieldType : undefined
+  };
   if (value.kind === 'text' || value.kind === 'number' || value.kind === 'boolean' || value.kind === 'dateTime') {
     return { ...common, kind: value.kind };
   }
@@ -131,6 +141,8 @@ function readSourceMapping(value: unknown): BetterListFieldMapping {
       kind: 'lookup',
       valueProperty: value.valueProperty === 'id' ? 'id' : 'title',
       lookupValueField: typeof value.lookupValueField === 'string' ? value.lookupValueField : undefined,
+      lookupValueQueryName: typeof value.lookupValueQueryName === 'string' ? value.lookupValueQueryName : undefined,
+      relationship: readRelationshipDescriptor(value.relationship, 'lookup'),
       multi: value.multi === true
     };
   }
@@ -141,9 +153,69 @@ function readSourceMapping(value: unknown): BetterListFieldMapping {
       value.valueProperty === 'loginName'
         ? value.valueProperty
         : 'title';
-    return { ...common, kind: 'person', valueProperty, multi: value.multi === true };
+    return {
+      ...common,
+      kind: 'person',
+      valueProperty,
+      personValueField: typeof value.personValueField === 'string'
+        ? value.personValueField
+        : typeof value.lookupValueField === 'string'
+          ? value.lookupValueField
+          : undefined,
+      personValueQueryName: typeof value.personValueQueryName === 'string'
+        ? value.personValueQueryName
+        : typeof value.lookupValueQueryName === 'string'
+          ? value.lookupValueQueryName
+          : undefined,
+      relationship: readRelationshipDescriptor(value.relationship, 'person'),
+      multi: value.multi === true
+    };
   }
   throw new Error('A source-field tab filter must use a supported field type.');
+}
+
+function readRelationshipDescriptor(
+  value: unknown,
+  kind: 'lookup' | 'person'
+): IBetterListRelationshipDescriptor | undefined {
+  if (!isRecord(value) || value.kind !== kind) return undefined;
+  const target = readRelationshipTarget(value.target);
+  if (!target) return undefined;
+  const targets = Array.isArray(value.targets)
+    ? value.targets.map(readRelationshipTarget).filter((entry): entry is IBetterListRelationshipTarget => Boolean(entry))
+    : undefined;
+  return {
+    kind,
+    lookupListId: typeof value.lookupListId === 'string' ? value.lookupListId : undefined,
+    target,
+    targets: targets && targets.length > 0 ? targets : undefined
+  };
+}
+
+function readRelationshipTarget(value: unknown): IBetterListRelationshipTarget | undefined {
+  if (
+    !isRecord(value) ||
+    typeof value.internalName !== 'string' ||
+    typeof value.label !== 'string' ||
+    typeof value.queryable !== 'boolean' ||
+    (value.resolution !== 'expanded' && value.resolution !== 'userInfoBatch') ||
+    (value.kind !== 'text' &&
+      value.kind !== 'number' &&
+      value.kind !== 'boolean' &&
+      value.kind !== 'dateTime' &&
+      value.kind !== 'url')
+  ) {
+    return undefined;
+  }
+  return {
+    internalName: value.internalName,
+    label: value.label,
+    kind: value.kind,
+    queryName: typeof value.queryName === 'string' ? value.queryName : undefined,
+    queryable: value.queryable,
+    resolution: value.resolution,
+    richText: typeof value.richText === 'boolean' ? value.richText : undefined
+  };
 }
 
 function readGroup(value: unknown): IBetterListGroup | undefined {
@@ -264,7 +336,8 @@ function readGroupingOverride(value: unknown): IBetterListTabGroupingOverride | 
     mode: 'custom',
     column,
     collapsible: value.collapsible !== false,
-    icons
+    icons,
+    filter: value.filter === undefined ? undefined : readFilter(value.filter)
   };
 }
 
@@ -374,19 +447,43 @@ export function addTabFilterMappings(
   tabs: readonly IBetterListTabConfig[]
 ): IBetterListFieldMappings {
   const filterFields = tabs.reduce((collected: BetterListFieldMapping[], tab): BetterListFieldMapping[] => {
-    if (tab.filter.kind === 'sourceEquals') {
-      collected.push(tab.filter.mapping);
-    } else if (tab.filter.kind === 'query') {
-      tab.filter.fields.forEach((field) => {
-        if (field.mapping) {
-          collected.push(field.mapping);
-        }
-      });
-    }
+    const filters = [tab.filter, tab.groupingOverride?.filter].filter(
+      (filter): filter is BetterListFilter => Boolean(filter)
+    );
+    filters.forEach((filter) => {
+      if (filter.kind === 'sourceEquals') {
+        collected.push(filter.mapping);
+      } else if (filter.kind === 'query') {
+        filter.fields.forEach((field) => {
+          if (field.mapping) {
+            collected.push(field.mapping);
+          }
+        });
+      }
+    });
     return collected;
   }, []);
   const uniqueFilterFields = filterFields.filter(
-    (mapping, index) => filterFields.findIndex((candidate) => candidate.internalName === mapping.internalName && candidate.kind === mapping.kind) === index
+    (mapping, index) => filterFields.findIndex((candidate) =>
+      candidate.internalName === mapping.internalName &&
+      candidate.kind === mapping.kind &&
+      getFilterMappingTarget(candidate) === getFilterMappingTarget(mapping)
+    ) === index
   );
   return uniqueFilterFields.length > 0 ? { ...mappings, filterFields: uniqueFilterFields } : mappings;
+}
+
+function getFilterMappingTarget(mapping: BetterListFieldMapping): string {
+  if (mapping.kind === 'lookup') {
+    return `${mapping.lookupValueField ?? ''}:${mapping.lookupValueQueryName ?? ''}:${mapping.valueProperty ?? ''}`;
+  }
+  if (mapping.kind === 'person') {
+    return `${mapping.personValueField ?? mapping.relationship?.target.internalName ?? mapping.lookupValueField ?? ''}:` +
+      `${mapping.personValueQueryName ?? mapping.relationship?.target.queryName ?? mapping.lookupValueQueryName ?? ''}:` +
+      `${mapping.valueProperty ?? ''}`;
+  }
+  if (mapping.kind === 'url') {
+    return mapping.valueProperty ?? '';
+  }
+  return '';
 }

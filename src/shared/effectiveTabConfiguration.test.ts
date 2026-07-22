@@ -27,9 +27,23 @@ describe('resolveBetterListTabConfigurations', () => {
         filter: { kind: 'all' },
         groupingOverride: {
           mode: 'custom',
-          column: 'Organization.Title',
+          column: 'Organization/Title',
           collapsible: false,
-          icons: { version: 1, showIcons: false, overrides: [] }
+          icons: { version: 1, showIcons: false, overrides: [] },
+          filter: {
+            kind: 'query',
+            expression: 'Organization/Department = Engineering',
+            fields: [{
+              name: 'Organization/Department',
+              kind: 'lookup',
+              fieldPath: 'Organization/Department',
+              mapping: {
+                kind: 'lookup',
+                internalName: 'Organization',
+                lookupValueField: 'Department'
+              }
+            }]
+          }
         }
       },
       { id: 'three', label: 'Three', filter: { kind: 'all' } }
@@ -39,10 +53,15 @@ describe('resolveBetterListTabConfigurations', () => {
 
     expect(resolved[0].grouping.column).toBe('Category');
     expect(resolved[0].groupingInherited).toBe(true);
-    expect(resolved[1].grouping.column).toBe('Organization.Title');
+    expect(resolved[1].grouping.column).toBe('Organization/Title');
     expect(resolved[1].grouping.collapsible).toBe(false);
+    expect(resolved[1].grouping.filter).toMatchObject({
+      kind: 'query',
+      expression: 'Organization/Department = Engineering'
+    });
     expect(resolved[1].itemLayoutInherited).toBe(true);
-    expect(resolved[2].grouping.column).toBe('Organization.Title');
+    expect(resolved[2].grouping.column).toBe('Organization/Title');
+    expect(resolved[2].grouping.filter).toEqual(resolved[1].grouping.filter);
     expect(resolved[2].inheritedFromTabId).toBe('two');
   });
 
@@ -112,14 +131,14 @@ describe('resolveBetterListTabConfigurations', () => {
       id: 'override',
       label: 'Override',
       filter: { kind: 'all' },
-      groupingOverride: { mode: 'custom', column: 'Organization.Title', collapsible: true }
+      groupingOverride: { mode: 'custom', column: 'Organization/Title', collapsible: true }
     };
     const inheriting: IBetterListTabConfig = { id: 'inheriting', label: 'Inheriting', filter: { kind: 'all' } };
 
     const withSource = resolveBetterListTabConfigurations([overridden, inheriting], legacy);
     const withoutSource = resolveBetterListTabConfigurations([inheriting], legacy);
 
-    expect(withSource[1].grouping.column).toBe('Organization.Title');
+    expect(withSource[1].grouping.column).toBe('Organization/Title');
     expect(withoutSource[0].grouping.column).toBe('Category');
   });
 

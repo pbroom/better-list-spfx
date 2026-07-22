@@ -110,7 +110,8 @@ describe('createBetterListFieldMapping', () => {
       }]
     };
 
-    expect(createBetterListFieldMapping(person, undefined, 'Department')).toMatchObject({
+    const mapping = createBetterListFieldMapping(person, undefined, 'Department');
+    expect(mapping).toMatchObject({
       fieldPath: 'PoC/Department',
       personValueField: 'Department',
       relationship: {
@@ -124,6 +125,7 @@ describe('createBetterListFieldMapping', () => {
         }
       }
     });
+    expect(mapping.kind === 'person' ? mapping.lookupValueField : undefined).toBeUndefined();
   });
 
   it('deduplicates exact field identities and disambiguates repeated display titles', () => {
