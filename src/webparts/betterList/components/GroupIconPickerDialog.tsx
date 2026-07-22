@@ -61,7 +61,20 @@ const useStyles = makeStyles({
     width: 'min(760px, calc(100vw - 32px))',
     maxWidth: '760px',
     maxHeight: 'calc(100vh - 32px)',
-    overflow: 'hidden'
+    display: 'flex',
+    flexDirection: 'column',
+    overflowX: 'hidden',
+    overflowY: 'hidden'
+  },
+  body: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 'auto',
+    minHeight: '0',
+    maxHeight: 'inherit',
+    gridTemplateRows: 'auto minmax(0, 1fr) auto',
+    overflowX: 'hidden',
+    overflowY: 'hidden'
   },
   content: {
     display: 'flex',
@@ -298,8 +311,18 @@ export const GroupIconPickerDialog: React.FunctionComponent<IGroupIconPickerDial
   return (
     <PortalMountNodeProvider value={portalMountNode}>
     <Dialog modalType="modal" open={open} onOpenChange={(_event, data) => onOpenChange(data.open)}>
-      <DialogSurface className={mergeClasses(classes.surface, betterListFluentSurfaceClassName)}>
-        <DialogBody>
+      <DialogSurface
+        className={mergeClasses(classes.surface, betterListFluentSurfaceClassName)}
+        style={{ maxHeight: 'calc(100dvh - 32px)' }}
+      >
+        <DialogBody
+          className={classes.body}
+          style={{
+            minHeight: 0,
+            overflow: 'hidden',
+            gridTemplateRows: 'auto minmax(0, 1fr) auto'
+          }}
+        >
           <DialogTitle>{`Icon for “${groupTitle}”`}</DialogTitle>
           <DialogContent className={classes.content}>
             <div className={classes.preview} aria-label="Selected icon preview">
