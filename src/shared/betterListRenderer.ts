@@ -1,4 +1,5 @@
 import { createDOMRenderer, GriffelRenderer } from '@griffel/react';
+import type { PositioningProps } from '@fluentui/react-components';
 
 const renderers: WeakMap<Document, GriffelRenderer> = new WeakMap<Document, GriffelRenderer>();
 
@@ -14,6 +15,7 @@ const criticalRuntimeStyles = `
   border: 1px solid #d1d1d1;
   color: #242424;
   font-family: "Segoe UI", system-ui, sans-serif;
+  z-index: 1000000;
 }
 .${betterListFluentSurfaceClassName} *,
 .${betterListFluentSurfaceClassName} *::before,
@@ -30,6 +32,51 @@ const criticalRuntimeStyles = `
   font: 12px/1.3 "Segoe UI", system-ui, sans-serif;
 }
 `;
+
+export type BetterListPortalPlacement = 'root-menu' | 'submenu';
+
+/**
+ * Resolves the document-owned portal root used by Better List authoring surfaces.
+ * SharePoint can render a property pane in a document other than the global one,
+ * so callers must never implicitly mount menus into `window.document.body`.
+ */
+export function getBetterListPortalMountNode(
+  targetDocument: Document | undefined
+): HTMLElement | undefined {
+  return targetDocument?.body;
+}
+
+/**
+ * Keeps authoring menus inside the owning document's viewport. Fluent handles
+ * flipping and shifting from these preferred positions; the explicit boundary
+ * prevents a long relationship menu from being measured against another frame.
+ */
+export function createBetterListPortalPositioning(
+  targetDocument: Document | undefined,
+  placement: BetterListPortalPlacement = 'root-menu'
+): PositioningProps {
+  const boundary = targetDocument?.documentElement;
+  if (placement === 'submenu') {
+    return {
+      align: 'top',
+      autoSize: 'height',
+      fallbackPositions: ['before-top', 'after-bottom', 'before-bottom'],
+      overflowBoundary: boundary,
+      overflowBoundaryPadding: 8,
+      position: 'after',
+      strategy: 'fixed'
+    };
+  }
+  return {
+    align: 'start',
+    autoSize: 'height',
+    fallbackPositions: ['above-start', 'below-end', 'above-end'],
+    overflowBoundary: boundary,
+    overflowBoundaryPadding: 8,
+    position: 'below',
+    strategy: 'fixed'
+  };
+}
 
 /**
  * Installs small, namespaced first-paint defaults for Better List portal surfaces.

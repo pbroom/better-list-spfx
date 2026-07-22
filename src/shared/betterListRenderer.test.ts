@@ -1,7 +1,9 @@
 import {
   betterListFluentSurfaceClassName,
   betterListFluentTooltipContentClassName,
+  createBetterListPortalPositioning,
   ensureBetterListRuntimeStyles,
+  getBetterListPortalMountNode,
   getBetterListRenderer
 } from './betterListRenderer';
 
@@ -23,6 +25,7 @@ describe('Better List Griffel renderer', () => {
     expect(document.head.querySelectorAll('style[data-better-list-runtime-styles]')).toHaveLength(1);
     expect(first.textContent).toContain(`.${betterListFluentSurfaceClassName}`);
     expect(first.textContent).toContain(`.${betterListFluentTooltipContentClassName}`);
+    expect(first.textContent).toContain('z-index: 1000000');
     expect(first.textContent).not.toContain('.fui-Button');
   });
 
@@ -53,5 +56,28 @@ describe('Better List Griffel renderer', () => {
 
     expect(reusedRenderer).toBe(initialRenderer);
     expect(targetDocument.head.querySelectorAll('style[data-better-list-runtime-styles]')).toHaveLength(1);
+  });
+
+  it('owns portals and viewport boundaries in the supplied document', () => {
+    const root = createBetterListPortalPositioning(document);
+    const submenu = createBetterListPortalPositioning(document, 'submenu');
+
+    expect(getBetterListPortalMountNode(document)).toBe(document.body);
+    expect(root).toEqual(expect.objectContaining({
+      align: 'start',
+      autoSize: 'height',
+      overflowBoundary: document.documentElement,
+      overflowBoundaryPadding: 8,
+      position: 'below',
+      strategy: 'fixed'
+    }));
+    expect(root.fallbackPositions).toContain('above-start');
+    expect(submenu).toEqual(expect.objectContaining({
+      align: 'top',
+      overflowBoundary: document.documentElement,
+      position: 'after',
+      strategy: 'fixed'
+    }));
+    expect(submenu.fallbackPositions).toContain('before-top');
   });
 });

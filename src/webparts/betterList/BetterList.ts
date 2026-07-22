@@ -3,7 +3,12 @@ import '@fontsource-variable/geist-mono';
 import * as React from 'react';
 import * as ReactDom from 'react-dom';
 import { GriffelRenderer, RendererProvider } from '@griffel/react';
-import { FluentProvider, webDarkTheme, webLightTheme } from '@fluentui/react-components';
+import {
+  FluentProvider,
+  PortalMountNodeProvider,
+  webDarkTheme,
+  webLightTheme
+} from '@fluentui/react-components';
 import { IReadonlyTheme } from '@microsoft/sp-component-base';
 import { DisplayMode, Version } from '@microsoft/sp-core-library';
 import { IPropertyPaneConfiguration, IPropertyPaneField, PropertyPaneFieldType } from '@microsoft/sp-property-pane';
@@ -172,14 +177,18 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
             targetDocument: this.domElement.ownerDocument,
             theme: this._isDarkTheme ? webDarkTheme : webLightTheme
           },
-          this.properties.customCss
-            ? React.createElement(
-                'style',
-                undefined,
-                scopeBetterListStyles(this.properties.customCss, `.${wrapperClassName}`)
-              )
-            : undefined,
-          view
+          React.createElement(
+            PortalMountNodeProvider,
+            { value: this.domElement.ownerDocument.body },
+            this.properties.customCss
+              ? React.createElement(
+                  'style',
+                  undefined,
+                  scopeBetterListStyles(this.properties.customCss, `.${wrapperClassName}`)
+                )
+              : undefined,
+            view
+          )
         )
       ),
       this.domElement
