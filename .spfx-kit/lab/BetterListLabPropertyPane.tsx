@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Button, Dropdown, Option, Switch, makeStyles, tokens } from '@fluentui/react-components';
+import { Button, Combobox, Dropdown, Option, Switch, makeStyles, tokens } from '@fluentui/react-components';
 import { AddRegular } from '@fluentui/react-icons';
 import type {
   LabCssEditorTarget,
@@ -38,6 +38,7 @@ import { servicesAuthoringFields, servicesListId, servicesListTitle } from './be
 export type BetterListLabProps = LabPropertyBag & {
   sourceListId: string;
   sourceListTitle: string;
+  sourceWebUrl: string;
   fieldMappingsJson: string;
   itemPropertiesJson: string;
   itemLayoutJson: string;
@@ -162,6 +163,9 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
   title: _title
 }) => {
   const classes = useStyles();
+  const [sourceInput, setSourceInput] = React.useState(values.sourceListTitle);
+  const [sourceError, setSourceError] = React.useState('');
+  React.useEffect(() => setSourceInput(values.sourceListTitle), [values.sourceListId, values.sourceListTitle]);
   const itemLayout = React.useMemo(
     () => parseItemLayoutConfiguration(
       values.itemLayoutJson,
@@ -233,25 +237,55 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
 
   return (
     <section className={classes.root}>
-      <Dropdown
+      <Combobox
         aria-label="Source list"
         className={classes.listPicker}
+        freeform
         listbox={{ style: { maxHeight: 'min(320px, 70vh)', overflowY: 'auto' } }}
-        placeholder="Select a SharePoint list"
+        placeholder="Select a list or paste its URL"
         positioning={{ align: 'start', autoSize: 'height', position: 'below', strategy: 'fixed' }}
         selectedOptions={values.sourceListId ? [values.sourceListId] : []}
-        value={values.sourceListTitle}
-        onOptionSelect={(_event, data) => {
-          if (data.optionValue === servicesListId) {
+        value={sourceInput}
+        onChange={(event) => {
+          setSourceInput((event.target as HTMLInputElement).value);
+          setSourceError('');
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter' || sourceInput === servicesListTitle) {
+            return;
+          }
+          event.preventDefault();
+          try {
+            const url = new URL(sourceInput.trim());
+            if (url.protocol !== 'https:' || !/\/lists\/services(?:\/|$)/i.test(url.pathname)) {
+              throw new Error('Enter the Services SharePoint list URL.');
+            }
+            setSourceInput(servicesListTitle);
+            setSourceError('');
             onChange({
               sourceListId: servicesListId,
-              sourceListTitle: servicesListTitle
+              sourceListTitle: servicesListTitle,
+              sourceWebUrl: `${url.origin}${url.pathname.replace(/\/Lists\/Services.*$/i, '')}`
+            });
+          } catch (error) {
+            setSourceError(error instanceof Error ? error.message : 'Enter a valid SharePoint list URL.');
+          }
+        }}
+        onOptionSelect={(_event, data) => {
+          if (data.optionValue === servicesListId) {
+            setSourceInput(servicesListTitle);
+            setSourceError('');
+            onChange({
+              sourceListId: servicesListId,
+              sourceListTitle: servicesListTitle,
+              sourceWebUrl: 'https://contoso.sharepoint.com/sites/lab'
             });
           }
         }}
       >
         <Option value={servicesListId}>{servicesListTitle}</Option>
-      </Dropdown>
+      </Combobox>
+      {sourceError ? <div role="alert">{sourceError}</div> : null}
 
       <DisclosureSection
         action={

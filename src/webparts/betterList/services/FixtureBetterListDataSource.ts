@@ -37,6 +37,16 @@ export class FixtureBetterListDataSource implements IBetterListDataSource {
     return Promise.resolve(this._lists);
   }
 
+  public resolveListUrl(value: string): Promise<IBetterListListInfo> {
+    const normalized: string = value.trim().replace(/[?#].*$/, '').replace(/\/$/, '').toLocaleLowerCase();
+    const match: IBetterListListInfo | undefined = this._lists.find((list) =>
+      Boolean(list.serverRelativeUrl && normalized.endsWith(list.serverRelativeUrl.toLocaleLowerCase()))
+    );
+    return match
+      ? Promise.resolve(match)
+      : Promise.reject(new Error('The fixture does not contain a list for that SharePoint URL.'));
+  }
+
   public discoverFields(_list: IBetterListListReference): Promise<readonly IBetterListFieldInfo[]> {
     return Promise.resolve(this._fields);
   }

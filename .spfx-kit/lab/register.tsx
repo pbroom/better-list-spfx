@@ -2,6 +2,7 @@ import '@fontsource-variable/geist-mono';
 
 import * as React from 'react';
 import type { LabRenderProps, LabWebPart, LabWebPartRegistry } from '@spfx-kit/spfx-lab-runtime';
+import { RendererProvider } from '@griffel/react';
 import { FluentProvider, webDarkTheme, webLightTheme } from '@fluentui/react-components';
 
 import {
@@ -10,6 +11,7 @@ import {
   defaultBetterListHtmlTemplate,
   defaultBetterListScss,
   formatItemPropertyValue,
+  getBetterListRenderer,
   getItemPropertyUrl,
   parseBetterListGroupIconsConfiguration,
   groupItems,
@@ -55,6 +57,7 @@ import './betterListLab.css';
 const defaultProps: BetterListLabProps = {
   sourceListId: servicesListId,
   sourceListTitle: servicesListTitle,
+  sourceWebUrl: 'https://contoso.sharepoint.com/sites/lab',
   fieldMappingsJson: JSON.stringify(servicesFieldMappings),
   itemPropertiesJson: serializeItemPropertyFields(['Title']),
   itemLayoutJson: '[]',
@@ -98,7 +101,14 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
     () =>
       new FixtureBetterListDataSource(createServicesFixtureRecords(lab.spfxContext.pageContext.user), {
         identity: createFixtureIdentity(lab.spfxContext.pageContext.user),
-        lists: [{ id: servicesListId, title: servicesListTitle, itemCount: 12, baseTemplate: 100 }],
+        lists: [{
+          id: servicesListId,
+          title: servicesListTitle,
+          itemCount: 12,
+          baseTemplate: 100,
+          webUrl: 'https://contoso.sharepoint.com/sites/lab',
+          serverRelativeUrl: '/sites/lab/Lists/Services'
+        }],
         fields: servicesFields
       }),
     [lab.spfxContext.pageContext.user]
@@ -114,7 +124,7 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
     setErrorMessage('');
     dataSource
       .loadItems({
-        list: { id: props.sourceListId, title: props.sourceListTitle },
+        list: { id: props.sourceListId, title: props.sourceListTitle, webUrl: props.sourceWebUrl },
         mappings: effectiveMappings
       })
       .then((result) => {
@@ -133,7 +143,7 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
     return () => {
       cancelled = true;
     };
-  }, [dataSource, effectiveMappings, props.sourceListId, props.sourceListTitle]);
+  }, [dataSource, effectiveMappings, props.sourceListId, props.sourceListTitle, props.sourceWebUrl]);
 
   const effectiveTabs = React.useMemo(
     () => resolveBetterListTabConfigurations(tabs, {
@@ -169,7 +179,7 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
     '--better-list-lab-border': lab.theme.border
   } as React.CSSProperties;
 
-  return (
+  const content = (
     <FluentProvider
       className="better-list-lab"
       data-active-tab={activeTabKey}
@@ -222,6 +232,9 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
       />
     </FluentProvider>
   );
+  return typeof document === 'undefined'
+    ? content
+    : <RendererProvider renderer={getBetterListRenderer(document)}>{content}</RendererProvider>;
 };
 
 function createFixtureImageAssetProvider(imageUrl: string): ISharePointImageAssetProvider {
