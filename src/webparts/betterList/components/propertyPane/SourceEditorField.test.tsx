@@ -130,9 +130,12 @@ describe('SourceEditorField', () => {
       await settleEditorFallback();
     });
 
+    expect(container.querySelector('[role="tab"][aria-label="Split"]')).toBeNull();
     const popOut = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Pop out');
     act(() => Simulate.click(popOut as HTMLButtonElement));
     expect(document.body.querySelectorAll('[role="dialog"][aria-label="Styles & template source workspace"]')).toHaveLength(1);
+    const splitTab = document.body.querySelector<HTMLButtonElement>('[role="tab"][aria-label="Split"]');
+    expect(splitTab).not.toBeNull();
 
     const htmlTab = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find(
       (button) => button.textContent === 'HTML template'
@@ -141,14 +144,20 @@ describe('SourceEditorField', () => {
     expect(htmlTab?.getAttribute('aria-selected')).toBe('true');
     expect(getTextareas(document.body).some((textarea) => textarea.value === '<section></section>')).toBe(true);
 
+    act(() => Simulate.click(splitTab as HTMLButtonElement));
+    expect(splitTab?.getAttribute('aria-selected')).toBe('true');
+
     act(() => {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     });
     expect(document.body.querySelectorAll('[role="dialog"]')).toHaveLength(0);
+    expect(container.querySelector<HTMLButtonElement>('[role="tab"][aria-selected="true"]')?.textContent).toBe(
+      'HTML template'
+    );
   });
 
   it('preserves invalid drafts when the workspace moves into and out of the portal', async () => {
-    const onDraftChange = jest.fn();
+    const onChange = jest.fn();
     const validate = (value: string): SourceEditorDiagnostic[] =>
       value.includes('<script>') ? [{ level: 'error', message: 'Scripts are not allowed.' }] : [];
 
@@ -165,8 +174,7 @@ describe('SourceEditorField', () => {
               language: 'html',
               validate,
               value: '<section>valid</section>',
-              onChange: jest.fn(),
-              onDraftChange
+              onChange
             }
           ]}
         />,
@@ -176,7 +184,7 @@ describe('SourceEditorField', () => {
     });
 
     changeTextarea(getTextareas(container)[0], '<script>draft</script>');
-    expect(onDraftChange).toHaveBeenLastCalledWith('<script>draft</script>');
+    expect(onChange).not.toHaveBeenCalled();
     const popOut = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Pop out');
     await act(async () => {
       Simulate.click(popOut as HTMLButtonElement);
@@ -230,25 +238,7 @@ describe('SourceEditorField', () => {
 
   it('remeasures floating shortcuts when the workspace resizes without ResizeObserver', async () => {
     const resizeObserverDescriptor = Object.getOwnPropertyDescriptor(window, 'ResizeObserver');
-    const mutationObserverDescriptor = Object.getOwnPropertyDescriptor(window, 'MutationObserver');
-    let notifyMutation: (() => void) | undefined;
-
-    class TestMutationObserver implements MutationObserver {
-      public constructor(callback: MutationCallback) {
-        notifyMutation = () => callback([], this);
-      }
-
-      public disconnect(): void {}
-
-      public observe(): void {}
-
-      public takeRecords(): MutationRecord[] {
-        return [];
-      }
-    }
-
-    Object.defineProperty(window, 'ResizeObserver', { configurable: true, value: undefined });
-    Object.defineProperty(window, 'MutationObserver', { configurable: true, value: TestMutationObserver });
+    Object.defineProperty(window, 'ResizeObserver', { configurable: true, writable: true, value: undefined });
 
     try {
       await act(async () => {
@@ -281,18 +271,33 @@ describe('SourceEditorField', () => {
       const toolbar = document.body.querySelector<HTMLElement>(
         '.bt-source-workspace--floating .bt-floating-editor__toolbar'
       );
+      const workspace = document.body.querySelector<HTMLElement>('.bt-source-workspace--floating');
       const items = toolbar?.querySelector<HTMLElement>('.bt-floating-editor__toolbar-items');
+      expect(workspace).not.toBeNull();
       expect(toolbar).not.toBeNull();
       expect(items).not.toBeNull();
       Object.defineProperty(toolbar as HTMLElement, 'clientWidth', { configurable: true, value: 100 });
       Object.defineProperty(items as HTMLElement, 'scrollWidth', { configurable: true, value: 200 });
 
-      act(() => notifyMutation?.());
+      await act(async () => {
+        (workspace as HTMLElement).style.width = '100px';
+        await settleMutationObserver();
+      });
 
-      expect(toolbar?.querySelector('.bt-floating-editor__shortcut-menu')).not.toBeNull();
+      const collapsedTrigger = toolbar?.querySelector<HTMLButtonElement>('[aria-label="Open SCSS editor shortcuts"]');
+      expect(collapsedTrigger).not.toBeNull();
+      act(() => Simulate.click(collapsedTrigger as HTMLButtonElement));
+      expect(document.body.querySelector('[role="menu"][aria-label="SCSS editor shortcuts"]')).not.toBeNull();
+
+      Object.defineProperty(toolbar as HTMLElement, 'clientWidth', { configurable: true, value: 400 });
+      await act(async () => {
+        (workspace as HTMLElement).style.width = '400px';
+        await settleMutationObserver();
+      });
+      const expandedTrigger = toolbar?.querySelector<HTMLButtonElement>('[aria-label="Open SCSS editor shortcuts"]');
+      expect(expandedTrigger).toBeNull();
     } finally {
       restoreWindowProperty('ResizeObserver', resizeObserverDescriptor);
-      restoreWindowProperty('MutationObserver', mutationObserverDescriptor);
     }
   });
 });
@@ -313,7 +318,12 @@ async function settleEditorFallback(): Promise<void> {
   await Promise.resolve();
 }
 
-function restoreWindowProperty(key: 'MutationObserver' | 'ResizeObserver', descriptor?: PropertyDescriptor): void {
+async function settleMutationObserver(): Promise<void> {
+  await new Promise((resolve) => window.setTimeout(resolve, 0));
+  await settleEditorFallback();
+}
+
+function restoreWindowProperty(key: 'ResizeObserver', descriptor?: PropertyDescriptor): void {
   if (descriptor) {
     Object.defineProperty(window, key, descriptor);
     return;
