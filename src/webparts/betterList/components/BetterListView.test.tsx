@@ -37,6 +37,93 @@ describe('BetterListView', () => {
     expect(html).toContain('Service title');
   });
 
+  it('renders an optional semantic heading instead of a single-tab strip', () => {
+    const tabs: readonly IBetterListTab[] = [
+      {
+        key: 'all',
+        label: 'All items',
+        grouped: false,
+        layout: { showSearch: false },
+        items: [item]
+      }
+    ];
+
+    const html = renderToStaticMarkup(
+      <BetterListView activeTabKey="all" heading="Service directory" items={[item]} tabs={tabs} />
+    );
+
+    expect(html).toContain('<h2');
+    expect(html).toContain('better-list__heading');
+    expect(html).toContain('Service directory</h2>');
+    expect(html).not.toContain('Better List views');
+    expect(html).not.toContain('>All items<');
+  });
+
+  it('preserves an authored single-tab slot class when the heading replaces the tab strip', () => {
+    const tabs: readonly IBetterListTab[] = [
+      {
+        key: 'all',
+        label: 'All items',
+        grouped: false,
+        layout: { showSearch: false },
+        items: [item]
+      }
+    ];
+    const template = customTemplate.replace(
+      '<span data-bl-slot="tabs"></span>',
+      '<span class="authored-tabs-slot" data-bl-slot="tabs"></span>'
+    );
+
+    const html = renderToStaticMarkup(
+      <BetterListView
+        activeTabKey="all"
+        heading="Service directory"
+        htmlTemplate={template}
+        items={[item]}
+        tabs={tabs}
+      />
+    );
+
+    expect(html).toContain('authored-tabs-slot');
+    expect(html).toContain('better-list__navigation');
+    expect(html).toContain('Service directory</h2>');
+  });
+
+  it('renders the optional semantic heading above a multi-tab strip', () => {
+    const tabs: readonly IBetterListTab[] = [
+      { key: 'featured', label: 'Featured', items: [item] },
+      { key: 'all', label: 'All items', items: [item] }
+    ];
+
+    const html = renderToStaticMarkup(
+      <BetterListView activeTabKey="featured" heading="Service directory" items={[item]} tabs={tabs} />
+    );
+
+    expect(html).toContain('better-list__navigation');
+    expect(html.indexOf('Service directory</h2>')).toBeLessThan(html.indexOf('Better List views'));
+    expect(html).toContain('Featured');
+    expect(html).toContain('All items');
+  });
+
+  it('preserves the existing tab behavior when the optional heading is blank or missing', () => {
+    const tabs: readonly IBetterListTab[] = [
+      { key: 'featured', label: 'Featured', items: [item] },
+      { key: 'all', label: 'All items', items: [item] }
+    ];
+
+    const blankHtml = renderToStaticMarkup(
+      <BetterListView activeTabKey="featured" heading="   " items={[item]} tabs={tabs} />
+    );
+    const missingHtml = renderToStaticMarkup(
+      <BetterListView activeTabKey="featured" items={[item]} tabs={tabs} />
+    );
+
+    expect(blankHtml).not.toContain('better-list__heading');
+    expect(missingHtml).not.toContain('better-list__heading');
+    expect(blankHtml).toContain('Better List views');
+    expect(missingHtml).toContain('Better List views');
+  });
+
   it('renders optional tab icons and counts', () => {
     const tabs: readonly IBetterListTab[] = [
       {

@@ -67,6 +67,7 @@ const BetterListRendererProvider = RendererProvider as unknown as React.Componen
 }>;
 
 export interface IBetterListWebPartProps {
+  heading: string;
   sourceListId: string;
   sourceListTitle: string;
   sourceWebUrl: string;
@@ -140,6 +141,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       groupIcons,
       groupImageAssetProvider: this._imageAssetProvider,
       isEditMode: this.displayMode === DisplayMode.Edit,
+      heading: this.properties.heading,
       listTitle: this.properties.sourceListTitle,
       onTabChange: (tabKey: string): void => {
         this._activeTabKey = tabKey;
@@ -185,6 +187,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
   }
 
   protected async onInit(): Promise<void> {
+    this.properties.heading = this.properties.heading || '';
     this.properties.sourceListId = this.properties.sourceListId || '';
     this.properties.sourceListTitle = this.properties.sourceListTitle || '';
     this.properties.sourceWebUrl = this.properties.sourceWebUrl || '';
@@ -342,6 +345,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       parseItemPropertyFields(this.properties.itemPropertiesJson)
     );
     return {
+      heading: this.properties.heading,
       sourceListId: this.properties.sourceListId,
       sourceListTitle: this.properties.sourceListTitle,
       sourceWebUrl: this.properties.sourceWebUrl,
@@ -381,6 +385,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       addTabFilterMappings(value.fieldMappings as IBetterListFieldMappings, nextTabs)
     );
     const next = {
+      heading: value.heading,
       sourceListId: value.sourceListId,
       sourceListTitle: value.sourceListTitle,
       sourceWebUrl: value.sourceWebUrl,
