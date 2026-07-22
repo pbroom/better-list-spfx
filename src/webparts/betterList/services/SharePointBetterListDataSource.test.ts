@@ -276,7 +276,7 @@ describe('SharePointBetterListDataSource', () => {
     expect(urls[3]).toContain('$filter=Id eq 7 or Id eq 99');
     expect(urls[3].match(/Id eq 7/g)).toHaveLength(1);
     expect(result.items.map((item) => item.metadata[0].value)).toEqual([
-      ['State', null],
+      ['State'],
       []
     ]);
   });

@@ -243,7 +243,10 @@ function normalizeSafeUrl(value: string): string | undefined {
 }
 
 function readPath(source: Readonly<Record<string, unknown>>, fieldPath: string): unknown {
-  return fieldPath.split(/[/.]/).reduce<unknown>((current, segment) => {
+  // Slash-separated paths are the canonical authored representation for
+  // SharePoint relationship fields. Continue to accept the legacy dot form so
+  // existing web-part JSON remains valid while schema hydration migrates it.
+  return fieldPath.split(/[/.]/).filter(Boolean).reduce<unknown>((current, segment) => {
     if (Array.isArray(current)) {
       return current
         .map((entry) => isRecord(entry) ? entry[segment] : undefined)
@@ -268,6 +271,9 @@ function formatValue(value: unknown, richText: boolean): string | undefined {
     return values.length ? values.join(', ') : undefined;
   }
   if (isRecord(value)) {
+    if (Array.isArray(value.results)) {
+      return formatValue(value.results, richText);
+    }
     return formatValue(
       value.Title ??
         value.title ??
@@ -276,7 +282,8 @@ function formatValue(value: unknown, richText: boolean): string | undefined {
         value.Url ??
         value.URL ??
         value.EMail ??
-        value.Email,
+        value.Email ??
+        value.Name,
       richText
     );
   }

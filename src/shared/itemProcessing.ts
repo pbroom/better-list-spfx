@@ -74,6 +74,11 @@ function property(value: unknown, names: readonly string[]): unknown {
 }
 
 export function normalizeFieldValue(value: unknown, mapping: BetterListFieldMapping): BetterListFieldValue {
+  const normalized = normalizeRawFieldValue(value, mapping);
+  return mapping.richText ? normalizeRichTextValue(normalized) : normalized;
+}
+
+function normalizeRawFieldValue(value: unknown, mapping: BetterListFieldMapping): BetterListFieldValue {
   if (mapping.kind === 'url') {
     const key: string = mapping.valueProperty === 'description' ? 'Description' : 'Url';
     const normalized = scalar(isRecord(value) ? property(value, [key, key.toLocaleLowerCase()]) : value);
@@ -88,9 +93,9 @@ export function normalizeFieldValue(value: unknown, mapping: BetterListFieldMapp
         return scalar(property(entry, ['Id', 'ID', 'id']));
       }
       const lookupValueField: string = mapping.lookupValueField || 'Title';
-      const normalized = scalar(property(entry, [lookupValueField, 'Title', 'LookupValue', 'title']) ?? entry);
-      return normalized;
-    });
+      const candidate = property(entry, [lookupValueField, 'Title', 'LookupValue', 'title']);
+      return scalar(candidate ?? (isRecord(entry) ? undefined : entry));
+    }).filter(isPresentComparableValue);
     return mapping.multi || normalized.length > 1 ? normalized : normalized[0] ?? null;
   }
   if (mapping.kind === 'person') {
@@ -117,8 +122,9 @@ export function normalizeFieldValue(value: unknown, mapping: BetterListFieldMapp
       if (mapping.valueProperty === 'loginName') {
         return scalar(property(entry, ['LoginName', 'Name', 'loginName']));
       }
-      return scalar(property(entry, ['Title', 'title', 'LookupValue']) ?? entry);
-    });
+      const candidate = property(entry, ['Title', 'title', 'LookupValue']);
+      return scalar(candidate ?? (isRecord(entry) ? undefined : entry));
+    }).filter(isPresentComparableValue);
     return mapping.multi || normalized.length > 1 ? normalized : normalized[0] ?? null;
   }
   if (mapping.kind === 'number') {
@@ -151,6 +157,10 @@ export function normalizeFieldValue(value: unknown, mapping: BetterListFieldMapp
   }
   const normalized = scalar(value);
   return normalized;
+}
+
+function isPresentComparableValue(value: BetterListComparableValue): boolean {
+  return value !== null && value !== '';
 }
 
 function normalizeRichTextValue(value: BetterListFieldValue): BetterListFieldValue {
@@ -232,7 +242,7 @@ export function normalizeItem(
     const mapping: BetterListFieldMapping | undefined = mappings[slot];
     if (mapping) {
       const normalized = normalizeFieldValue(source[mapping.internalName], mapping);
-      values[slot] = slot === 'description' ? normalizeRichTextValue(normalized) : normalized;
+      values[slot] = normalized;
     }
   });
 

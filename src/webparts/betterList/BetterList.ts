@@ -101,13 +101,23 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
 
   public render(): void {
     const tabs = this._createEffectiveTabConfigurations();
-    const descriptionFieldPath = this._readMappings().description?.internalName;
+    const fieldMappings = this._readMappings();
+    const descriptionFieldPath = fieldMappings.description?.internalName;
+    const richTextFieldPaths = new Set(
+      (fieldMappings.metadata || [])
+        .filter((entry) => entry.mapping.richText)
+        .map((entry) => entry.key)
+    );
     const itemLayout = parseItemLayoutConfiguration(
       this.properties.itemLayoutJson,
       parseItemPropertyFields(this.properties.itemPropertiesJson)
     );
     const groupIcons = parseBetterListGroupIconsConfiguration(this.properties.groupIconsJson);
-    const presentationTabs = tabs.map((tab) => this._createPresentationTab(tab, descriptionFieldPath));
+    const presentationTabs = tabs.map((tab) => this._createPresentationTab(
+      tab,
+      descriptionFieldPath,
+      richTextFieldPaths
+    ));
     const firstTab = presentationTabs[0];
     if (!this._activeTabKey || !presentationTabs.some((tab) => tab.key === this._activeTabKey)) {
       this._activeTabKey = firstTab?.key || '';
@@ -433,7 +443,8 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
 
   private _createPresentationTab(
     configuration: IBetterListEffectiveTabConfiguration,
-    descriptionFieldPath: string | undefined
+    descriptionFieldPath: string | undefined,
+    richTextFieldPaths: ReadonlySet<string>
   ): IBetterListTab {
     const group = configuration.grouping.column
       ? { field: 'group' as const, direction: 'ascending' as const, ungroupedLabel: 'Other' }
@@ -470,7 +481,8 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
           tab,
           configuration.itemLayout.itemProperties,
           configuration.itemLayout.links,
-          descriptionFieldPath
+          descriptionFieldPath,
+          richTextFieldPaths
         ));
       });
     });
@@ -499,13 +511,18 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     tab: IBetterListTabConfig,
     itemProperties: readonly string[],
     itemElementLinks: BetterListItemElementLinks,
-    descriptionFieldPath: string | undefined
+    descriptionFieldPath: string | undefined,
+    richTextFieldPaths: ReadonlySet<string>
   ): IBetterListItem {
     const elements = itemProperties
       .filter((fieldPath) => fieldPath !== 'Title')
       .map((fieldPath) => {
         const isDescription = fieldPath === descriptionFieldPath;
-        const value = formatItemPropertyValue(item.source, fieldPath, isDescription);
+        const value = formatItemPropertyValue(
+          item.source,
+          fieldPath,
+          isDescription || richTextFieldPaths.has(fieldPath)
+        );
         return value
           ? {
               key: fieldPath,
