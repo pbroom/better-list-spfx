@@ -422,7 +422,8 @@ const SortableTabCard: React.FunctionComponent<ISortableTabCardProps> = ({
             } as unknown as NonNullable<React.ComponentProps<typeof AccordionHeader>['button']>
           }
           className="bl-tabs-builder__accordion-header"
-          expandIconPosition="end"
+          expandIcon={{ className: 'bl-tabs-builder__accordion-expand-icon' }}
+          expandIconPosition="start"
           size="small"
         >
           <strong className="bl-tabs-builder__tab-label">Tab {index + 1}</strong>
@@ -740,7 +741,8 @@ const tabBuilderCss = `
 .bl-tabs-builder__accordion-header { margin: 0; min-width: 0; }
 .bl-tabs-builder__accordion-button { cursor: grab; justify-content: flex-start !important; padding-left: 0 !important; touch-action: none; width: 100%; }
 .bl-tabs-builder__accordion-button:active { cursor: grabbing; }
-.bl-tabs-builder__tab-label { padding-left: 4px; }
+.bl-tabs-builder__tab-label { order: 0; padding-left: 4px; }
+.bl-tabs-builder .bl-tabs-builder__accordion-expand-icon { flex: 0 0 auto; order: 1; padding-left: ${tokens.spacingHorizontalS}; padding-right: 0; }
 .bl-tabs-builder__drag-overlay { background: ${tokens.colorNeutralBackground1}; border: 1px solid ${tokens.colorNeutralStroke2}; border-radius: ${tokens.borderRadiusMedium}; box-shadow: ${tokens.shadow16}; color: ${tokens.colorNeutralForeground1}; font: 600 12px/1.4 "Segoe UI", sans-serif; min-width: 180px; padding: 10px 12px; }
 .bl-tabs-builder__actions { gap: 2px; }
 .bl-tabs-builder__sr-only { clip: rect(0, 0, 0, 0); clip-path: inset(50%); height: 1px; overflow: hidden; position: absolute; white-space: nowrap; width: 1px; }

@@ -52,10 +52,9 @@ describe('TabBuilder', () => {
     expect(html).toContain('Drag to reorder. For keyboard sorting, focus this row and press Space.');
     expect(html).toContain('aria-roledescription="sortable"');
     expect(html).toContain('bl-tabs-builder__tab-label');
-    expect(html).toContain('.bl-tabs-builder__tab-label { padding-left: 4px; }');
-    expect(html.indexOf('fui-AccordionHeader__expandIcon')).toBeGreaterThan(
-      html.indexOf('bl-tabs-builder__tab-label')
-    );
+    expect(html).toContain('bl-tabs-builder__accordion-expand-icon');
+    expect(html).toContain('.bl-tabs-builder__tab-label { order: 0; padding-left: 4px; }');
+    expect(html).toContain('.bl-tabs-builder .bl-tabs-builder__accordion-expand-icon { flex: 0 0 auto; order: 1;');
     expect(html).toContain('fui-Switch');
     expect(html).toContain('Show item count');
     expect(html).toContain('Megaphone');
