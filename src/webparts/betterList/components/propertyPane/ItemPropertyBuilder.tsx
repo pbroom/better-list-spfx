@@ -55,6 +55,7 @@ import {
 } from '@fluentui/react-icons';
 
 import {
+  betterListFluentSurfaceClassName,
   betterListMaxItemRows,
   BetterListItemElementLinks,
   BetterListItemLayoutRows,
@@ -819,7 +820,7 @@ const ItemPropertyLinkMenu: React.FunctionComponent<{
           title={ariaLabel}
         />
       </MenuTrigger>
-      <MenuPopover className={classes.menuPopover}>
+      <MenuPopover className={mergeClasses(classes.menuPopover, betterListFluentSurfaceClassName)}>
         <MenuList>
           <MenuItemRadio name="itemLink" value={noItemLinkValue}>
             No link
@@ -878,7 +879,7 @@ export function ColumnPickerMenu({
           size="small"
         />
       </MenuTrigger>
-      <MenuPopover className={classes.menuPopover}>
+      <MenuPopover className={mergeClasses(classes.menuPopover, betterListFluentSurfaceClassName)}>
         <MenuList>
           {onAddRow ? (
             <>
@@ -894,7 +895,7 @@ export function ColumnPickerMenu({
                 <MenuTrigger disableButtonEnhancement>
                   <MenuItem>{field.title}</MenuItem>
                 </MenuTrigger>
-                <MenuPopover className={classes.menuPopover}>
+                <MenuPopover className={mergeClasses(classes.menuPopover, betterListFluentSurfaceClassName)}>
                   <MenuList>
                     {getBetterListFieldTargetFields(field)
                       .filter(
