@@ -1,10 +1,13 @@
 import { createDOMRenderer, GriffelRenderer } from '@griffel/react';
-import type { PositioningProps } from '@fluentui/react-components';
+import type { PortalProps, PositioningProps } from '@fluentui/react-components';
 
 const renderers: WeakMap<Document, GriffelRenderer> = new WeakMap<Document, GriffelRenderer>();
 
 export const betterListFluentSurfaceClassName = 'better-list-fluent-surface';
 export const betterListFluentTooltipContentClassName = 'better-list-fluent-tooltip-content';
+export const betterListPortalMountNodeProps: PortalProps['mountNode'] = {
+  className: 'better-list-portal'
+};
 
 const runtimeStyleAttribute = 'data-better-list-runtime-styles';
 
@@ -12,7 +15,7 @@ const criticalRuntimeStyles = `
 .${betterListFluentSurfaceClassName} {
   box-sizing: border-box;
   background: #ffffff;
-  border: 1px solid #d1d1d1;
+  border: 1px solid transparent;
   color: #242424;
   font-family: "Segoe UI", system-ui, sans-serif;
   z-index: 1000000;

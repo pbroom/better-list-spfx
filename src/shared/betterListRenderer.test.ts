@@ -1,6 +1,7 @@
 import {
   betterListFluentSurfaceClassName,
   betterListFluentTooltipContentClassName,
+  betterListPortalMountNodeProps,
   createBetterListPortalPositioning,
   ensureBetterListRuntimeStyles,
   getBetterListPortalMountNode,
@@ -26,7 +27,14 @@ describe('Better List Griffel renderer', () => {
     expect(first.textContent).toContain(`.${betterListFluentSurfaceClassName}`);
     expect(first.textContent).toContain(`.${betterListFluentTooltipContentClassName}`);
     expect(first.textContent).toContain('z-index: 1000000');
+    expect(first.textContent).toContain('border: 1px solid transparent');
+    expect(first.textContent).not.toContain('border: 1px solid #d1d1d1');
     expect(first.textContent).not.toContain('.fui-Button');
+  });
+
+  it('lets Fluent create a themed portal wrapper inside the supplied portal root', () => {
+    expect(betterListPortalMountNodeProps).toEqual({ className: 'better-list-portal' });
+    expect(betterListPortalMountNodeProps).not.toHaveProperty('element');
   });
 
   it('initializes independently for the first instance in every document', () => {

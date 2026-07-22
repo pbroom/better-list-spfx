@@ -71,6 +71,7 @@ describe('BetterListPropertyPane', () => {
     expect(html).toContain('bl-pane__source-dropdown');
     expect(html).toContain('aria-label="Heading"');
     expect(html).toContain('--bl-font-mono: &quot;Geist Mono Variable&quot;');
+    expect(html.match(/bl-property-pane-section/g)).toHaveLength(4);
     expect(html).toContain('data-property-pane-section-heading="true"');
     expect(html.match(/data-property-pane-section-divider="before"/g)).toHaveLength(3);
     expect(html.match(/data-property-pane-section-divider="none"/g)).toHaveLength(1);
