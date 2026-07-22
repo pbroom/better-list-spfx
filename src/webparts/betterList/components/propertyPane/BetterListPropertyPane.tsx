@@ -24,6 +24,7 @@ import {
   betterListTemplateMaxBytes,
   BetterListItemLayoutRows,
   BetterListItemElementLinks,
+  betterListFluentSurfaceClassName,
   IBetterListFieldDescriptor,
   IBetterListFieldMappings,
   IBetterListGroupIconsConfiguration,
@@ -80,6 +81,7 @@ export interface IBetterListPropertyPaneProps {
   imageAssetProvider?: ISharePointImageAssetProvider;
   onChange: (value: IBetterListAuthoringState) => void;
   onActiveTabChange?: (tabId: string) => void;
+  targetDocument?: Document;
 }
 
 const cssTargets: readonly ISourceEditorTarget[] = [
@@ -377,7 +379,11 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
   const tabFilterFields = createTabFilterFields(props.value.fieldMappings, fields);
 
   return (
-    <FluentProvider className="bl-pane-provider" theme={webLightTheme}>
+    <FluentProvider
+      className="bl-pane-provider"
+      targetDocument={props.targetDocument || document}
+      theme={webLightTheme}
+    >
       <div className="bl-pane">
         <style>{propertyPaneCss}</style>
         <section className="bl-pane__source-section">
@@ -389,7 +395,7 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
             className="bl-pane__source-dropdown"
             freeform
             listbox={{
-              className: 'bl-pane__source-listbox',
+              className: `bl-pane__source-listbox ${betterListFluentSurfaceClassName}`,
               style: { maxHeight: 'min(320px, 70vh)', overflowY: 'auto' }
             }}
             placeholder={loadingLists ? 'Loading lists…' : 'Select a list or paste its URL'}
@@ -480,6 +486,7 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
           <span className="bl-pane__label">Grouping column</span>
           <Dropdown
             aria-label="Grouping column"
+            listbox={{ className: betterListFluentSurfaceClassName }}
             selectedOptions={[activeGrouping.column || noGroupingValue]}
             value={selectedGroupingOption?.label || 'No grouping'}
             onOptionSelect={(_event, data) =>

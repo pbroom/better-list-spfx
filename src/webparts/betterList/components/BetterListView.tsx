@@ -32,6 +32,7 @@ import {
   SearchRegular
 } from '@fluentui/react-icons';
 import {
+  betterListFluentTooltipContentClassName,
   BetterListItemLayoutRows,
   BetterListGroupIconOverride,
   BetterListTabIcon,
@@ -724,7 +725,13 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
     }
     const override = getBetterListGroupIconOverride(selectedGroupIcons, selectedGroupIconScope, group.id);
     return (
-      <Tooltip content={`Change icon for ${group.title}`} relationship="label">
+      <Tooltip
+        content={{
+          children: `Change icon for ${group.title}`,
+          className: betterListFluentTooltipContentClassName
+        }}
+        relationship="label"
+      >
         <Button
           appearance="subtle"
           aria-haspopup="dialog"

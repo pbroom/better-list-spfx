@@ -25,6 +25,7 @@ import { ImageRegular, SearchRegular } from '@fluentui/react-icons';
 import {
   BetterListGroupIconLibrary,
   BetterListGroupIconOverride,
+  betterListFluentSurfaceClassName,
   normalizeBetterListGroupImageUrl
 } from '../../../shared';
 import {
@@ -281,7 +282,7 @@ export const GroupIconPickerDialog: React.FunctionComponent<IGroupIconPickerDial
 
   return (
     <Dialog modalType="modal" open={open} onOpenChange={(_event, data) => onOpenChange(data.open)}>
-      <DialogSurface className={classes.surface}>
+      <DialogSurface className={mergeClasses(classes.surface, betterListFluentSurfaceClassName)}>
         <DialogBody>
           <DialogTitle>{`Icon for “${groupTitle}”`}</DialogTitle>
           <DialogContent className={classes.content}>

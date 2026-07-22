@@ -290,6 +290,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
               { renderer: getBetterListRenderer(domElement.ownerDocument) },
               React.createElement(BetterListPropertyPane, {
                 activeTabId: this._activeTabKey,
+                targetDocument: domElement.ownerDocument,
                 value: this._createAuthoringState(),
                 pickerDataSource: this._pickerDataSource,
                 imageAssetProvider: this._imageAssetProvider,
