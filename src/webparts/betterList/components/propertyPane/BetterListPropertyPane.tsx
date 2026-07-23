@@ -8,7 +8,6 @@ import {
   Input,
   Option,
   PortalMountNodeProvider,
-  Select,
   Switch,
   tokens,
   webLightTheme
@@ -610,18 +609,26 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
           <div className="bl-pane__top-settings">
             <label className="bl-pane__field">
               <span className="bl-pane__label">Columns</span>
-              <Select
+              <Dropdown
                 aria-label="Columns"
+                className="bl-pane__compact-dropdown"
+                listbox={{ className: betterListFluentSurfaceClassName }}
+                mountNode={betterListPortalMountNodeProps}
+                positioning={createBetterListPortalPositioning(targetDocument)}
+                selectedOptions={[String(props.value.itemColumns)]}
                 value={String(props.value.itemColumns)}
-                onChange={(event) => {
-                  patchValue({ itemColumns: Number(event.currentTarget.value) as BetterListColumnCount });
+                onOptionSelect={(_event, data) => {
+                  const itemColumns = Number(data.optionValue);
+                  if (itemColumns === 1 || itemColumns === 2 || itemColumns === 3 || itemColumns === 4) {
+                    patchValue({ itemColumns });
+                  }
                 }}
               >
-                <option value="1">1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-              </Select>
+                <Option text="1" value="1">1</Option>
+                <Option text="2" value="2">2</Option>
+                <Option text="3" value="3">3</Option>
+                <Option text="4" value="4">4</Option>
+              </Dropdown>
             </label>
             <label className="bl-pane__field">
               <span className="bl-pane__label">Maximum items per page</span>
@@ -1014,6 +1021,7 @@ const propertyPaneCss = `
 .bl-pane__top-settings { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .bl-pane__label { font-size: 12px; font-weight: 600; }
 .bl-pane__source-dropdown { min-width: 0; width: 100%; }
+.bl-pane__compact-dropdown { min-width: 0; width: 100%; }
 .bl-pane__source-listbox { font-family: "Segoe UI", sans-serif; }
 .bl-pane__help { color: #616161; font-size: 11px; line-height: 1.4; margin: -4px 0 12px; }
 .bl-pane__error { background: #fdf3f4; border-left: 3px solid #c50f1f; color: #8a1219; font-size: 12px; padding: 8px; }

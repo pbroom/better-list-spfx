@@ -75,10 +75,9 @@ describe('BetterListPropertyPane', () => {
     expect(html).toContain('aria-label="Title"');
     expect(html).toContain('placeholder="Title (optional)"');
     expect(html).toContain('aria-label="Columns"');
-    expect(html).toContain('<option value="1">1</option>');
-    expect(html).toContain('<option selected="" value="2">2</option>');
-    expect(html).toContain('<option value="3">3</option>');
-    expect(html).toContain('<option value="4">4</option>');
+    expect(html).toContain('fui-Dropdown');
+    expect(html).toContain('bl-pane__compact-dropdown');
+    expect(html).not.toContain('fui-Select');
     expect(html).toContain('aria-label="Maximum items per page"');
     expect(html).toContain('placeholder="No maximum"');
     expect(html).toContain('Search &amp; sorting');
@@ -200,11 +199,18 @@ describe('BetterListPropertyPane', () => {
       await Promise.resolve();
     });
 
-    const select = container.querySelector<HTMLSelectElement>('select[aria-label="Columns"]');
-    expect(select).not.toBeNull();
+    const dropdown = container.querySelector<HTMLButtonElement>('button[aria-label="Columns"]');
+    expect(dropdown).not.toBeNull();
     await act(async () => {
-      (select as HTMLSelectElement).value = '4';
-      Simulate.change(select as HTMLSelectElement);
+      Simulate.click(dropdown as HTMLButtonElement);
+      await Promise.resolve();
+    });
+    const option = Array.from(document.body.querySelectorAll<HTMLElement>('[role="option"]')).find(
+      (candidate) => candidate.textContent?.trim() === '4'
+    );
+    expect(option).toBeDefined();
+    await act(async () => {
+      Simulate.click(option as HTMLElement);
     });
 
     expect(onChange).toHaveBeenLastCalledWith({ ...value, itemColumns: 4 });

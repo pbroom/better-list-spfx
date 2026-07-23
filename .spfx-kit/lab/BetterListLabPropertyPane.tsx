@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Button, Combobox, Dropdown, Input, Option, Select, Switch, makeStyles, tokens } from '@fluentui/react-components';
+import { Button, Combobox, Dropdown, Input, Option, Switch, makeStyles, tokens } from '@fluentui/react-components';
 import { AddRegular, EditRegular } from '@fluentui/react-icons';
 import type {
   LabCssEditorTarget,
@@ -92,6 +92,10 @@ const useStyles = makeStyles({
     display: 'grid',
     columnGap: '8px',
     gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)'
+  },
+  compactDropdown: {
+    minWidth: 0,
+    width: '100%'
   },
   sectionLabel: {
     fontSize: '14px',
@@ -392,18 +396,24 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
       <div className={classes.topSettings}>
         <label className={classes.groupingField}>
           <span>Columns</span>
-          <Select
+          <Dropdown
             aria-label="Columns"
+            className={classes.compactDropdown}
+            positioning={{ align: 'start', autoSize: 'height', position: 'below', strategy: 'fixed' }}
+            selectedOptions={[String(values.itemColumns)]}
             value={String(values.itemColumns)}
-            onChange={(event) => {
-              onChange({ itemColumns: Number(event.currentTarget.value) as BetterListColumnCount });
+            onOptionSelect={(_event, data) => {
+              const itemColumns = Number(data.optionValue);
+              if (itemColumns === 1 || itemColumns === 2 || itemColumns === 3 || itemColumns === 4) {
+                onChange({ itemColumns });
+              }
             }}
           >
-            <option value="1">1</option>
-            <option value="2">2</option>
-            <option value="3">3</option>
-            <option value="4">4</option>
-          </Select>
+            <Option text="1" value="1">1</Option>
+            <Option text="2" value="2">2</Option>
+            <Option text="3" value="3">3</Option>
+            <Option text="4" value="4">4</Option>
+          </Dropdown>
         </label>
         <label className={classes.groupingField}>
           <span>Maximum items per page</span>
