@@ -60,7 +60,7 @@ describe('TabBuilder', () => {
     expect(html).toContain('aria-roledescription="sortable"');
     expect(html).toContain('bl-tabs-builder__tab-label');
     expect(html).toContain('bl-tabs-builder__accordion-expand-icon');
-    expect(html).toContain('.bl-tabs-builder__tab-label { order: 0; padding-left: 4px; }');
+    expect(html).toContain('.bl-tabs-builder__tab-label { order: 0; padding-left: var(--spacingHorizontalM); }');
     expect(html).toContain('.bl-tabs-builder .bl-tabs-builder__accordion-expand-icon { flex: 0 0 auto; order: 1;');
     expect(html).toContain('fui-Switch');
     expect(html).toContain('Show item count');
@@ -75,9 +75,10 @@ describe('TabBuilder', () => {
     expect(html).not.toContain('Move Featured down');
     expect(html).toContain('.bl-tabs-builder:focus-within { z-index: 2; }');
     expect(html).toContain(
-      '.bl-tabs-builder__card[data-tab-selected=&quot;true&quot;] { box-shadow: 0 0 0 var(--strokeWidthThin) var(--colorBrandStroke1); }'
+      '.bl-tabs-builder__card[data-tab-selected=&quot;true&quot;] { background: #f9fcff; box-shadow: 0 0 0 var(--strokeWidthThin) var(--colorBrandStroke1); }'
     );
-    expect(html).not.toContain('.bl-tabs-builder__card[data-tab-selected=&quot;true&quot;] { background:');
+    expect(html).toContain('.bl-tabs-builder__card-body { padding: var(--spacingVerticalS) 0 var(--spacingVerticalM); }');
+    expect(html).toContain('.bl-tabs-builder__actions { gap: 2px; padding-right: var(--spacingHorizontalS); }');
     expect(html).not.toContain('[data-tab-selected=&quot;true&quot;] &gt; .bl-tabs-builder__card-heading');
     expect(html).toContain('.bl-tabs-builder__card-heading { border-bottom: 0;');
     expect(html).toContain(

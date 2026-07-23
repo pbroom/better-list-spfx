@@ -733,18 +733,18 @@ const tabBuilderCss = `
 .bl-tabs-builder__heading { color: #616161; margin-bottom: 8px; }
 .bl-tabs-builder__card { background: transparent; border: 0; border-radius: ${tokens.borderRadiusMedium}; margin: 0 0 4px; padding: 0; position: relative; }
 .bl-tabs-builder__card:focus-within { z-index: 2; }
-.bl-tabs-builder__card[data-tab-selected="true"] { box-shadow: 0 0 0 ${tokens.strokeWidthThin} ${tokens.colorBrandStroke1}; }
+.bl-tabs-builder__card[data-tab-selected="true"] { background: #f9fcff; box-shadow: 0 0 0 ${tokens.strokeWidthThin} ${tokens.colorBrandStroke1}; }
 .bl-tabs-builder__card.is-dragging { opacity: .35; }
 .bl-tabs-builder__card-heading { border-bottom: 0; min-height: 38px; }
 .bl-tabs-builder__card-heading:hover > .bl-tabs-builder__actions [data-tab-remove], .bl-tabs-builder__card-heading:focus-within > .bl-tabs-builder__actions [data-tab-remove] { opacity: 1; pointer-events: auto; }
-.bl-tabs-builder__card-body { padding: 8px 0 6px; }
+.bl-tabs-builder__card-body { padding: ${tokens.spacingVerticalS} 0 ${tokens.spacingVerticalM}; }
 .bl-tabs-builder__accordion-header { margin: 0; min-width: 0; }
 .bl-tabs-builder__accordion-button { cursor: grab; justify-content: flex-start !important; padding-left: 0 !important; touch-action: none; width: 100%; }
 .bl-tabs-builder__accordion-button:active { cursor: grabbing; }
-.bl-tabs-builder__tab-label { order: 0; padding-left: 4px; }
+.bl-tabs-builder__tab-label { order: 0; padding-left: ${tokens.spacingHorizontalM}; }
 .bl-tabs-builder .bl-tabs-builder__accordion-expand-icon { flex: 0 0 auto; order: 1; padding-left: ${tokens.spacingHorizontalS}; padding-right: 0; }
 .bl-tabs-builder__drag-overlay { background: ${tokens.colorNeutralBackground1}; border: 1px solid ${tokens.colorNeutralStroke2}; border-radius: ${tokens.borderRadiusMedium}; box-shadow: ${tokens.shadow16}; color: ${tokens.colorNeutralForeground1}; font: 600 12px/1.4 "Segoe UI", sans-serif; min-width: 180px; padding: 10px 12px; }
-.bl-tabs-builder__actions { gap: 2px; }
+.bl-tabs-builder__actions { gap: 2px; padding-right: ${tokens.spacingHorizontalS}; }
 .bl-tabs-builder__sr-only { clip: rect(0, 0, 0, 0); clip-path: inset(50%); height: 1px; overflow: hidden; position: absolute; white-space: nowrap; width: 1px; }
 .bl-tabs-builder .bl-tabs-builder__remove { color: ${tokens.colorNeutralForeground3}; height: 28px; min-height: 28px; min-width: 28px; padding: 0; transition: opacity 100ms ease-out; width: 28px; }
 .bl-tabs-builder__field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
