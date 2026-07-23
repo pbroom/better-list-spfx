@@ -23,7 +23,9 @@
       "officeFabricIconFontName": "Page",
       "properties": {
         "heading": "",
+        "itemColumns": 2,
         "maxItemsPerPage": 0,
+        "showSearch": true,
         "groupIconsJson": "{\"version\":1,\"showIcons\":true,\"overrides\":[]}",
         "itemLayoutJson": "[]",
         "htmlTemplate": "<template data-bl-fragment=\"shell\">\n  <section>\n    <div class=\"better-list__header\">\n      <div class=\"better-list__toolbar\">\n        <span data-bl-slot=\"tabs\"></span>\n        <span data-bl-slot=\"search\"></span>\n      </div>\n    </div>\n    <div data-bl-slot=\"content\"></div>\n  </section>\n</template>\n\n<template data-bl-fragment=\"group\">\n  <section>\n    <h2 data-bl-slot=\"heading\"></h2>\n    <div data-bl-slot=\"body\"></div>\n  </section>\n</template>\n\n<template data-bl-fragment=\"list\">\n  <ul>\n    <li data-bl-slot=\"items\"></li>\n  </ul>\n</template>\n\n<template data-bl-fragment=\"item\">\n  <li>\n    <span data-bl-slot=\"title\"></span>\n    <div data-bl-slot=\"properties\"></div>\n  </li>\n</template>"

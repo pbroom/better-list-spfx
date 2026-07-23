@@ -26,6 +26,7 @@ import {
   validateBetterListTemplateStructure,
   serializeTabConfiguration,
   IBetterListFieldMappings,
+  BetterListColumnCount,
   IBetterListTabConfig,
   resolveBetterListTabConfigurations
 } from '../../src/shared';
@@ -49,7 +50,9 @@ const titleCommitDelayMs = 500;
 
 export type BetterListLabProps = LabPropertyBag & {
   heading: string;
+  itemColumns: BetterListColumnCount;
   maxItemsPerPage: number;
+  showSearch: boolean;
   sourceListId: string;
   sourceListTitle: string;
   sourceWebUrl: string;
@@ -84,6 +87,15 @@ const useStyles = makeStyles({
     marginBottom: '12px',
     fontSize: '12px',
     fontWeight: 600
+  },
+  topSettings: {
+    display: 'grid',
+    columnGap: '8px',
+    gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)'
+  },
+  compactDropdown: {
+    minWidth: 0,
+    width: '100%'
   },
   sectionLabel: {
     fontSize: '14px',
@@ -381,24 +393,57 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
           }}
         />
       </label>
-      <label className={classes.groupingField}>
-        <span>Maximum items per page</span>
-        <Input
-          aria-label="Maximum items per page"
-          min={1}
-          placeholder="No maximum"
-          step={1}
-          type="number"
-          value={values.maxItemsPerPage > 0 ? String(values.maxItemsPerPage) : ''}
-          onChange={(_event, data) => {
-            const numericValue = Number(data.value);
-            onChange({
-              maxItemsPerPage:
-                Number.isFinite(numericValue) && numericValue > 0 ? Math.floor(numericValue) : 0
-            });
-          }}
+      <div className={classes.topSettings}>
+        <label className={classes.groupingField}>
+          <span>Columns</span>
+          <Dropdown
+            aria-label="Columns"
+            className={classes.compactDropdown}
+            positioning={{ align: 'start', autoSize: 'height', position: 'below', strategy: 'fixed' }}
+            selectedOptions={[String(values.itemColumns)]}
+            value={String(values.itemColumns)}
+            onOptionSelect={(_event, data) => {
+              const itemColumns = Number(data.optionValue);
+              if (itemColumns === 1 || itemColumns === 2 || itemColumns === 3 || itemColumns === 4) {
+                onChange({ itemColumns });
+              }
+            }}
+          >
+            <Option text="1" value="1">1</Option>
+            <Option text="2" value="2">2</Option>
+            <Option text="3" value="3">3</Option>
+            <Option text="4" value="4">4</Option>
+          </Dropdown>
+        </label>
+        <label className={classes.groupingField}>
+          <span>Maximum items per page</span>
+          <Input
+            aria-label="Maximum items per page"
+            min={1}
+            placeholder="No maximum"
+            step={1}
+            type="number"
+            value={values.maxItemsPerPage > 0 ? String(values.maxItemsPerPage) : ''}
+            onChange={(_event, data) => {
+              const numericValue = Number(data.value);
+              onChange({
+                maxItemsPerPage:
+                  Number.isFinite(numericValue) && numericValue > 0 ? Math.floor(numericValue) : 0
+              });
+            }}
+          />
+        </label>
+      </div>
+
+      <DisclosureSection label="Search & sorting">
+        <Switch
+          aria-label="Search field"
+          checked={values.showSearch}
+          className={classes.switch}
+          label="Search field"
+          onChange={(_event, data) => onChange({ showSearch: data.checked })}
         />
-      </label>
+      </DisclosureSection>
 
       <DisclosureSection
         action={

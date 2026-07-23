@@ -35,6 +35,7 @@ import {
 } from '@fluentui/react-icons';
 import {
   betterListFluentTooltipContentClassName,
+  BetterListColumnCount,
   BetterListItemLayoutRows,
   BetterListGroupIconOverride,
   BetterListTabIcon,
@@ -45,6 +46,7 @@ import {
   IBetterListGroupIconsConfiguration,
   defaultBetterListGroupIconsConfiguration,
   getBetterListGroupIconOverride,
+  normalizeBetterListColumnCount,
   resolveBetterListTemplate,
   substituteBetterListTokens
 } from '../../../shared';
@@ -63,7 +65,7 @@ export type BetterListStatus = 'loading' | 'ready' | 'error';
 export type BetterListGroupIcon = 'general' | 'communications' | 'policy' | 'support';
 
 export interface IBetterListTabLayout {
-  columns?: 1 | 2 | 3;
+  columns?: BetterListColumnCount;
   density?: 'compact' | 'comfortable';
   collapsible?: boolean;
   initiallyExpanded?: boolean;
@@ -139,7 +141,9 @@ export interface IBetterListViewProps {
   groupImageAssetProvider?: ISharePointImageAssetProvider;
   isEditMode?: boolean;
   heading?: string;
+  itemColumns?: BetterListColumnCount;
   maxItemsPerPage?: number;
+  showSearch?: boolean;
   listTitle?: string;
   onTabChange?: (tabKey: string) => void;
   onSearchChange?: (value: string) => void;
@@ -653,7 +657,9 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   groupImageAssetProvider,
   isEditMode = false,
   heading = '',
+  itemColumns,
   maxItemsPerPage = 0,
+  showSearch,
   listTitle = 'Better List',
   onTabChange,
   onSearchChange,
@@ -692,14 +698,18 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   const selectedLayout = selectedTab?.layout;
   const density = selectedLayout?.density ?? 'comfortable';
   const showDescriptions = selectedLayout?.showDescriptions !== false;
-  const showSearch = selectedLayout?.showSearch !== false;
+  const searchVisible = (showSearch ?? true) && selectedLayout?.showSearch !== false;
   const grouped = selectedTab?.grouped === true;
   const collapsible = grouped && selectedLayout?.collapsible !== false;
   const initiallyExpanded = selectedLayout?.initiallyExpanded !== false;
+  const normalizedItemColumns =
+    itemColumns === undefined
+      ? selectedLayout?.columns ?? 2
+      : normalizeBetterListColumnCount(itemColumns);
   const gridStyle = {
-    '--better-list-columns': String(selectedLayout?.columns ?? 2)
+    '--better-list-columns': String(normalizedItemColumns)
   } as React.CSSProperties;
-  const normalizedSearchText = normalizeSearchText(internalSearchValue);
+  const normalizedSearchText = searchVisible ? normalizeSearchText(internalSearchValue) : '';
   const normalizedHeading = heading.trim();
   const normalizedMaxItemsPerPage =
     Number.isFinite(maxItemsPerPage) && maxItemsPerPage > 0 ? Math.floor(maxItemsPerPage) : 0;
@@ -1207,7 +1217,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
         {
       tabs: renderTabs,
       search: (attributes, key) =>
-        showSearch ? (
+        searchVisible ? (
           <Input
             {...attributes}
             className={mergeClasses(String(attributes.className || ''), classes.search, 'better-list__search')}
