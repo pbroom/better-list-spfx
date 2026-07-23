@@ -560,7 +560,6 @@ export const ItemPropertyBuilder: React.FunctionComponent<IItemPropertyBuilderPr
           targetDocument={targetDocument}
         />
       }
-      divider={false}
       label="Item layout"
     >
       {context}

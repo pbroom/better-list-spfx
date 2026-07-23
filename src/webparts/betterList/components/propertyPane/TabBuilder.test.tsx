@@ -1,11 +1,14 @@
 import * as React from 'react';
+import * as ReactDom from 'react-dom';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { act, Simulate } from 'react-dom/test-utils';
 
 import { IBetterListTabConfig } from '../../../../shared';
 import {
   appendNewTab,
   IBetterListTabFilterField,
   reorderTabsById,
+  resolveTabHeaderClick,
   resolveTabNameDraft,
   shouldToggleTabAccordion,
   tabSortKeyboardCodes,
@@ -28,13 +31,20 @@ describe('TabBuilder', () => {
     ];
 
     const html = renderToStaticMarkup(
-      <TabBuilder fields={fields} showAddAction={false} tabs={tabs} onChange={() => undefined} />
+      <TabBuilder
+        fields={fields}
+        selectedTabId="featured"
+        showAddAction={false}
+        tabs={tabs}
+        onChange={() => undefined}
+      />
     );
 
     expect(html).toContain('fui-Accordion');
     expect(html).toContain('fui-AccordionItem');
     expect(html).toContain('fui-AccordionHeader');
     expect(html).toContain('fui-AccordionPanel');
+    expect(html.match(/data-tab-selected="true"/g)).toHaveLength(1);
     expect(html.match(/aria-expanded="true"/g)).toHaveLength(2);
     expect(html).toContain('<legend>Filter items</legend>');
     expect(html).toContain('placeholder="All items"');
@@ -51,6 +61,10 @@ describe('TabBuilder', () => {
     expect(html).toContain('aria-describedby="tab-featured-header-reorder-help"');
     expect(html).toContain('Drag to reorder. For keyboard sorting, focus this row and press Space.');
     expect(html).toContain('aria-roledescription="sortable"');
+    expect(html).toContain('bl-tabs-builder__tab-label');
+    expect(html).toContain('bl-tabs-builder__accordion-expand-icon');
+    expect(html).toContain('.bl-tabs-builder__tab-label { order: 0; padding-left: var(--spacingHorizontalM); }');
+    expect(html).toContain('.bl-tabs-builder .bl-tabs-builder__accordion-expand-icon { flex: 0 0 auto; order: 1;');
     expect(html).toContain('fui-Switch');
     expect(html).toContain('Show item count');
     expect(html).toContain('Megaphone');
@@ -63,6 +77,12 @@ describe('TabBuilder', () => {
     expect(html).not.toContain('Move Featured up');
     expect(html).not.toContain('Move Featured down');
     expect(html).toContain('.bl-tabs-builder:focus-within { z-index: 2; }');
+    expect(html).toContain(
+      '.bl-tabs-builder__card[data-tab-selected=&quot;true&quot;] { background: #f9fcff; box-shadow: 0 0 0 var(--strokeWidthThin) var(--colorBrandStroke1); }'
+    );
+    expect(html).toContain('.bl-tabs-builder__card-body { padding: var(--spacingVerticalS) 0 var(--spacingVerticalM); }');
+    expect(html).toContain('.bl-tabs-builder__actions { gap: 2px; padding-right: var(--spacingHorizontalS); }');
+    expect(html).not.toContain('[data-tab-selected=&quot;true&quot;] &gt; .bl-tabs-builder__card-heading');
     expect(html).toContain('.bl-tabs-builder__card-heading { border-bottom: 0;');
     expect(html).toContain(
       'font-family: var(--bl-font-mono, &quot;Geist Mono Variable&quot;, &quot;Geist Mono&quot;, ui-monospace, SFMono-Regular, Consolas, &quot;Liberation Mono&quot;, monospace) !important;'
@@ -92,6 +112,57 @@ describe('TabBuilder', () => {
     expect(tabSortKeyboardCodes.start).not.toContain('Enter');
     expect(shouldToggleTabAccordion(true)).toBe(false);
     expect(shouldToggleTabAccordion(false)).toBe(true);
+  });
+
+  it('keeps header selection and disclosure behavior independent', () => {
+    expect(resolveTabHeaderClick(false, true, true)).toEqual({ select: false, toggle: true });
+    expect(resolveTabHeaderClick(true, true, true)).toEqual({ select: false, toggle: true });
+    expect(resolveTabHeaderClick(false, false, true)).toEqual({ select: true, toggle: false });
+    expect(resolveTabHeaderClick(true, false, true)).toEqual({ select: false, toggle: true });
+    expect(resolveTabHeaderClick(false, false, false)).toEqual({ select: false, toggle: true });
+  });
+
+  it('reopens a collapsed tab when controlled selection returns to it', async () => {
+    const container = document.createElement('div');
+    const tabs: readonly IBetterListTabConfig[] = [
+      { id: 'featured', label: 'Featured', filter: { kind: 'all' } },
+      { id: 'all-services', label: 'All Services', filter: { kind: 'all' } }
+    ];
+    const renderBuilder = async (selectedTabId: string): Promise<void> => {
+      await act(async () => {
+        ReactDom.render(
+          <TabBuilder fields={[]} selectedTabId={selectedTabId} tabs={tabs} onChange={() => undefined} />,
+          container
+        );
+      });
+    };
+
+    try {
+      await renderBuilder('all-services');
+      const allServicesHeader = container.querySelector<HTMLButtonElement>(
+        'button[aria-label^="Tab 2: All Services."]'
+      ) as HTMLButtonElement;
+
+      await act(async () => {
+        Simulate.click(allServicesHeader);
+      });
+      expect(allServicesHeader.getAttribute('aria-expanded')).toBe('false');
+      expect(container.querySelector('#tab-all-services-panel')).toBeNull();
+
+      await renderBuilder('featured');
+      expect(allServicesHeader.getAttribute('aria-expanded')).toBe('false');
+
+      await renderBuilder('all-services');
+      expect(allServicesHeader.getAttribute('aria-expanded')).toBe('true');
+      expect(container.querySelector('#tab-all-services-panel')).not.toBeNull();
+      expect(container.querySelector('[data-tab-sortable="all-services"]')?.getAttribute('data-tab-selected')).toBe(
+        'true'
+      );
+    } finally {
+      await act(async () => {
+        ReactDom.unmountComponentAtNode(container);
+      });
+    }
   });
 
   it('reorders tabs by stable id without mutating the source', () => {

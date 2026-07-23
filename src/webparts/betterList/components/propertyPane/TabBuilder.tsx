@@ -202,10 +202,6 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({
               }
               const nextOpenTabIds = new Set(data.openItems);
               setClosedTabIds(new Set(tabs.filter((tab) => !nextOpenTabIds.has(tab.id)).map((tab) => tab.id)));
-              const newlyOpened = data.openItems.find((tabId) => closedTabIds.has(tabId));
-              if (newlyOpened) {
-                onSelectedTabChange?.(newlyOpened);
-              }
             }}
           >
             {tabs.map((tab, index) => {
@@ -224,7 +220,7 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({
                   selected={tab.id === selectedTabId}
                   tab={tab}
                   tabsLength={tabs.length}
-                  onSelect={() => onSelectedTabChange?.(tab.id)}
+                  onSelect={onSelectedTabChange ? () => onSelectedTabChange(tab.id) : undefined}
                   onRemove={() => removeTab(index)}
                 >
                   {open ? (
@@ -369,7 +365,7 @@ interface ISortableTabCardProps {
   selected: boolean;
   tab: IBetterListTabConfig;
   tabsLength: number;
-  onSelect: () => void;
+  onSelect?: () => void;
   onRemove: () => void;
 }
 
@@ -397,8 +393,16 @@ const SortableTabCard: React.FunctionComponent<ISortableTabCardProps> = ({
       className={`bl-tabs-builder__card${isDragging ? ' is-dragging' : ''}`}
       data-tab-selected={selected || undefined}
       data-tab-sortable={tab.id}
-      onFocusCapture={onSelect}
-      onPointerDown={onSelect}
+      onFocusCapture={(event) => {
+        if (!isWithinTabCardHeading(event.target)) {
+          onSelect?.();
+        }
+      }}
+      onPointerDown={(event) => {
+        if (!isWithinTabCardHeading(event.target)) {
+          onSelect?.();
+        }
+      }}
       ref={setNodeRef}
       style={style}
       value={tab.id}
@@ -418,14 +422,28 @@ const SortableTabCard: React.FunctionComponent<ISortableTabCardProps> = ({
               'aria-label': `Tab ${index + 1}: ${tab.label}. ${reorderInstructions}`,
               className: 'bl-tabs-builder__accordion-button',
               id: headerId,
+              onClick: (event: React.MouseEvent<HTMLButtonElement>) => {
+                const action = resolveTabHeaderClick(
+                  selected,
+                  isWithinTabExpandIcon(event.target),
+                  onSelect !== undefined
+                );
+                if (!action.toggle) {
+                  event.preventDefault();
+                }
+                if (action.select) {
+                  onSelect?.();
+                }
+              },
               ref: setActivatorNodeRef
             } as unknown as NonNullable<React.ComponentProps<typeof AccordionHeader>['button']>
           }
           className="bl-tabs-builder__accordion-header"
+          expandIcon={{ className: 'bl-tabs-builder__accordion-expand-icon' }}
           expandIconPosition="start"
           size="small"
         >
-          <strong>Tab {index + 1}</strong>
+          <strong className="bl-tabs-builder__tab-label">Tab {index + 1}</strong>
         </AccordionHeader>
         <div aria-label={`Actions for ${tab.label}`} className="bl-tabs-builder__actions" role="group">
           <Button
@@ -448,6 +466,25 @@ const SortableTabCard: React.FunctionComponent<ISortableTabCardProps> = ({
     </AccordionItem>
   );
 };
+
+export function resolveTabHeaderClick(
+  selected: boolean,
+  expandIcon: boolean,
+  canSelect: boolean
+): { select: boolean; toggle: boolean } {
+  if (expandIcon || !canSelect || selected) {
+    return { select: false, toggle: true };
+  }
+  return { select: true, toggle: false };
+}
+
+function isWithinTabCardHeading(target: EventTarget): boolean {
+  return target instanceof Element && target.closest('.bl-tabs-builder__card-heading') !== null;
+}
+
+function isWithinTabExpandIcon(target: EventTarget): boolean {
+  return target instanceof Element && target.closest('.bl-tabs-builder__accordion-expand-icon') !== null;
+}
 
 export const TabNameField: React.FunctionComponent<{
   value: string;
@@ -730,18 +767,20 @@ const tabBuilderCss = `
 .bl-tabs-builder__heading { justify-content: flex-end; }
 .bl-tabs-builder__card-heading { align-items: center; display: grid; grid-template-columns: minmax(0, 1fr) auto; }
 .bl-tabs-builder__heading { color: #616161; margin-bottom: 8px; }
-.bl-tabs-builder__card { background: transparent; border: 0; border-radius: 0; margin: 0 0 4px; padding: 0; position: relative; }
+.bl-tabs-builder__card { background: transparent; border: 0; border-radius: ${tokens.borderRadiusMedium}; margin: 0 0 4px; padding: 0; position: relative; }
 .bl-tabs-builder__card:focus-within { z-index: 2; }
-.bl-tabs-builder__card[data-tab-selected="true"] > .bl-tabs-builder__card-heading { background: ${tokens.colorNeutralBackground1Hover}; }
+.bl-tabs-builder__card[data-tab-selected="true"] { background: #f9fcff; box-shadow: 0 0 0 ${tokens.strokeWidthThin} ${tokens.colorBrandStroke1}; }
 .bl-tabs-builder__card.is-dragging { opacity: .35; }
 .bl-tabs-builder__card-heading { border-bottom: 0; min-height: 38px; }
 .bl-tabs-builder__card-heading:hover > .bl-tabs-builder__actions [data-tab-remove], .bl-tabs-builder__card-heading:focus-within > .bl-tabs-builder__actions [data-tab-remove] { opacity: 1; pointer-events: auto; }
-.bl-tabs-builder__card-body { padding: 8px 0 6px; }
+.bl-tabs-builder__card-body { padding: ${tokens.spacingVerticalS} 0 ${tokens.spacingVerticalM}; }
 .bl-tabs-builder__accordion-header { margin: 0; min-width: 0; }
 .bl-tabs-builder__accordion-button { cursor: grab; justify-content: flex-start !important; padding-left: 0 !important; touch-action: none; width: 100%; }
 .bl-tabs-builder__accordion-button:active { cursor: grabbing; }
+.bl-tabs-builder__tab-label { order: 0; padding-left: ${tokens.spacingHorizontalM}; }
+.bl-tabs-builder .bl-tabs-builder__accordion-expand-icon { flex: 0 0 auto; order: 1; padding-left: ${tokens.spacingHorizontalS}; padding-right: 0; }
 .bl-tabs-builder__drag-overlay { background: ${tokens.colorNeutralBackground1}; border: 1px solid ${tokens.colorNeutralStroke2}; border-radius: ${tokens.borderRadiusMedium}; box-shadow: ${tokens.shadow16}; color: ${tokens.colorNeutralForeground1}; font: 600 12px/1.4 "Segoe UI", sans-serif; min-width: 180px; padding: 10px 12px; }
-.bl-tabs-builder__actions { gap: 2px; }
+.bl-tabs-builder__actions { gap: 2px; padding-right: ${tokens.spacingHorizontalS}; }
 .bl-tabs-builder__sr-only { clip: rect(0, 0, 0, 0); clip-path: inset(50%); height: 1px; overflow: hidden; position: absolute; white-space: nowrap; width: 1px; }
 .bl-tabs-builder .bl-tabs-builder__remove { color: ${tokens.colorNeutralForeground3}; height: 28px; min-height: 28px; min-width: 28px; padding: 0; transition: opacity 100ms ease-out; width: 28px; }
 .bl-tabs-builder__field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
