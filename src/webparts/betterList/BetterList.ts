@@ -358,6 +358,15 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
   protected onThemeChanged(theme: IReadonlyTheme | undefined): void {
     this._isDarkTheme = Boolean(theme?.isInverted);
     this._themeColors = createSharePointThemeColors(theme?.palette);
+
+    if (!this.renderedOnce) {
+      return;
+    }
+
+    this.render();
+    if (this.context.propertyPane.isPropertyPaneOpen()) {
+      this.context.propertyPane.refresh();
+    }
   }
 
   protected onDispose(): void {
