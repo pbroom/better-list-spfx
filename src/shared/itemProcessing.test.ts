@@ -4,6 +4,7 @@ import {
   IBetterListItem
 } from './betterListTypes';
 import {
+  applyBetterListGroupOrder,
   filterVisibleItems,
   groupItems,
   groupItemsBySourceField,
@@ -28,6 +29,20 @@ const mappings: IBetterListFieldMappings = {
 };
 
 describe('Better List item processing', () => {
+  it('applies a saved group order, hides configured groups, and appends new groups', () => {
+    const groups = [
+      { key: 'alpha', label: 'Alpha', items: [] },
+      { key: 'beta', label: 'Beta', items: [] },
+      { key: 'gamma', label: 'Gamma', items: [] }
+    ];
+
+    expect(applyBetterListGroupOrder(groups, [
+      { key: 'beta' },
+      { key: 'alpha', hidden: true },
+      { key: 'stale', hidden: true }
+    ]).map((group) => group.key)).toEqual(['beta', 'gamma']);
+  });
+
   it('normalizes lookup, hyperlink, person, boolean, and metadata fields', () => {
     const item: IBetterListItem = normalizeItem(
       {

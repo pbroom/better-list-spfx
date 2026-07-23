@@ -30,6 +30,10 @@ describe('resolveBetterListTabConfigurations', () => {
           column: 'Organization/Title',
           collapsible: false,
           icons: { version: 1, showIcons: false, overrides: [] },
+          groupOrder: [
+            { key: 'organization:42' },
+            { key: 'organization:7', hidden: true }
+          ],
           filter: {
             kind: 'query',
             expression: 'Organization/Department = Engineering',
@@ -59,9 +63,14 @@ describe('resolveBetterListTabConfigurations', () => {
       kind: 'query',
       expression: 'Organization/Department = Engineering'
     });
+    expect(resolved[1].grouping.groupOrder).toEqual([
+      { key: 'organization:42' },
+      { key: 'organization:7', hidden: true }
+    ]);
     expect(resolved[1].itemLayoutInherited).toBe(true);
     expect(resolved[2].grouping.column).toBe('Organization/Title');
     expect(resolved[2].grouping.filter).toEqual(resolved[1].grouping.filter);
+    expect(resolved[2].grouping.groupOrder).toEqual(resolved[1].grouping.groupOrder);
     expect(resolved[2].inheritedFromTabId).toBe('two');
   });
 

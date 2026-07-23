@@ -1,5 +1,6 @@
 import {
   BetterListFilter,
+  IBetterListGroupOrderEntry,
   IBetterListTabConfig,
   IBetterListTabGroupingOverride,
   IBetterListTabItemLayoutOverride
@@ -21,6 +22,7 @@ export interface IBetterListEffectiveGroupingConfiguration {
   collapsible: boolean;
   icons: IBetterListGroupIconsConfiguration;
   filter: BetterListFilter;
+  groupOrder: readonly IBetterListGroupOrderEntry[];
 }
 
 export interface IBetterListEffectiveItemLayoutConfiguration {
@@ -29,10 +31,14 @@ export interface IBetterListEffectiveItemLayoutConfiguration {
   links: BetterListItemElementLinks;
 }
 
-export interface IBetterListLegacyTabConfiguration {
-  grouping: Omit<IBetterListEffectiveGroupingConfiguration, 'filter'> & {
+type BetterListGroupingConfigurationInput =
+  Omit<IBetterListEffectiveGroupingConfiguration, 'filter' | 'groupOrder'> & {
     filter?: BetterListFilter;
+    groupOrder?: readonly IBetterListGroupOrderEntry[];
   };
+
+export interface IBetterListLegacyTabConfiguration {
+  grouping: BetterListGroupingConfigurationInput;
   itemLayout: IBetterListEffectiveItemLayoutConfiguration;
 }
 
@@ -73,9 +79,7 @@ export function resolveBetterListTabConfigurations(
 }
 
 export function createBetterListGroupingOverride(
-  value: Omit<IBetterListEffectiveGroupingConfiguration, 'filter'> & {
-    filter?: BetterListFilter;
-  }
+  value: BetterListGroupingConfigurationInput
 ): IBetterListTabGroupingOverride {
   const normalized = normalizeGroupingConfiguration(value);
   return normalized.column
@@ -84,7 +88,8 @@ export function createBetterListGroupingOverride(
         column: normalized.column,
         collapsible: normalized.collapsible,
         icons: normalized.icons,
-        filter: normalized.filter
+        filter: normalized.filter,
+        groupOrder: normalized.groupOrder
       }
     : { mode: 'none' };
 }
@@ -104,29 +109,45 @@ function resolveGroupingOverride(
       column: '',
       collapsible: false,
       icons: normalizeGroupIcons(override.icons ?? inherited.icons),
-      filter: { kind: 'all' }
+      filter: { kind: 'all' },
+      groupOrder: []
     };
   }
   return normalizeGroupingConfiguration({
     column: override.column || '',
     collapsible: override.collapsible !== false,
     icons: override.icons ?? inherited.icons,
-    filter: override.filter ?? { kind: 'all' }
+    filter: override.filter ?? { kind: 'all' },
+    groupOrder: override.groupOrder ?? []
   });
 }
 
 function normalizeGroupingConfiguration(
-  value: Omit<IBetterListEffectiveGroupingConfiguration, 'filter'> & {
-    filter?: BetterListFilter;
-  }
+  value: BetterListGroupingConfigurationInput
 ): IBetterListEffectiveGroupingConfiguration {
   const column = value.column.trim();
   return {
     column,
     collapsible: Boolean(column) && value.collapsible !== false,
     icons: normalizeGroupIcons(value.icons),
-    filter: column ? value.filter ?? { kind: 'all' } : { kind: 'all' }
+    filter: column ? value.filter ?? { kind: 'all' } : { kind: 'all' },
+    groupOrder: column ? normalizeGroupOrder(value.groupOrder) : []
   };
+}
+
+function normalizeGroupOrder(
+  value: readonly IBetterListGroupOrderEntry[] | undefined
+): readonly IBetterListGroupOrderEntry[] {
+  const seen = new Set<string>();
+  return (value ?? []).reduce<IBetterListGroupOrderEntry[]>((entries, entry) => {
+    const key = entry.key.trim();
+    if (!key || seen.has(key)) {
+      return entries;
+    }
+    seen.add(key);
+    entries.push(entry.hidden ? { key, hidden: true } : { key });
+    return entries;
+  }, []);
 }
 
 function normalizeGroupIcons(

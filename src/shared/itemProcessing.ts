@@ -544,6 +544,34 @@ export function groupItemsBySourceField(
     }));
 }
 
+export function applyBetterListGroupOrder(
+  groups: readonly IBetterListGroupResult[],
+  groupOrder: readonly { key: string; hidden?: boolean }[] | undefined
+): readonly IBetterListGroupResult[] {
+  if (!groupOrder?.length) {
+    return groups;
+  }
+  const groupByKey = new Map(groups.map((group) => [group.key, group]));
+  const orderedKeys = new Set<string>();
+  const ordered: IBetterListGroupResult[] = [];
+  groupOrder.forEach((entry) => {
+    const group = groupByKey.get(entry.key);
+    if (!group || orderedKeys.has(entry.key)) {
+      return;
+    }
+    orderedKeys.add(entry.key);
+    if (!entry.hidden) {
+      ordered.push(group);
+    }
+  });
+  groups.forEach((group) => {
+    if (!orderedKeys.has(group.key)) {
+      ordered.push(group);
+    }
+  });
+  return ordered;
+}
+
 function groupMembershipKey(root: string, membership: unknown, label: string): string {
   if (isRecord(membership)) {
     const identity = property(membership, ['Id', 'ID', 'id', 'LookupId']);

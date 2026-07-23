@@ -12,7 +12,7 @@ import {
   tokens,
   webLightTheme
 } from '@fluentui/react-components';
-import { AddRegular } from '@fluentui/react-icons';
+import { AddRegular, EditRegular } from '@fluentui/react-icons';
 
 import {
   createBetterListFieldMapping,
@@ -26,6 +26,7 @@ import {
   betterListSemanticSlots,
   defaultBetterListHtmlTemplate,
   betterListTemplateMaxBytes,
+  BetterListFilter,
   BetterListItemLayoutRows,
   BetterListItemElementLinks,
   betterListFluentSurfaceClassName,
@@ -35,6 +36,7 @@ import {
   IBetterListFieldDescriptor,
   IBetterListFieldMappings,
   IBetterListGroupIconsConfiguration,
+  IBetterListGroupOrderEntry,
   IBetterListQueryField,
   IBetterListTabConfig,
   resolveBetterListTabConfigurations,
@@ -43,6 +45,10 @@ import {
 import { ISourceEditorTarget } from '../../../../vendor/source-editor/SourceEditorField';
 import { SourceWorkspaceField } from '../../../../vendor/source-editor/SourceWorkspaceField';
 import { GroupIconColorField } from '../GroupIconColorField';
+import {
+  GroupOrderEditorDialog,
+  IBetterListGroupOption
+} from './GroupOrderEditorDialog';
 import { ItemPropertyBuilder } from './ItemPropertyBuilder';
 import { PropertyPaneSection } from './PropertyPaneSection';
 import {
@@ -94,6 +100,11 @@ export interface IBetterListPropertyPaneProps {
   value: IBetterListAuthoringState;
   pickerDataSource: IBetterListPickerDataSource;
   imageAssetProvider?: ISharePointImageAssetProvider;
+  loadGroupOptions?: (
+    tabId: string,
+    column: string,
+    filter: BetterListFilter
+  ) => Promise<readonly IBetterListGroupOption[]>;
   onChange: (value: IBetterListAuthoringState) => void;
   onActiveTabChange?: (tabId: string) => void;
   targetDocument?: Document;
@@ -155,6 +166,10 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
   const [listError, setListError] = React.useState('');
   const [fieldError, setFieldError] = React.useState('');
   const [headingInput, setHeadingInput] = React.useState(props.value.heading);
+  const [groupEditorOpen, setGroupEditorOpen] = React.useState(false);
+  const [groupOptionsLoading, setGroupOptionsLoading] = React.useState(false);
+  const [groupOptions, setGroupOptions] = React.useState<readonly IBetterListGroupOption[]>([]);
+  const [groupOptionsError, setGroupOptionsError] = React.useState('');
   const headingInputRef = React.useRef(props.value.heading);
   const latestValueRef = React.useRef(props.value);
   const onChangeRef = React.useRef(props.onChange);
@@ -279,7 +294,8 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
     column: '',
     collapsible: false,
     icons: props.value.groupIcons,
-    filter: { kind: 'all' as const }
+    filter: { kind: 'all' as const },
+    groupOrder: [] as readonly IBetterListGroupOrderEntry[]
   };
   const activeItemLayout = activeConfiguration?.itemLayout ?? {
     itemProperties: props.value.itemProperties,
@@ -427,8 +443,29 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
       filter: fieldPath === activeGrouping.column ? activeGrouping.filter : { kind: 'all' },
       icons: fieldPath === activeGrouping.column
         ? activeGrouping.icons
-        : { ...activeGrouping.icons, overrides: [] }
+        : { ...activeGrouping.icons, overrides: [] },
+      groupOrder: fieldPath === activeGrouping.column ? activeGrouping.groupOrder : []
     });
+  };
+  const openGroupEditor = async (): Promise<void> => {
+    if (!activeGrouping.column || groupOptionsLoading) {
+      return;
+    }
+    setGroupOptionsLoading(true);
+    setGroupOptionsError('');
+    try {
+      const nextGroups = props.loadGroupOptions
+        ? await props.loadGroupOptions(activeTabId, activeGrouping.column, activeGrouping.filter)
+        : [];
+      setGroupOptions(nextGroups);
+      setGroupEditorOpen(true);
+    } catch (loadError) {
+      setGroupOptionsError(
+        loadError instanceof Error ? loadError.message : 'Groups could not be loaded.'
+      );
+    } finally {
+      setGroupOptionsLoading(false);
+    }
   };
   const groupingFields = fields.filter(isGroupingColumn);
   const groupingOptions = createGroupingColumnOptions(groupingFields);
@@ -590,6 +627,18 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
         </label>
         {activeGrouping.column ? (
           <>
+            <Button
+              appearance="secondary"
+              className="bl-pane__edit-groups"
+              disabled={groupOptionsLoading}
+              icon={<EditRegular />}
+              onClick={() => openGroupEditor().catch(() => undefined)}
+            >
+              {groupOptionsLoading ? 'Loading groups…' : 'Edit groups'}
+            </Button>
+            {groupOptionsError ? (
+              <div className="bl-pane__error" role="alert">{groupOptionsError}</div>
+            ) : null}
             <Switch
               checked={activeGrouping.collapsible}
               className="bl-pane__switch"
@@ -662,6 +711,15 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
           </>
         ) : null}
         </PropertyPaneSection>
+
+        {groupEditorOpen ? (
+          <GroupOrderEditorDialog
+            groups={groupOptions}
+            value={activeGrouping.groupOrder}
+            onApply={(groupOrder) => patchActiveGrouping({ ...activeGrouping, groupOrder })}
+            onOpenChange={setGroupEditorOpen}
+          />
+        ) : null}
 
         <ItemPropertyBuilder
           context={(
@@ -862,6 +920,7 @@ const propertyPaneCss = `
 .bl-pane__error { background: #fdf3f4; border-left: 3px solid #c50f1f; color: #8a1219; font-size: 12px; padding: 8px; }
 .bl-pane__empty { background: #f5f5f5; color: #616161; font-size: 12px; padding: 10px; }
 .bl-pane__switch { margin-top: 8px; }
+.bl-pane__edit-groups { align-self: flex-start; margin: 0 0 4px; }
 .bl-pane__setting-row { align-items: center; color: #616161; display: flex; font-size: 12px; justify-content: space-between; gap: 8px; margin-top: 10px; }
 .bl-pane__inheritance { align-items: flex-start; background: ${tokens.colorNeutralBackground2}; color: ${tokens.colorNeutralForeground3}; display: flex; font-size: 11px; gap: 8px; justify-content: space-between; line-height: 1.35; margin: 0 0 10px; padding: 8px; }
 .bl-pane__text-button { border-color: transparent !important; min-height: 24px !important; padding: 2px 4px !important; }
