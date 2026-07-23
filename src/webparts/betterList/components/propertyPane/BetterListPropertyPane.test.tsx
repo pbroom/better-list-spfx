@@ -35,6 +35,7 @@ describe('BetterListPropertyPane', () => {
 
   const createValue = (): IBetterListAuthoringState => ({
     heading: '',
+    maxItemsPerPage: 0,
     sourceListId: 'services',
     sourceListTitle: 'Services',
     sourceWebUrl: 'https://contoso.sharepoint.com/sites/example',
@@ -71,8 +72,11 @@ describe('BetterListPropertyPane', () => {
     expect(html).toContain('bl-pane__source-dropdown');
     expect(html).toContain('aria-label="Title"');
     expect(html).toContain('placeholder="Title (optional)"');
+    expect(html).toContain('aria-label="Maximum items per page"');
+    expect(html).toContain('placeholder="No maximum"');
     expect(html.indexOf('aria-label="Source list"')).toBeLessThan(html.indexOf('aria-label="Title"'));
-    expect(html.indexOf('aria-label="Title"')).toBeLessThan(html.indexOf('aria-label="Add tab"'));
+    expect(html.indexOf('aria-label="Title"')).toBeLessThan(html.indexOf('aria-label="Maximum items per page"'));
+    expect(html.indexOf('aria-label="Maximum items per page"')).toBeLessThan(html.indexOf('aria-label="Add tab"'));
     expect(html).toContain('--bl-font-mono: &quot;Geist Mono Variable&quot;');
     expect(html.match(/bl-property-pane-section/g)).toHaveLength(4);
     expect(html).toContain('data-property-pane-section-heading="true"');
@@ -125,6 +129,43 @@ describe('BetterListPropertyPane', () => {
       ...value,
       heading: 'Service directory'
     });
+    ReactDom.unmountComponentAtNode(container);
+  });
+
+  it('authors and clears the maximum items per page setting', async () => {
+    const container = document.createElement('div');
+    const onChange = jest.fn();
+    const value = createValue();
+
+    await act(async () => {
+      ReactDom.render(
+        <BetterListPropertyPane
+          pickerDataSource={{
+            loadFields: async () => [],
+            loadLists: async () => [{ id: 'services', title: 'Services' }],
+            resolveListUrl: async () => ({ id: 'services', title: 'Services' })
+          }}
+          value={value}
+          onChange={onChange}
+        />,
+        container
+      );
+      await Promise.resolve();
+    });
+
+    const input = container.querySelector<HTMLInputElement>('input[aria-label="Maximum items per page"]');
+    expect(input).not.toBeNull();
+    await act(async () => {
+      (input as HTMLInputElement).value = '6';
+      Simulate.change(input as HTMLInputElement);
+    });
+    expect(onChange).toHaveBeenLastCalledWith({ ...value, maxItemsPerPage: 6 });
+
+    await act(async () => {
+      (input as HTMLInputElement).value = '';
+      Simulate.change(input as HTMLInputElement);
+    });
+    expect(onChange).toHaveBeenLastCalledWith({ ...value, maxItemsPerPage: 0 });
     ReactDom.unmountComponentAtNode(container);
   });
 

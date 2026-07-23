@@ -49,6 +49,7 @@ const titleCommitDelayMs = 500;
 
 export type BetterListLabProps = LabPropertyBag & {
   heading: string;
+  maxItemsPerPage: number;
   sourceListId: string;
   sourceListTitle: string;
   sourceWebUrl: string;
@@ -144,6 +145,8 @@ Better List CSS/SCSS targets:
 .better-list - web part surface and design tokens.
 .better-list__toolbar - tabs and search row.
 .better-list__group - grouped section.
+.better-list__pagination - page navigation.
+.better-list__load-more - progressive result loading.
 .better-list__item - list item surface.
 */`,
   targets: createCssTargets()
@@ -375,6 +378,24 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
             headingInputRef.current = data.value;
             setHeadingInput(data.value);
             scheduleHeadingCommit();
+          }}
+        />
+      </label>
+      <label className={classes.groupingField}>
+        <span>Maximum items per page</span>
+        <Input
+          aria-label="Maximum items per page"
+          min={1}
+          placeholder="No maximum"
+          step={1}
+          type="number"
+          value={values.maxItemsPerPage > 0 ? String(values.maxItemsPerPage) : ''}
+          onChange={(_event, data) => {
+            const numericValue = Number(data.value);
+            onChange({
+              maxItemsPerPage:
+                Number.isFinite(numericValue) && numericValue > 0 ? Math.floor(numericValue) : 0
+            });
           }}
         />
       </label>

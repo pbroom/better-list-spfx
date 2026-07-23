@@ -64,6 +64,7 @@ const titleCommitDelayMs = 500;
 
 export interface IBetterListAuthoringState {
   heading: string;
+  maxItemsPerPage: number;
   sourceListId: string;
   sourceListTitle: string;
   sourceWebUrl: string;
@@ -122,6 +123,16 @@ const cssTargets: readonly ISourceEditorTarget[] = [
     label: 'Group heading',
     selector: '.better-list__group-heading',
     snippet: '.better-list__group-heading {\n  /* group icon and title */\n}'
+  },
+  {
+    label: 'Pagination',
+    selector: '.better-list__pagination',
+    snippet: '.better-list__pagination {\n  /* page navigation */\n}'
+  },
+  {
+    label: 'Load more',
+    selector: '.better-list__load-more',
+    snippet: '.better-list__load-more {\n  /* progressive result loading */\n}'
   },
   { label: 'Item', selector: '.better-list__item', snippet: '.better-list__item {\n  /* list item */\n}' },
   {
@@ -589,6 +600,24 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
                   event.preventDefault();
                   event.currentTarget.blur();
                 }
+              }}
+            />
+          </label>
+          <label className="bl-pane__field">
+            <span className="bl-pane__label">Maximum items per page</span>
+            <Input
+              aria-label="Maximum items per page"
+              min={1}
+              placeholder="No maximum"
+              step={1}
+              type="number"
+              value={props.value.maxItemsPerPage > 0 ? String(props.value.maxItemsPerPage) : ''}
+              onChange={(_event, data) => {
+                const numericValue = Number(data.value);
+                patchValue({
+                  maxItemsPerPage:
+                    Number.isFinite(numericValue) && numericValue > 0 ? Math.floor(numericValue) : 0
+                });
               }}
             />
           </label>

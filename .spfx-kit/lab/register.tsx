@@ -60,6 +60,7 @@ import './betterListLab.css';
 
 const defaultProps: BetterListLabProps = {
   heading: '',
+  maxItemsPerPage: 0,
   sourceListId: servicesListId,
   sourceListTitle: servicesListTitle,
   sourceWebUrl: 'https://contoso.sharepoint.com/sites/lab',
@@ -210,6 +211,7 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
         groupImageAssetProvider={imageAssetProvider}
         isEditMode={lab.displayMode === 'edit'}
         heading={props.heading}
+        maxItemsPerPage={props.maxItemsPerPage}
         listTitle={props.sourceListTitle}
         emptyMessage="There are no active Services items to display."
         onTabChange={(tabKey) => {

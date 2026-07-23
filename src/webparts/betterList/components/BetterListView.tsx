@@ -22,6 +22,8 @@ import {
   AppsListDetailRegular,
   ArrowClockwiseRegular,
   ChevronDownRegular,
+  ChevronLeftRegular,
+  ChevronRightRegular,
   ChevronUpRegular,
   DocumentTextRegular,
   FluentIcon,
@@ -137,6 +139,7 @@ export interface IBetterListViewProps {
   groupImageAssetProvider?: ISharePointImageAssetProvider;
   isEditMode?: boolean;
   heading?: string;
+  maxItemsPerPage?: number;
   listTitle?: string;
   onTabChange?: (tabKey: string) => void;
   onSearchChange?: (value: string) => void;
@@ -203,6 +206,21 @@ const useStyles = makeStyles({
   },
   searchIcon: {},
   content: {},
+  resultsControls: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    columnGap: '12px',
+    rowGap: '8px',
+    flexWrap: 'wrap',
+    paddingTop: '16px'
+  },
+  resultsStatus: {
+    minWidth: '96px',
+    textAlign: 'center'
+  },
+  pagination: {},
+  loadMore: {},
   grid: {
     display: 'flex',
     flexDirection: 'column'
@@ -356,6 +374,7 @@ function renderTabIcon(tab: IBetterListTab, className: string): React.ReactEleme
 }
 
 let betterListInstanceCount = 0;
+const lazyRenderBatchSize = 30;
 
 const normalizeSearchText = (value: string): string => value.trim().toLocaleLowerCase();
 
@@ -634,6 +653,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   groupImageAssetProvider,
   isEditMode = false,
   heading = '',
+  maxItemsPerPage = 0,
   listTitle = 'Better List',
   onTabChange,
   onSearchChange,
@@ -646,6 +666,9 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   const [internalSearchValue, setInternalSearchValue] = React.useState(searchValue ?? '');
   const [collapsedGroups, setCollapsedGroups] = React.useState<Record<string, boolean>>({});
   const [editingGroup, setEditingGroup] = React.useState<IBetterListGroup | undefined>(undefined);
+  const [currentPage, setCurrentPage] = React.useState(0);
+  const [lazyItemCount, setLazyItemCount] = React.useState(lazyRenderBatchSize);
+  const loadMoreRef = React.useRef<HTMLDivElement | null>(null);
   const [instanceId] = React.useState(() => {
     betterListInstanceCount += 1;
     return betterListInstanceCount;
@@ -678,6 +701,8 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   } as React.CSSProperties;
   const normalizedSearchText = normalizeSearchText(internalSearchValue);
   const normalizedHeading = heading.trim();
+  const normalizedMaxItemsPerPage =
+    Number.isFinite(maxItemsPerPage) && maxItemsPerPage > 0 ? Math.floor(maxItemsPerPage) : 0;
 
   const visibleItems = React.useMemo(() => {
     const tabItems = selectedTab?.items ?? items;
@@ -689,8 +714,54 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
     const orderedItems = grouped ? visibleItems : visibleItems.slice().sort(compareItems);
     return selectedTab?.maxItems ? orderedItems.slice(0, selectedTab.maxItems) : orderedItems;
   }, [grouped, selectedTab?.maxItems, visibleItems]);
-  const groups = React.useMemo(() => (grouped ? groupItems(displayedItems) : []), [displayedItems, grouped]);
+  const totalPages = normalizedMaxItemsPerPage
+    ? Math.max(1, Math.ceil(displayedItems.length / normalizedMaxItemsPerPage))
+    : 1;
+  const selectedPage = Math.min(currentPage, totalPages - 1);
+  const renderedItems = React.useMemo(
+    () => normalizedMaxItemsPerPage
+      ? displayedItems.slice(
+          selectedPage * normalizedMaxItemsPerPage,
+          (selectedPage + 1) * normalizedMaxItemsPerPage
+        )
+      : displayedItems.slice(0, lazyItemCount),
+    [displayedItems, lazyItemCount, normalizedMaxItemsPerPage, selectedPage]
+  );
+  const groups = React.useMemo(() => (grouped ? groupItems(renderedItems) : []), [grouped, renderedItems]);
+  const hasMoreLazyItems = !normalizedMaxItemsPerPage && renderedItems.length < displayedItems.length;
   const hasAnyItems = items.length > 0 || tabs.some((tab) => Boolean(tab.items?.length));
+
+  React.useEffect(() => {
+    setCurrentPage(0);
+    setLazyItemCount(lazyRenderBatchSize);
+  }, [normalizedMaxItemsPerPage, normalizedSearchText, selectedTab?.key]);
+
+  React.useEffect(() => {
+    if (currentPage !== selectedPage) {
+      setCurrentPage(selectedPage);
+    }
+  }, [currentPage, selectedPage]);
+
+  const loadMoreItems = React.useCallback((): void => {
+    setLazyItemCount((current) => Math.min(current + lazyRenderBatchSize, displayedItems.length));
+  }, [displayedItems.length]);
+
+  React.useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!hasMoreLazyItems || !target || typeof IntersectionObserver === 'undefined') {
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          loadMoreItems();
+        }
+      },
+      { rootMargin: '300px 0px' }
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [hasMoreLazyItems, loadMoreItems]);
 
   const handleTabSelect = (_event: SelectTabEvent, data: SelectTabData): void => {
     const nextTabKey = String(data.value);
@@ -771,6 +842,9 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
     'better-list__tab': classes.tab,
     'better-list__search': classes.search,
     'better-list__content': classes.content,
+    'better-list__pagination': classes.pagination,
+    'better-list__load-more': classes.loadMore,
+    'better-list__results-status': classes.resultsStatus,
     'better-list__grid': classes.grid,
     'better-list__group': classes.group,
     'better-list__group-heading': classes.groupHeading,
@@ -1020,6 +1094,62 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
     );
   };
 
+  const renderResultControls = (): React.ReactNode => {
+    if (normalizedMaxItemsPerPage && totalPages > 1) {
+      return (
+        <nav
+          aria-label="List pagination"
+          className={mergeClasses(classes.resultsControls, classes.pagination, 'better-list__pagination')}
+        >
+          <Button
+            appearance="subtle"
+            aria-label="Previous page"
+            disabled={selectedPage === 0}
+            icon={<ChevronLeftRegular aria-hidden="true" />}
+            onClick={() => setCurrentPage((page) => Math.max(0, page - 1))}
+          >
+            Previous
+          </Button>
+          <Text
+            aria-live="polite"
+            className={mergeClasses(classes.resultsStatus, 'better-list__results-status')}
+          >
+            Page {selectedPage + 1} of {totalPages}
+          </Text>
+          <Button
+            appearance="subtle"
+            aria-label="Next page"
+            disabled={selectedPage >= totalPages - 1}
+            icon={<ChevronRightRegular aria-hidden="true" />}
+            iconPosition="after"
+            onClick={() => setCurrentPage((page) => Math.min(totalPages - 1, page + 1))}
+          >
+            Next
+          </Button>
+        </nav>
+      );
+    }
+    if (!hasMoreLazyItems) {
+      return null;
+    }
+    return (
+      <div
+        className={mergeClasses(classes.resultsControls, classes.loadMore, 'better-list__load-more')}
+        ref={loadMoreRef}
+      >
+        <Text
+          aria-live="polite"
+          className={mergeClasses(classes.resultsStatus, 'better-list__results-status')}
+        >
+          Showing {renderedItems.length} of {displayedItems.length}
+        </Text>
+        <Button appearance="secondary" onClick={loadMoreItems}>
+          Load {Math.min(lazyRenderBatchSize, displayedItems.length - renderedItems.length)} more
+        </Button>
+      </div>
+    );
+  };
+
   const renderReadyContent = (): React.ReactNode => {
     if (!hasAnyItems) {
       return (
@@ -1045,16 +1175,22 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
 
     if (!grouped) {
       return (
-        <div className={mergeClasses(classes.grid, 'better-list__grid')} style={gridStyle} aria-live="polite">
-          {renderListTemplate(displayedItems, density, showDescriptions)}
-        </div>
+        <>
+          <div className={mergeClasses(classes.grid, 'better-list__grid')} style={gridStyle} aria-live="polite">
+            {renderListTemplate(renderedItems, density, showDescriptions)}
+          </div>
+          {renderResultControls()}
+        </>
       );
     }
 
     return (
-      <div className={mergeClasses(classes.grid, 'better-list__grid')} style={gridStyle} aria-live="polite">
-        {groups.map(renderGroupTemplate)}
-      </div>
+      <>
+        <div className={mergeClasses(classes.grid, 'better-list__grid')} style={gridStyle} aria-live="polite">
+          {groups.map(renderGroupTemplate)}
+        </div>
+        {renderResultControls()}
+      </>
     );
   };
 

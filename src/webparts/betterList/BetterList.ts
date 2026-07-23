@@ -77,8 +77,14 @@ const BetterListRendererProvider = RendererProvider as unknown as React.Componen
   renderer: GriffelRenderer;
 }>;
 
+const normalizeMaxItemsPerPage = (value: unknown): number => {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) && numericValue > 0 ? Math.floor(numericValue) : 0;
+};
+
 export interface IBetterListWebPartProps {
   heading: string;
+  maxItemsPerPage: number;
   sourceListId: string;
   sourceListTitle: string;
   sourceWebUrl: string;
@@ -151,6 +157,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       groupImageAssetProvider: this._imageAssetProvider,
       isEditMode: this.displayMode === DisplayMode.Edit,
       heading: this.properties.heading,
+      maxItemsPerPage: this.properties.maxItemsPerPage,
       listTitle: this.properties.sourceListTitle,
       onTabChange: (tabKey: string): void => {
         this._activeTabKey = tabKey;
@@ -201,6 +208,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
 
   protected async onInit(): Promise<void> {
     this.properties.heading = this.properties.heading || '';
+    this.properties.maxItemsPerPage = normalizeMaxItemsPerPage(this.properties.maxItemsPerPage);
     this.properties.sourceListId = this.properties.sourceListId || '';
     this.properties.sourceListTitle = this.properties.sourceListTitle || '';
     this.properties.sourceWebUrl = this.properties.sourceWebUrl || '';
@@ -361,6 +369,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     );
     return {
       heading: this.properties.heading,
+      maxItemsPerPage: this.properties.maxItemsPerPage,
       sourceListId: this.properties.sourceListId,
       sourceListTitle: this.properties.sourceListTitle,
       sourceWebUrl: this.properties.sourceWebUrl,
@@ -401,6 +410,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     );
     const next = {
       heading: value.heading,
+      maxItemsPerPage: normalizeMaxItemsPerPage(value.maxItemsPerPage),
       sourceListId: value.sourceListId,
       sourceListTitle: value.sourceListTitle,
       sourceWebUrl: value.sourceWebUrl,

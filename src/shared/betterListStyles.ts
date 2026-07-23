@@ -71,6 +71,16 @@ Edit these rules in the web part's Monaco field to restyle this instance.
   margin-top: 34px;
 }
 
+.better-list__pagination,
+.better-list__load-more {
+  margin-top: 16px;
+}
+
+.better-list__results-status {
+  color: var(--better-list-muted);
+  font-size: 0.875rem;
+}
+
 .better-list__grid {
   display: flex;
   flex-direction: column;
