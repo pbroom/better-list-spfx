@@ -366,7 +366,7 @@ const webPart: LabWebPart<BetterListLabProps> = {
   id: 'better-list-spfx:default',
   appId: 'better-list-spfx',
   title: 'Better List',
-  description: 'Display SharePoint list content as searchable, grouped, configurable list items.',
+  description: 'Display SharePoint list content as searchable, grouped, configurable list items. Developed by M/EX - Executive Office.',
   defaultProps,
   controls: [betterListSourceWorkspaceControl],
   propertyPane: BetterListLabPropertyPane,
