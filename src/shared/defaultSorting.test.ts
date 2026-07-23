@@ -1,9 +1,12 @@
 import {
   betterListDefaultSortOptions,
   createBetterListSortableFieldOptions,
+  defaultBetterListViewerSortOptions,
   getBetterListDefaultSortFieldPath,
   normalizeBetterListDefaultSort,
-  normalizeBetterListDefaultSortSelection
+  normalizeBetterListDefaultSortSelection,
+  normalizeBetterListViewerSortOptions,
+  serializeBetterListViewerSortOptions
 } from './defaultSorting';
 import type { IBetterListFieldDescriptor } from './fieldMappingAuthoring';
 
@@ -33,6 +36,34 @@ describe('default sorting authoring', () => {
     expect(normalizeBetterListDefaultSort(undefined)).toBe('listOrder');
     expect(normalizeBetterListDefaultSort('unsupported')).toBe('listOrder');
     expect(normalizeBetterListDefaultSort('trending')).toBe('trending');
+  });
+
+  it('normalizes visitor sorting options with backward-compatible defaults', () => {
+    expect(normalizeBetterListViewerSortOptions(undefined)).toEqual(
+      defaultBetterListViewerSortOptions
+    );
+    expect(normalizeBetterListViewerSortOptions('{invalid')).toEqual(
+      defaultBetterListViewerSortOptions
+    );
+    expect(
+      normalizeBetterListViewerSortOptions({
+        version: 1,
+        enabled: ['descending', 'ascending', 'descending', 'unsupported']
+      })
+    ).toEqual(['ascending', 'descending']);
+    expect(
+      normalizeBetterListViewerSortOptions({
+        version: 1,
+        enabled: []
+      })
+    ).toEqual([]);
+  });
+
+  it('serializes visitor sorting options as a versioned configuration', () => {
+    expect(JSON.parse(serializeBetterListViewerSortOptions(['descending']))).toEqual({
+      version: 1,
+      enabled: ['descending']
+    });
   });
 
   it('resolves built-in and authored sort fields', () => {

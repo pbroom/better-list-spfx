@@ -44,6 +44,7 @@ import {
 import {
   betterListFluentSurfaceClassName,
   betterListFluentTooltipContentClassName,
+  betterListViewerSortChoices,
   BetterListColumnCount,
   BetterListComparableValue,
   BetterListDefaultSort,
@@ -54,6 +55,7 @@ import {
   BetterListTabIcon,
   BetterListTemplateFragmentName,
   BetterListTemplateSlotName,
+  BetterListViewerSortOption,
   IBetterListTemplateElementNode,
   IBetterListTemplateNode,
   IBetterListGroupIconsConfiguration,
@@ -62,6 +64,7 @@ import {
   getBetterListGroupIconOverride,
   normalizeBetterListColumnCount,
   normalizeBetterListDefaultSort,
+  normalizeBetterListViewerSortOptions,
   resolveBetterListTemplate,
   substituteBetterListTokens
 } from '../../../shared';
@@ -164,6 +167,7 @@ export interface IBetterListViewProps {
   maxItemsPerPage?: number;
   showSearch?: boolean;
   showSortingOptions?: boolean;
+  viewerSortOptions?: readonly BetterListViewerSortOption[];
   defaultSort?: BetterListDefaultSort;
   defaultSortFieldPath?: string;
   listTitle?: string;
@@ -175,7 +179,6 @@ export interface IBetterListViewProps {
 
 type BetterListTemplateTokens = Readonly<Record<string, string | number | undefined>>;
 type BetterListTemplateSlotRenderer = (attributes: Record<string, unknown>, key: string) => React.ReactNode;
-type BetterListViewerSortDirection = 'ascending' | 'descending';
 
 interface IBetterListGroup {
   id: string;
@@ -448,7 +451,7 @@ const compareItems = (left: IBetterListItem, right: IBetterListItem): number => 
 const compareItemsByTitle = (
   left: IBetterListItem,
   right: IBetterListItem,
-  direction: BetterListViewerSortDirection
+  direction: BetterListViewerSortOption
 ): number => {
   const titleDifference = compareText(left.title, right.title);
   const directionMultiplier = direction === 'descending' ? -1 : 1;
@@ -472,7 +475,7 @@ function compareDefaultSortValues(
   left: BetterListFieldValue | undefined,
   right: BetterListFieldValue | undefined,
   kind: BetterListFieldKind | undefined,
-  direction: BetterListViewerSortDirection
+  direction: BetterListViewerSortOption
 ): number {
   const leftValue = firstSortValue(left);
   const rightValue = firstSortValue(right);
@@ -514,7 +517,7 @@ function compareItemsByDefaultSort(
   if (mode === 'listOrder') {
     return compareItems(left, right);
   }
-  const direction: BetterListViewerSortDirection =
+  const direction: BetterListViewerSortOption =
     mode === 'column' ? 'ascending' : 'descending';
   return compareDefaultSortValues(
     left.defaultSortValue,
@@ -800,6 +803,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   maxItemsPerPage = 0,
   showSearch,
   showSortingOptions = false,
+  viewerSortOptions,
   defaultSort = 'listOrder',
   defaultSortFieldPath = '',
   listTitle = 'Better List',
@@ -812,7 +816,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   const compiledTemplate = React.useMemo(() => resolveBetterListTemplate(htmlTemplate), [htmlTemplate]);
   const [selectedTabKey, setSelectedTabKey] = React.useState(activeTabKey);
   const [internalSearchValue, setInternalSearchValue] = React.useState(searchValue ?? '');
-  const [sortOverride, setSortOverride] = React.useState<BetterListViewerSortDirection | undefined>(undefined);
+  const [sortOverride, setSortOverride] = React.useState<BetterListViewerSortOption | undefined>(undefined);
   const [collapsedGroups, setCollapsedGroups] = React.useState<Record<string, boolean>>({});
   const [editingGroup, setEditingGroup] = React.useState<IBetterListGroup | undefined>(undefined);
   const [currentPage, setCurrentPage] = React.useState(0);
@@ -835,9 +839,20 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   }, [searchValue]);
 
   const normalizedDefaultSort = normalizeBetterListDefaultSort(defaultSort);
+  const normalizedViewerSortOptions = normalizeBetterListViewerSortOptions(viewerSortOptions);
+  const ascendingSortEnabled = normalizedViewerSortOptions.indexOf('ascending') >= 0;
+  const descendingSortEnabled = normalizedViewerSortOptions.indexOf('descending') >= 0;
   React.useEffect(() => {
     setSortOverride(undefined);
   }, [defaultSortFieldPath, normalizedDefaultSort]);
+  React.useEffect(() => {
+    if (
+      (sortOverride === 'ascending' && !ascendingSortEnabled) ||
+      (sortOverride === 'descending' && !descendingSortEnabled)
+    ) {
+      setSortOverride(undefined);
+    }
+  }, [ascendingSortEnabled, descendingSortEnabled, sortOverride]);
 
   const selectedTab = tabs.find((tab) => tab.key === selectedTabKey) ?? tabs[0];
   const selectedItemPropertyFields = selectedTab?.itemPropertyFields ?? itemPropertyFields;
@@ -848,7 +863,8 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   const density = selectedLayout?.density ?? 'comfortable';
   const showDescriptions = selectedLayout?.showDescriptions !== false;
   const searchVisible = (showSearch ?? true) && selectedLayout?.showSearch !== false;
-  const sortingVisible = showSortingOptions === true;
+  const sortingVisible =
+    showSortingOptions === true && (ascendingSortEnabled || descendingSortEnabled);
   const grouped = selectedTab?.grouped === true;
   const collapsible = grouped && selectedLayout?.collapsible !== false;
   const initiallyExpanded = selectedLayout?.initiallyExpanded !== false;
@@ -1472,12 +1488,17 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
                 </MenuTrigger>
                 <MenuPopover className={betterListFluentSurfaceClassName}>
                   <MenuList aria-label="Sort items">
-                    <MenuItemRadio name="sortDirection" value="ascending">
-                      A → Z
-                    </MenuItemRadio>
-                    <MenuItemRadio name="sortDirection" value="descending">
-                      Z → A
-                    </MenuItemRadio>
+                    {betterListViewerSortChoices
+                      .filter((choice) => normalizedViewerSortOptions.indexOf(choice.value) >= 0)
+                      .map((choice) => (
+                        <MenuItemRadio
+                          key={choice.value}
+                          name="sortDirection"
+                          value={choice.value}
+                        >
+                          {choice.label}
+                        </MenuItemRadio>
+                      ))}
                   </MenuList>
                 </MenuPopover>
               </Menu>

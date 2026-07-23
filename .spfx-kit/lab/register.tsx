@@ -30,6 +30,7 @@ import {
   IBetterListTabConfig,
   itemPropertyFieldPathsEqual,
   normalizeBetterListDefaultSort,
+  normalizeBetterListViewerSortOptions,
   parseItemLayoutConfiguration,
   parseItemPropertyFields,
   parseTabConfiguration,
@@ -70,6 +71,7 @@ const defaultProps: BetterListLabProps = {
   maxItemsPerPage: 0,
   showSearch: true,
   showSortingOptions: false,
+  sortingOptionsJson: '{"version":1,"enabled":["ascending","descending"]}',
   defaultSort: 'listOrder',
   defaultSortColumn: '',
   sourceListId: servicesListId,
@@ -233,6 +235,7 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
         maxItemsPerPage={props.maxItemsPerPage}
         showSearch={props.showSearch}
         showSortingOptions={props.showSortingOptions}
+        viewerSortOptions={normalizeBetterListViewerSortOptions(props.sortingOptionsJson)}
         defaultSort={defaultSort}
         defaultSortFieldPath={defaultSortMetadata?.key || props.defaultSortColumn}
         listTitle={props.sourceListTitle}

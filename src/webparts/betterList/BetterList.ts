@@ -58,11 +58,13 @@ import {
   processItems,
   normalizeBetterListColumnCount,
   normalizeBetterListDefaultSort,
+  normalizeBetterListViewerSortOptions,
   resolveBetterListTabConfigurations,
   scopeBetterListStyles,
   serializeItemLayoutConfiguration,
   serializeBetterListGroupIconsConfiguration,
   serializeItemPropertyFields,
+  serializeBetterListViewerSortOptions,
   serializeTabConfiguration,
   updateBetterListGroupIconOverride
 } from '../../shared';
@@ -125,6 +127,7 @@ export interface IBetterListWebPartProps {
   maxItemsPerPage: number;
   showSearch: boolean;
   showSortingOptions: boolean;
+  sortingOptionsJson: string;
   defaultSort: BetterListDefaultSort;
   defaultSortColumn: string;
   sourceListId: string;
@@ -176,6 +179,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     );
     const groupIcons = parseBetterListGroupIconsConfiguration(this.properties.groupIconsJson);
     const defaultSort = normalizeBetterListDefaultSort(this.properties.defaultSort);
+    const sortingOptions = normalizeBetterListViewerSortOptions(this.properties.sortingOptionsJson);
     const defaultSortMetadata = resolveDefaultSortMetadata(
       defaultSort,
       this.properties.defaultSortColumn,
@@ -211,6 +215,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       maxItemsPerPage: this.properties.maxItemsPerPage,
       showSearch: this.properties.showSearch,
       showSortingOptions: this.properties.showSortingOptions,
+      viewerSortOptions: sortingOptions,
       defaultSort,
       defaultSortFieldPath: defaultSortMetadata?.key || this.properties.defaultSortColumn,
       listTitle: this.properties.sourceListTitle,
@@ -267,6 +272,9 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     this.properties.maxItemsPerPage = normalizeMaxItemsPerPage(this.properties.maxItemsPerPage);
     this.properties.showSearch = this.properties.showSearch !== false;
     this.properties.showSortingOptions = this.properties.showSortingOptions === true;
+    this.properties.sortingOptionsJson = serializeBetterListViewerSortOptions(
+      this.properties.sortingOptionsJson
+    );
     this.properties.defaultSort = normalizeBetterListDefaultSort(this.properties.defaultSort);
     this.properties.defaultSortColumn = this.properties.defaultSortColumn || '';
     this.properties.sourceListId = this.properties.sourceListId || '';
@@ -444,6 +452,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       maxItemsPerPage: this.properties.maxItemsPerPage,
       showSearch: this.properties.showSearch,
       showSortingOptions: this.properties.showSortingOptions,
+      sortingOptions: normalizeBetterListViewerSortOptions(this.properties.sortingOptionsJson),
       defaultSort: this.properties.defaultSort,
       defaultSortColumn: this.properties.defaultSortColumn,
       sourceListId: this.properties.sourceListId,
@@ -490,6 +499,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       maxItemsPerPage: normalizeMaxItemsPerPage(value.maxItemsPerPage),
       showSearch: value.showSearch !== false,
       showSortingOptions: value.showSortingOptions === true,
+      sortingOptionsJson: serializeBetterListViewerSortOptions(value.sortingOptions),
       defaultSort: normalizeBetterListDefaultSort(value.defaultSort),
       defaultSortColumn: value.defaultSort === 'column' ? value.defaultSortColumn : '',
       sourceListId: value.sourceListId,

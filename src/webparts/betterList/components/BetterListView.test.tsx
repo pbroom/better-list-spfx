@@ -353,6 +353,60 @@ describe('BetterListView', () => {
     expect(sortingOnlyHtml).not.toContain('type="search"');
   });
 
+  it('hides visitor sorting when every authored option is disabled', () => {
+    const tabs: readonly IBetterListTab[] = [
+      { key: 'all', label: 'All items', grouped: false, items: [item] }
+    ];
+    const html = renderToStaticMarkup(
+      <BetterListView
+        activeTabKey="all"
+        items={[item]}
+        showSearch={false}
+        showSortingOptions
+        tabs={tabs}
+        viewerSortOptions={[]}
+      />
+    );
+
+    expect(html).not.toContain('aria-label="Sort items"');
+    expect(html).not.toContain('better-list__search-controls');
+  });
+
+  it('only renders the enabled visitor sorting choices', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const tabs: readonly IBetterListTab[] = [
+      { key: 'all', label: 'All items', grouped: false, items: [item] }
+    ];
+
+    await act(async () => {
+      ReactDom.render(
+        <BetterListView
+          activeTabKey="all"
+          items={[item]}
+          showSortingOptions
+          tabs={tabs}
+          viewerSortOptions={['descending']}
+        />,
+        container
+      );
+    });
+    await act(async () => {
+      Simulate.click(
+        container.querySelector<HTMLButtonElement>('button[aria-label="Sort items"]') as HTMLButtonElement
+      );
+      await Promise.resolve();
+    });
+
+    expect(
+      Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')).map(
+        (candidate) => candidate.textContent?.trim()
+      )
+    ).toEqual(['Z → A']);
+    ReactDom.unmountComponentAtNode(container);
+    container.remove();
+  });
+
   it('preserves list ordering until a visitor chooses a title sort direction', async () => {
     const container = document.createElement('div');
     document.body.appendChild(container);

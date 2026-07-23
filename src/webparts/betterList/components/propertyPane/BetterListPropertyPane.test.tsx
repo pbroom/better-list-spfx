@@ -43,6 +43,7 @@ describe('BetterListPropertyPane', () => {
     maxItemsPerPage: 0,
     showSearch: true,
     showSortingOptions: false,
+    sortingOptions: ['ascending', 'descending'],
     defaultSort: 'listOrder',
     defaultSortColumn: '',
     sourceListId: 'services',
@@ -362,6 +363,57 @@ describe('BetterListPropertyPane', () => {
         ...value.fieldMappings,
         metadata: []
       }
+    });
+    ReactDom.unmountComponentAtNode(container);
+  });
+
+  it('authors the visitor sorting options when sorting controls are shown', async () => {
+    const container = document.createElement('div');
+    const onChange = jest.fn();
+    const value = {
+      ...createValue(),
+      showSortingOptions: true
+    };
+
+    await act(async () => {
+      ReactDom.render(
+        <BetterListPropertyPane
+          pickerDataSource={{
+            loadFields: async () => [],
+            loadLists: async () => [{ id: 'services', title: 'Services' }],
+            resolveListUrl: async () => ({ id: 'services', title: 'Services' })
+          }}
+          value={value}
+          onChange={onChange}
+        />,
+        container
+      );
+      await Promise.resolve();
+    });
+
+    const searchSectionButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Search & sorting'
+    );
+    await act(async () => {
+      Simulate.click(searchSectionButton as HTMLButtonElement);
+    });
+
+    const ascendingOption = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Show A → Z sorting option"]'
+    );
+    const descendingOption = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Show Z → A sorting option"]'
+    );
+    expect(ascendingOption?.checked).toBe(true);
+    expect(descendingOption?.checked).toBe(true);
+
+    await act(async () => {
+      (ascendingOption as HTMLInputElement).checked = false;
+      Simulate.change(ascendingOption as HTMLInputElement);
+    });
+    expect(onChange).toHaveBeenLastCalledWith({
+      ...value,
+      sortingOptions: ['descending']
     });
     ReactDom.unmountComponentAtNode(container);
   });

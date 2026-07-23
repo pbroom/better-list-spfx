@@ -1,5 +1,15 @@
 import * as React from 'react';
-import { Button, Combobox, Dropdown, Input, Option, Switch, makeStyles, tokens } from '@fluentui/react-components';
+import {
+  Button,
+  Checkbox,
+  Combobox,
+  Dropdown,
+  Input,
+  Option,
+  Switch,
+  makeStyles,
+  tokens
+} from '@fluentui/react-components';
 import { AddRegular, EditRegular } from '@fluentui/react-icons';
 import type {
   LabCssEditorTarget,
@@ -30,10 +40,13 @@ import {
   IBetterListFieldMappings,
   BetterListColumnCount,
   BetterListDefaultSort,
+  betterListViewerSortChoices,
   getBetterListDefaultSortFieldPath,
   IBetterListTabConfig,
   normalizeBetterListDefaultSortSelection,
-  resolveBetterListTabConfigurations
+  normalizeBetterListViewerSortOptions,
+  resolveBetterListTabConfigurations,
+  serializeBetterListViewerSortOptions
 } from '../../src/shared';
 import { GroupIconColorField } from '../../src/webparts/betterList/components/GroupIconColorField';
 import { DefaultSortingMenu } from '../../src/webparts/betterList/components/propertyPane/DefaultSortingMenu';
@@ -60,6 +73,7 @@ export type BetterListLabProps = LabPropertyBag & {
   maxItemsPerPage: number;
   showSearch: boolean;
   showSortingOptions: boolean;
+  sortingOptionsJson: string;
   defaultSort: BetterListDefaultSort;
   defaultSortColumn: string;
   sourceListId: string;
@@ -135,6 +149,19 @@ const useStyles = makeStyles({
   },
   switch: {
     marginTop: '8px'
+  },
+  sortingOptions: {
+    border: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    rowGap: '4px',
+    margin: '8px 0 12px 24px',
+    padding: 0
+  },
+  sortingOptionsLabel: {
+    fontSize: '12px',
+    fontWeight: 600,
+    marginBottom: '4px'
   },
   editGroups: {
     alignSelf: 'flex-start',
@@ -212,6 +239,7 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
   const headingCommitTimerRef = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const latestValuesRef = React.useRef(values);
   const onChangeRef = React.useRef(onChange);
+  const enabledViewerSortOptions = normalizeBetterListViewerSortOptions(values.sortingOptionsJson);
 
   latestValuesRef.current = values;
   onChangeRef.current = onChange;
@@ -507,6 +535,27 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
           label="Show sorting options"
           onChange={(_event, data) => onChange({ showSortingOptions: data.checked })}
         />
+        {values.showSortingOptions ? (
+          <fieldset aria-label="Sorting options" className={classes.sortingOptions}>
+            <legend className={classes.sortingOptionsLabel}>Sorting options</legend>
+            {betterListViewerSortChoices.map((choice) => (
+              <Checkbox
+                aria-label={`Show ${choice.label} sorting option`}
+                checked={enabledViewerSortOptions.indexOf(choice.value) >= 0}
+                key={choice.value}
+                label={choice.label}
+                onChange={(_event, data) => {
+                  const nextOptions = data.checked
+                    ? [...enabledViewerSortOptions, choice.value]
+                    : enabledViewerSortOptions.filter((option) => option !== choice.value);
+                  onChange({
+                    sortingOptionsJson: serializeBetterListViewerSortOptions(nextOptions)
+                  });
+                }}
+              />
+            ))}
+          </fieldset>
+        ) : null}
         <label className={classes.groupingField}>
           <span>Default sorting</span>
           <DefaultSortingMenu

@@ -27,6 +27,7 @@
         "maxItemsPerPage": 0,
         "showSearch": true,
         "showSortingOptions": false,
+        "sortingOptionsJson": "{\"version\":1,\"enabled\":[\"ascending\",\"descending\"]}",
         "defaultSort": "listOrder",
         "defaultSortColumn": "",
         "groupIconsJson": "{\"version\":1,\"showIcons\":true,\"overrides\":[]}",

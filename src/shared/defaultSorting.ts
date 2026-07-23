@@ -1,4 +1,7 @@
-import type { BetterListDefaultSort } from './betterListTypes';
+import type {
+  BetterListDefaultSort,
+  BetterListViewerSortOption
+} from './betterListTypes';
 import {
   createBetterListFieldPathCatalog,
   IBetterListFieldDescriptor,
@@ -24,6 +27,24 @@ export const betterListDefaultSortOptions: readonly IBetterListDefaultSortOption
   { label: 'Column', value: 'column' }
 ];
 
+export interface IBetterListViewerSortChoice {
+  label: string;
+  value: BetterListViewerSortOption;
+}
+
+export interface IBetterListViewerSortConfiguration {
+  version: 1;
+  enabled: readonly BetterListViewerSortOption[];
+}
+
+export const betterListViewerSortChoices: readonly IBetterListViewerSortChoice[] = [
+  { label: 'A → Z', value: 'ascending' },
+  { label: 'Z → A', value: 'descending' }
+];
+
+export const defaultBetterListViewerSortOptions: readonly BetterListViewerSortOption[] =
+  betterListViewerSortChoices.map((choice) => choice.value);
+
 export const betterListPopularityFieldNames: readonly string[] = [
   'ViewsLifeTime',
   'ViewCount',
@@ -41,6 +62,37 @@ export function normalizeBetterListDefaultSort(value: unknown): BetterListDefaul
   return betterListDefaultSortOptions.some((option) => option.value === value)
     ? (value as BetterListDefaultSort)
     : 'listOrder';
+}
+
+export function normalizeBetterListViewerSortOptions(
+  value: unknown
+): readonly BetterListViewerSortOption[] {
+  let candidate = value;
+  if (typeof value === 'string') {
+    try {
+      candidate = JSON.parse(value) as unknown;
+    } catch {
+      return defaultBetterListViewerSortOptions.slice();
+    }
+  }
+  if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
+    candidate = (candidate as { enabled?: unknown }).enabled;
+  }
+  if (!Array.isArray(candidate)) {
+    return defaultBetterListViewerSortOptions.slice();
+  }
+  const enabled = candidate as readonly unknown[];
+  return betterListViewerSortChoices
+    .filter((choice) => enabled.indexOf(choice.value) >= 0)
+    .map((choice) => choice.value);
+}
+
+export function serializeBetterListViewerSortOptions(value: unknown): string {
+  const configuration: IBetterListViewerSortConfiguration = {
+    version: 1,
+    enabled: normalizeBetterListViewerSortOptions(value)
+  };
+  return JSON.stringify(configuration);
 }
 
 export function createBetterListSortableFieldOptions(

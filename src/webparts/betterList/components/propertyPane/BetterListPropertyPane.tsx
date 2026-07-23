@@ -2,6 +2,7 @@
 import * as React from 'react';
 import {
   Button,
+  Checkbox,
   Combobox,
   Dropdown,
   FluentProvider,
@@ -34,6 +35,8 @@ import {
   betterListPortalMountNodeProps,
   BetterListColumnCount,
   BetterListDefaultSort,
+  BetterListViewerSortOption,
+  betterListViewerSortChoices,
   createBetterListPortalPositioning,
   getBetterListDefaultSortFieldPath,
   getBetterListPortalMountNode,
@@ -46,6 +49,7 @@ import {
   IBetterListThemeColor,
   normalizeBetterListDefaultSortSelection,
   resolveBetterListTabConfigurations,
+  normalizeBetterListViewerSortOptions,
   validateBetterListTemplateStructure
 } from '../../../../shared';
 import { ISourceEditorTarget } from '../../../../vendor/source-editor/SourceEditorField';
@@ -75,6 +79,7 @@ export interface IBetterListAuthoringState {
   maxItemsPerPage: number;
   showSearch: boolean;
   showSortingOptions: boolean;
+  sortingOptions: readonly BetterListViewerSortOption[];
   defaultSort: BetterListDefaultSort;
   defaultSortColumn: string;
   sourceListId: string;
@@ -736,6 +741,30 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
             label="Show sorting options"
             onChange={(_event, data) => patchValue({ showSortingOptions: data.checked })}
           />
+          {props.value.showSortingOptions ? (
+            <fieldset
+              aria-label="Sorting options"
+              className="bl-pane__sorting-options"
+            >
+              <legend className="bl-pane__label">Sorting options</legend>
+              {betterListViewerSortChoices.map((choice) => (
+                <Checkbox
+                  aria-label={`Show ${choice.label} sorting option`}
+                  checked={props.value.sortingOptions.indexOf(choice.value) >= 0}
+                  key={choice.value}
+                  label={choice.label}
+                  onChange={(_event, data) => {
+                    const nextOptions = data.checked
+                      ? [...props.value.sortingOptions, choice.value]
+                      : props.value.sortingOptions.filter((option) => option !== choice.value);
+                    patchValue({
+                      sortingOptions: normalizeBetterListViewerSortOptions(nextOptions)
+                    });
+                  }}
+                />
+              ))}
+            </fieldset>
+          ) : null}
           <label className="bl-pane__field">
             <span className="bl-pane__label">Default sorting</span>
             <DefaultSortingMenu
@@ -1116,6 +1145,7 @@ const propertyPaneCss = `
 .bl-pane__error { background: #fdf3f4; border-left: 3px solid #c50f1f; color: #8a1219; font-size: 12px; padding: 8px; }
 .bl-pane__empty { background: #f5f5f5; color: #616161; font-size: 12px; padding: 10px; }
 .bl-pane__switch { margin-top: 8px; }
+.bl-pane__sorting-options { border: 0; display: flex; flex-direction: column; gap: 4px; margin: 8px 0 12px 24px; padding: 0; }
 .bl-pane__edit-groups { align-self: flex-start; margin: 0 0 4px; }
 .bl-pane__setting-row { align-items: center; color: #616161; display: flex; font-size: 12px; justify-content: space-between; gap: 8px; margin-top: 10px; }
 .bl-pane__inheritance { align-items: flex-start; background: ${tokens.colorNeutralBackground2}; color: ${tokens.colorNeutralForeground3}; display: flex; font-size: 11px; gap: 8px; justify-content: space-between; line-height: 1.35; margin: 0 0 10px; padding: 8px; }
