@@ -514,25 +514,6 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
         <style>{propertyPaneCss}</style>
         <section className="bl-pane__source-section">
           <label className="bl-pane__field">
-            <span className="bl-pane__label">Heading</span>
-            <Input
-              aria-label="Heading"
-              placeholder="Optional heading"
-              value={headingInput}
-              onBlur={commitHeading}
-              onChange={(_event, data) => {
-                headingInputRef.current = data.value;
-                setHeadingInput(data.value);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  event.currentTarget.blur();
-                }
-              }}
-            />
-          </label>
-          <label className="bl-pane__field">
             <span className="bl-pane__label">Source list</span>
             <Combobox
             aria-label="Source list"
@@ -581,6 +562,25 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
               {sourceError || fieldError || listError}
             </div>
           )}
+          <label className="bl-pane__field">
+            <span className="bl-pane__label">Title</span>
+            <Input
+              aria-label="Title"
+              placeholder="Optional title"
+              value={headingInput}
+              onBlur={commitHeading}
+              onChange={(_event, data) => {
+                headingInputRef.current = data.value;
+                setHeadingInput(data.value);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  event.currentTarget.blur();
+                }
+              }}
+            />
+          </label>
         </section>
 
         <PropertyPaneSection

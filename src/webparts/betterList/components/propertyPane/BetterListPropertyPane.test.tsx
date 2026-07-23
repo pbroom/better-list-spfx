@@ -69,7 +69,9 @@ describe('BetterListPropertyPane', () => {
     expect(html).toContain('fui-FluentProvider');
     expect(html).toContain('fui-Combobox');
     expect(html).toContain('bl-pane__source-dropdown');
-    expect(html).toContain('aria-label="Heading"');
+    expect(html).toContain('aria-label="Title"');
+    expect(html.indexOf('aria-label="Source list"')).toBeLessThan(html.indexOf('aria-label="Title"'));
+    expect(html.indexOf('aria-label="Title"')).toBeLessThan(html.indexOf('aria-label="Add tab"'));
     expect(html).toContain('--bl-font-mono: &quot;Geist Mono Variable&quot;');
     expect(html.match(/bl-property-pane-section/g)).toHaveLength(4);
     expect(html).toContain('data-property-pane-section-heading="true"');
@@ -86,7 +88,7 @@ describe('BetterListPropertyPane', () => {
     expect(html).not.toContain('aria-label="Split"');
   });
 
-  it('authors an optional heading without changing the source-list selection', async () => {
+  it('authors an optional title without changing the source-list selection', async () => {
     const container = document.createElement('div');
     const onChange = jest.fn();
     const value = createValue();
@@ -107,7 +109,7 @@ describe('BetterListPropertyPane', () => {
       await Promise.resolve();
     });
 
-    const input = container.querySelector<HTMLInputElement>('input[aria-label="Heading"]');
+    const input = container.querySelector<HTMLInputElement>('input[aria-label="Title"]');
     expect(input).not.toBeNull();
     await act(async () => {
       (input as HTMLInputElement).value = 'Service directory';
@@ -125,7 +127,7 @@ describe('BetterListPropertyPane', () => {
     ReactDom.unmountComponentAtNode(container);
   });
 
-  it('commits a focused heading draft when the property pane unmounts', async () => {
+  it('commits a focused title draft when the property pane unmounts', async () => {
     const container = document.createElement('div');
     const onChange = jest.fn();
     const value = createValue();
@@ -146,7 +148,7 @@ describe('BetterListPropertyPane', () => {
       await Promise.resolve();
     });
 
-    const input = container.querySelector<HTMLInputElement>('input[aria-label="Heading"]');
+    const input = container.querySelector<HTMLInputElement>('input[aria-label="Title"]');
     expect(input).not.toBeNull();
     await act(async () => {
       (input as HTMLInputElement).value = 'Service directory';
