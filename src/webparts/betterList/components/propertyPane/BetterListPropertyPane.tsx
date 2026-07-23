@@ -44,6 +44,7 @@ import {
   IBetterListGroupOrderEntry,
   IBetterListQueryField,
   IBetterListTabConfig,
+  IBetterListThemeColor,
   normalizeBetterListDefaultSortSelection,
   resolveBetterListTabConfigurations,
   validateBetterListTemplateStructure
@@ -114,6 +115,7 @@ export interface IBetterListPropertyPaneProps {
   value: IBetterListAuthoringState;
   pickerDataSource: IBetterListPickerDataSource;
   imageAssetProvider?: ISharePointImageAssetProvider;
+  themeColors?: readonly IBetterListThemeColor[];
   loadGroupOptions?: (
     tabId: string,
     column: string,
@@ -823,6 +825,7 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
             selectedTabId={activeTabId}
             fields={tabFilterFields}
             imageAssetProvider={props.imageAssetProvider}
+            themeColors={props.themeColors}
             showAddAction={false}
             tabs={props.value.tabs}
             onChange={(tabs) => patchValue({ tabs: tabs.slice(), tabsColumn: '' })}
@@ -914,6 +917,7 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
             {activeGrouping.icons.showIcons ? (
               <GroupIconColorField
                 label="Default icon color"
+                themeColors={props.themeColors}
                 value={activeGrouping.icons.defaultColor}
                 onChange={(defaultColor) =>
                   patchActiveGrouping({

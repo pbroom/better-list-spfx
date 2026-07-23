@@ -10,4 +10,5 @@ export * from './filterQuery';
 export * from './groupIconConfiguration';
 export * from './itemProcessing';
 export * from './itemPropertyConfiguration';
+export * from './sharePointThemeColors';
 export * from './tabConfiguration';

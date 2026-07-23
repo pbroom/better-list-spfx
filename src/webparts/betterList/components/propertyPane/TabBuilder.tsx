@@ -40,7 +40,8 @@ import {
   BetterListFilter,
   IBetterListQueryField,
   IBetterListQuerySuggestion,
-  IBetterListTabConfig
+  IBetterListTabConfig,
+  IBetterListThemeColor
 } from '../../../../shared';
 import {
   collectBetterListQueryFields,
@@ -68,6 +69,7 @@ export interface IBetterListTabFilterField {
 export interface ITabBuilderProps {
   fields: readonly IBetterListTabFilterField[];
   imageAssetProvider?: ISharePointImageAssetProvider;
+  themeColors?: readonly IBetterListThemeColor[];
   selectedTabId?: string;
   showAddAction?: boolean;
   tabs: readonly IBetterListTabConfig[];
@@ -81,6 +83,7 @@ const tabNameCommitDelayMs = 500;
 export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({
   fields,
   imageAssetProvider,
+  themeColors,
   selectedTabId,
   showAddAction = true,
   tabs,
@@ -328,6 +331,7 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({
             current={tabIconOverride(tabs.find((tab) => tab.id === iconPickerTabId))}
             groupTitle={tabs.find((tab) => tab.id === iconPickerTabId)?.label || 'tab'}
             imageAssetProvider={imageAssetProvider}
+            themeColors={themeColors}
             open
             showAutomaticAction={false}
             onApply={(override) => {

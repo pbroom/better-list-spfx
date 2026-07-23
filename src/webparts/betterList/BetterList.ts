@@ -32,6 +32,7 @@ import {
   betterListPopularityFieldNames,
   betterListTrendingFieldNames,
   createBetterListGroupingOverride,
+  createSharePointThemeColors,
   createBetterListFieldCatalog,
   createBetterListLoadSignature,
   defaultBetterListScss,
@@ -47,6 +48,7 @@ import {
   IBetterListFieldInfo,
   IBetterListGroupResult,
   IBetterListEffectiveTabConfiguration,
+  IBetterListThemeColor,
   IBetterListItem as ICoreBetterListItem,
   IBetterListTabConfig,
   parseItemLayoutConfiguration,
@@ -160,6 +162,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
   private _errorMessage = '';
   private _activeTabKey = '';
   private _isDarkTheme = false;
+  private _themeColors: readonly IBetterListThemeColor[] = [];
   private readonly _loadRequestEpoch = new BetterListRequestEpoch();
 
   public render(): void {
@@ -201,6 +204,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       groupIconScope: this.properties.groupsColumn,
       groupIcons,
       groupImageAssetProvider: this._imageAssetProvider,
+      themeColors: this._themeColors,
       isEditMode: this.displayMode === DisplayMode.Edit,
       heading: this.properties.heading,
       itemColumns: this.properties.itemColumns,
@@ -353,6 +357,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
 
   protected onThemeChanged(theme: IReadonlyTheme | undefined): void {
     this._isDarkTheme = Boolean(theme?.isInverted);
+    this._themeColors = createSharePointThemeColors(theme?.palette);
   }
 
   protected onDispose(): void {
@@ -398,6 +403,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
                 value: this._createAuthoringState(),
                 pickerDataSource: this._pickerDataSource,
                 imageAssetProvider: this._imageAssetProvider,
+                themeColors: this._themeColors,
                 loadGroupOptions: (tabId, column, filter) =>
                   this._loadGroupOptions(tabId, column, filter),
                 onChange: (value): void => this._applyAuthoringState(value, changeCallback),

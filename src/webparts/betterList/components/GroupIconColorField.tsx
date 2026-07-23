@@ -4,21 +4,27 @@ import {
   ColorArea,
   ColorPicker,
   ColorSlider,
+  ColorSwatch,
   Input,
   Popover,
   PopoverSurface,
   PopoverTrigger,
+  SwatchPicker,
   Text,
   makeStyles,
   shorthands,
   tokens
 } from '@fluentui/react-components';
 
-import { normalizeBetterListGroupIconColor } from '../../../shared';
+import {
+  IBetterListThemeColor,
+  normalizeBetterListGroupIconColor
+} from '../../../shared';
 
 export interface IGroupIconColorFieldProps {
   fallbackColor?: string;
   label?: string;
+  themeColors?: readonly IBetterListThemeColor[];
   value: string | undefined;
   onChange: (value: string | undefined) => void;
 }
@@ -74,12 +80,25 @@ const useStyles = makeStyles({
   colorSlider: {
     width: '100%',
     minWidth: 0
+  },
+  themeColors: {
+    display: 'grid',
+    rowGap: '6px'
+  },
+  themeSwatches: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(7, 24px)',
+    gap: '4px',
+    maxHeight: '164px',
+    overflowY: 'auto',
+    ...shorthands.padding('2px')
   }
 });
 
 export function GroupIconColorField({
   fallbackColor,
   label = 'Icon color',
+  themeColors = [],
   value,
   onChange
 }: IGroupIconColorFieldProps): JSX.Element {
@@ -129,6 +148,30 @@ export function GroupIconColorField({
               <ColorArea aria-label={`${label} saturation and brightness`} className={classes.colorArea} />
               <ColorSlider aria-label={`${label} hue`} className={classes.colorSlider} />
             </ColorPicker>
+            {themeColors.length ? (
+              <div className={classes.themeColors}>
+                <Text size={200} weight="semibold">SharePoint theme colors</Text>
+                <SwatchPicker
+                  aria-label="SharePoint theme colors"
+                  className={classes.themeSwatches}
+                  layout="grid"
+                  selectedValue={normalizeBetterListGroupIconColor(value)}
+                  size="small"
+                  spacing="small"
+                  onSelectionChange={(_event, data) => commitColor(data.selectedSwatch)}
+                >
+                  {themeColors.map((themeColor) => (
+                    <ColorSwatch
+                      aria-label={`${themeColor.label}, ${themeColor.color}`}
+                      color={themeColor.color}
+                      key={themeColor.key}
+                      title={`${themeColor.label} (${themeColor.color})`}
+                      value={themeColor.color}
+                    />
+                  ))}
+                </SwatchPicker>
+              </div>
+            ) : null}
           </PopoverSurface>
         </Popover>
         <Input
