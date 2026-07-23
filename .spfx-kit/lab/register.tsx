@@ -8,6 +8,10 @@ import { FluentProvider, webDarkTheme, webLightTheme } from '@fluentui/react-com
 import {
   applyBetterListGroupOrder,
   BetterListFieldValue,
+  BetterListDefaultSort,
+  BetterListFieldKind,
+  betterListPopularityFieldNames,
+  betterListTrendingFieldNames,
   createBetterListGroupingOverride,
   defaultBetterListHtmlTemplate,
   defaultBetterListScss,
@@ -24,6 +28,7 @@ import {
   IBetterListItem as ICoreBetterListItem,
   IBetterListTabConfig,
   itemPropertyFieldPathsEqual,
+  normalizeBetterListDefaultSort,
   parseItemLayoutConfiguration,
   parseItemPropertyFields,
   parseTabConfiguration,
@@ -64,6 +69,8 @@ const defaultProps: BetterListLabProps = {
   maxItemsPerPage: 0,
   showSearch: true,
   showSortingOptions: false,
+  defaultSort: 'listOrder',
+  defaultSortColumn: '',
   sourceListId: servicesListId,
   sourceListTitle: servicesListTitle,
   sourceWebUrl: 'https://contoso.sharepoint.com/sites/lab',
@@ -88,6 +95,11 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
 
   const mappings = React.useMemo(() => readMappings(props.fieldMappingsJson), [props.fieldMappingsJson]);
   const effectiveMappings = mappings;
+  const defaultSort = normalizeBetterListDefaultSort(props.defaultSort);
+  const defaultSortMetadata = React.useMemo(
+    () => resolveDefaultSortMetadata(defaultSort, props.defaultSortColumn, effectiveMappings),
+    [defaultSort, effectiveMappings, props.defaultSortColumn]
+  );
   const itemLayout = React.useMemo(
     () => parseItemLayoutConfiguration(
       props.itemLayoutJson,
@@ -170,9 +182,10 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
       items,
       tab,
       props.sourceListTitle,
-      effectiveMappings
+      effectiveMappings,
+      defaultSortMetadata
     )),
-    [effectiveMappings, effectiveTabs, items, props.sourceListTitle]
+    [defaultSortMetadata, effectiveMappings, effectiveTabs, items, props.sourceListTitle]
   );
   const activeConfiguration = effectiveTabs.find((entry) => entry.tab.id === activeTabKey) ?? effectiveTabs[0];
 
@@ -218,6 +231,8 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
         maxItemsPerPage={props.maxItemsPerPage}
         showSearch={props.showSearch}
         showSortingOptions={props.showSortingOptions}
+        defaultSort={defaultSort}
+        defaultSortFieldPath={defaultSortMetadata?.key || props.defaultSortColumn}
         listTitle={props.sourceListTitle}
         emptyMessage="There are no active Services items to display."
         onTabChange={(tabKey) => {
@@ -335,7 +350,8 @@ function createPresentationTab(
   sourceItems: readonly ICoreBetterListItem[],
   configuration: IBetterListEffectiveTabConfiguration,
   sourceListTitle: string,
-  mappings: IBetterListFieldMappings
+  mappings: IBetterListFieldMappings,
+  defaultSortMetadata?: { key: string; kind: BetterListFieldKind }
 ): IBetterListTab {
   const richTextFieldPaths = getRichTextItemPropertyPaths(mappings);
   const descriptionFieldPath = mappings.description?.fieldPath || mappings.description?.internalName;
@@ -399,6 +415,11 @@ function createPresentationTab(
           href: string | undefined;
         } => Boolean(element));
       const metadata = elements.filter((element) => element.kind === 'metadata').map((element) => element.value);
+      const defaultSortValue = defaultSortMetadata
+        ? item.metadata.find((entry) =>
+            itemPropertyFieldPathsEqual(entry.key, defaultSortMetadata.key)
+          )?.value
+        : undefined;
       items.push({
         id: String(item.id),
         title: item.title,
@@ -411,7 +432,10 @@ function createPresentationTab(
         groupTitle: group.label,
         groupIcon: getGroupIcon(tab, group.items[0]),
         groupSortOrder: groupIndex,
-        itemSortOrder: item.sortOrder
+        itemSortOrder: item.sortOrder,
+        presentationOrder: items.length,
+        defaultSortKind: defaultSortMetadata?.kind,
+        defaultSortValue
       });
     });
   });
@@ -432,6 +456,34 @@ function createPresentationTab(
     groupIconScope: configuration.grouping.column,
     groupIcons: configuration.grouping.icons
   };
+}
+
+function resolveDefaultSortMetadata(
+  mode: BetterListDefaultSort,
+  column: string,
+  mappings: Partial<IBetterListFieldMappings>
+): { key: string; kind: BetterListFieldKind } | undefined {
+  const metadata = mappings.metadata || [];
+  if (mode === 'column') {
+    const entry = metadata.find((candidate) =>
+      itemPropertyFieldPathsEqual(candidate.key, column)
+    );
+    return entry ? { key: entry.key, kind: entry.mapping.kind } : undefined;
+  }
+  const names = mode === 'recentlyUpdated'
+    ? ['Modified']
+    : mode === 'popularity'
+      ? betterListPopularityFieldNames
+      : mode === 'trending'
+        ? betterListTrendingFieldNames
+        : [];
+  const normalizedNames = names.map((name) => name.toLocaleLowerCase());
+  const entry = metadata.find((candidate) => {
+    const mapping = candidate.mapping;
+    return normalizedNames.indexOf(mapping.internalName.toLocaleLowerCase()) >= 0 ||
+      Boolean(mapping.queryName && normalizedNames.indexOf(mapping.queryName.toLocaleLowerCase()) >= 0);
+  });
+  return entry ? { key: entry.key, kind: entry.mapping.kind } : undefined;
 }
 
 function getGroupIcon(tab: IBetterListTabConfig, firstItem?: ICoreBetterListItem): BetterListGroupIcon | undefined {

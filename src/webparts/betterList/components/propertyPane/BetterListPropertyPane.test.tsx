@@ -39,6 +39,8 @@ describe('BetterListPropertyPane', () => {
     maxItemsPerPage: 0,
     showSearch: true,
     showSortingOptions: false,
+    defaultSort: 'listOrder',
+    defaultSortColumn: '',
     sourceListId: 'services',
     sourceListTitle: 'Services',
     sourceWebUrl: 'https://contoso.sharepoint.com/sites/example',
@@ -249,10 +251,37 @@ describe('BetterListPropertyPane', () => {
 
     const searchSwitch = container.querySelector<HTMLInputElement>('input[aria-label="Search field"]');
     const sortingSwitch = container.querySelector<HTMLInputElement>('input[aria-label="Show sorting options"]');
+    const defaultSorting = container.querySelector<HTMLButtonElement>('button[aria-label="Default sorting"]');
     expect(searchSwitch).not.toBeNull();
     expect(sortingSwitch).not.toBeNull();
+    expect(defaultSorting).not.toBeNull();
+    expect(defaultSorting?.textContent).toContain('List ordering');
     expect(searchSwitch?.checked).toBe(true);
     expect(sortingSwitch?.checked).toBe(false);
+    await act(async () => {
+      Simulate.click(defaultSorting as HTMLButtonElement);
+      await Promise.resolve();
+    });
+    const defaultSortOptions = Array.from(document.body.querySelectorAll<HTMLElement>('[role="option"]'));
+    expect(defaultSortOptions.map((candidate) => candidate.textContent?.trim())).toEqual([
+      'List ordering',
+      'A to Z',
+      'Popularity',
+      'Trending',
+      'Recently updated',
+      'Column (select)...'
+    ]);
+    await act(async () => {
+      Simulate.click(
+        defaultSortOptions.find((candidate) => candidate.textContent?.trim() === 'Recently updated') as HTMLElement
+      );
+    });
+    expect(onChange).toHaveBeenLastCalledWith({
+      ...value,
+      defaultSort: 'recentlyUpdated',
+      defaultSortColumn: '',
+      fieldMappings: { ...value.fieldMappings, metadata: [] }
+    });
     await act(async () => {
       (searchSwitch as HTMLInputElement).checked = false;
       Simulate.change(searchSwitch as HTMLInputElement);

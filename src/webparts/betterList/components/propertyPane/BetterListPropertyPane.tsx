@@ -20,9 +20,11 @@ import {
   createBetterListGroupingOverride,
   createBetterListItemLayoutOverride,
   createBetterListMetadataMappings,
+  createBetterListSortableFieldOptions,
   parseBetterListFieldPath,
   collectBetterListQueryFields,
   createDefaultTabs,
+  betterListDefaultSortOptions,
   betterListSemanticSlots,
   defaultBetterListHtmlTemplate,
   betterListTemplateMaxBytes,
@@ -32,7 +34,9 @@ import {
   betterListFluentSurfaceClassName,
   betterListPortalMountNodeProps,
   BetterListColumnCount,
+  BetterListDefaultSort,
   createBetterListPortalPositioning,
+  getBetterListDefaultSortFieldPath,
   getBetterListPortalMountNode,
   IBetterListFieldDescriptor,
   IBetterListFieldMappings,
@@ -69,6 +73,8 @@ export interface IBetterListAuthoringState {
   maxItemsPerPage: number;
   showSearch: boolean;
   showSortingOptions: boolean;
+  defaultSort: BetterListDefaultSort;
+  defaultSortColumn: string;
   sourceListId: string;
   sourceListTitle: string;
   sourceWebUrl: string;
@@ -346,7 +352,11 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
   const updateActiveTab = (patch: Partial<IBetterListTabConfig>): IBetterListTabConfig[] =>
     props.value.tabs.map((tab) => tab.id === activeTabId ? { ...tab, ...patch } : tab);
 
-  const patchTabsWithDerivedMetadata = (tabs: IBetterListTabConfig[]): void => {
+  const createDerivedMetadata = (
+    tabs: IBetterListTabConfig[],
+    defaultSort: BetterListDefaultSort = props.value.defaultSort,
+    defaultSortColumn: string = props.value.defaultSortColumn
+  ): ReturnType<typeof createBetterListMetadataMappings> => {
     const resolved = resolveBetterListTabConfigurations(tabs, {
       grouping: {
         column: props.value.groupsColumn,
@@ -360,25 +370,50 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
         links: props.value.itemElementLinks
       }
     });
-    const metadata = createBetterListMetadataMappings(
-      fields,
-      resolved.reduce<string[]>((paths, entry) => {
-        paths.push(...entry.itemLayout.itemProperties);
-        paths.push(...Object.keys(entry.itemLayout.links).map((fieldPath) => entry.itemLayout.links[fieldPath]));
-        if (entry.grouping.column) {
-          paths.push(entry.grouping.column);
-        }
-        if (entry.grouping.filter.kind === 'sourceEquals') {
-          paths.push(entry.grouping.filter.fieldPath);
-        } else if (entry.grouping.filter.kind === 'query') {
-          paths.push(...entry.grouping.filter.fields
-            .map((field) => field.fieldPath)
-            .filter((fieldPath): fieldPath is string => Boolean(fieldPath)));
-        }
-        return paths;
-      }, [])
+    const paths = resolved.reduce<string[]>((result, entry) => {
+      result.push(...entry.itemLayout.itemProperties);
+      result.push(...Object.keys(entry.itemLayout.links).map((fieldPath) => entry.itemLayout.links[fieldPath]));
+      if (entry.grouping.column) {
+        result.push(entry.grouping.column);
+      }
+      if (entry.grouping.filter.kind === 'sourceEquals') {
+        result.push(entry.grouping.filter.fieldPath);
+      } else if (entry.grouping.filter.kind === 'query') {
+        result.push(...entry.grouping.filter.fields
+          .map((field) => field.fieldPath)
+          .filter((fieldPath): fieldPath is string => Boolean(fieldPath)));
+      }
+      return result;
+    }, []);
+    const defaultSortFieldPath = getBetterListDefaultSortFieldPath(
+      defaultSort,
+      defaultSortColumn,
+      fields
     );
+    if (defaultSortFieldPath) {
+      paths.push(defaultSortFieldPath);
+    }
+    return createBetterListMetadataMappings(fields, paths);
+  };
+
+  const patchTabsWithDerivedMetadata = (tabs: IBetterListTabConfig[]): void => {
+    const metadata = createDerivedMetadata(tabs);
     patchValue({ tabs, fieldMappings: { ...props.value.fieldMappings, metadata } });
+  };
+
+  const patchDefaultSort = (
+    defaultSort: BetterListDefaultSort,
+    defaultSortColumn: string = props.value.defaultSortColumn
+  ): void => {
+    const column = defaultSort === 'column' ? defaultSortColumn : '';
+    patchValue({
+      defaultSort,
+      defaultSortColumn: column,
+      fieldMappings: {
+        ...props.value.fieldMappings,
+        metadata: createDerivedMetadata(props.value.tabs, defaultSort, column)
+      }
+    });
   };
 
   const patchActiveGrouping = (nextGrouping: typeof activeGrouping): void => {
@@ -395,6 +430,8 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
       itemProperties: ['Title'],
       itemLayoutRows: [],
       itemElementLinks: {},
+      defaultSort: 'listOrder',
+      defaultSortColumn: '',
       tabsColumn: '',
       groupsColumn: '',
       groupsCollapsible: true,
@@ -522,6 +559,13 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
   const groupingFields = fields.filter(isGroupingColumn);
   const groupingOptions = createGroupingColumnOptions(groupingFields);
   const selectedGroupingOption = groupingOptions.find((option) => option.value === activeGrouping.column);
+  const defaultSortColumnOptions = createBetterListSortableFieldOptions(fields);
+  const selectedDefaultSort = betterListDefaultSortOptions.find(
+    (option) => option.value === props.value.defaultSort
+  ) || betterListDefaultSortOptions[0];
+  const selectedDefaultSortColumn = defaultSortColumnOptions.find(
+    (option) => option.fieldPath === props.value.defaultSortColumn
+  );
   const tabFilterFields = createTabFilterFields(props.value.fieldMappings, fields);
   const groupFilterFields = createGroupFilterFields(fields, activeGrouping.column);
   const groupQueryFields = groupFilterFields.map(toGroupQueryField);
@@ -667,6 +711,57 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
             label="Show sorting options"
             onChange={(_event, data) => patchValue({ showSortingOptions: data.checked })}
           />
+          <label className="bl-pane__field">
+            <span className="bl-pane__label">Default sorting</span>
+            <Dropdown
+              aria-label="Default sorting"
+              listbox={{ className: betterListFluentSurfaceClassName }}
+              mountNode={betterListPortalMountNodeProps}
+              positioning={createBetterListPortalPositioning(targetDocument)}
+              selectedOptions={[props.value.defaultSort]}
+              value={selectedDefaultSort?.label || 'List ordering'}
+              onOptionSelect={(_event, data) => {
+                const defaultSort = betterListDefaultSortOptions.find(
+                  (option) => option.value === data.optionValue
+                )?.value;
+                if (defaultSort) {
+                  patchDefaultSort(defaultSort);
+                }
+              }}
+            >
+              {betterListDefaultSortOptions.map((option) => (
+                <Option key={option.value} text={option.label} value={option.value}>
+                  {option.label}
+                </Option>
+              ))}
+            </Dropdown>
+          </label>
+          {props.value.defaultSort === 'column' ? (
+            <label className="bl-pane__field">
+              <span className="bl-pane__label">Column</span>
+              <Dropdown
+                aria-label="Default sorting column"
+                listbox={{
+                  className: betterListFluentSurfaceClassName,
+                  style: { maxHeight: 'min(360px, calc(100vh - 16px))', overflowY: 'auto' }
+                }}
+                mountNode={betterListPortalMountNodeProps}
+                placeholder="Select a column"
+                positioning={createBetterListPortalPositioning(targetDocument)}
+                selectedOptions={props.value.defaultSortColumn ? [props.value.defaultSortColumn] : []}
+                value={selectedDefaultSortColumn?.label || ''}
+                onOptionSelect={(_event, data) =>
+                  patchDefaultSort('column', data.optionValue || '')
+                }
+              >
+                {defaultSortColumnOptions.map((option) => (
+                  <Option key={option.fieldPath} text={option.label} value={option.fieldPath}>
+                    {option.label}
+                  </Option>
+                ))}
+              </Dropdown>
+            </label>
+          ) : null}
         </PropertyPaneSection>
 
         <PropertyPaneSection

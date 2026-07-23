@@ -34,6 +34,14 @@ export type BetterListFieldKind =
   | 'lookup'
   | 'person';
 
+export type BetterListDefaultSort =
+  | 'listOrder'
+  | 'titleAscending'
+  | 'popularity'
+  | 'trending'
+  | 'recentlyUpdated'
+  | 'column';
+
 export type BetterListRelationshipKind = 'lookup' | 'person';
 export type BetterListRelationshipResolution = 'expanded' | 'userInfoBatch';
 

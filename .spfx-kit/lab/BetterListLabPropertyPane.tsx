@@ -10,6 +10,7 @@ import type {
 
 import {
   createBetterListMetadataMappings,
+  createBetterListSortableFieldOptions,
   createBetterListGroupingOverride,
   createBetterListItemLayoutOverride,
   getRichTextItemPropertyPaths,
@@ -21,12 +22,15 @@ import {
   normalizeItem,
   processItems,
   betterListSemanticSlots,
+  betterListDefaultSortOptions,
   betterListTemplateMaxBytes,
   defaultBetterListHtmlTemplate,
   validateBetterListTemplateStructure,
   serializeTabConfiguration,
   IBetterListFieldMappings,
   BetterListColumnCount,
+  BetterListDefaultSort,
+  getBetterListDefaultSortFieldPath,
   IBetterListTabConfig,
   resolveBetterListTabConfigurations
 } from '../../src/shared';
@@ -54,6 +58,8 @@ export type BetterListLabProps = LabPropertyBag & {
   maxItemsPerPage: number;
   showSearch: boolean;
   showSortingOptions: boolean;
+  defaultSort: BetterListDefaultSort;
+  defaultSortColumn: string;
   sourceListId: string;
   sourceListTitle: string;
   sourceWebUrl: string;
@@ -254,6 +260,16 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
   );
   const groupingFields = React.useMemo(() => servicesAuthoringFields.filter(isGroupingColumn), []);
   const groupingOptions = React.useMemo(() => createGroupingColumnOptions(groupingFields), [groupingFields]);
+  const defaultSortColumnOptions = React.useMemo(
+    () => createBetterListSortableFieldOptions(servicesAuthoringFields),
+    []
+  );
+  const selectedDefaultSort = betterListDefaultSortOptions.find(
+    (option) => option.value === values.defaultSort
+  ) || betterListDefaultSortOptions[0];
+  const selectedDefaultSortColumn = defaultSortColumnOptions.find(
+    (option) => option.fieldPath === values.defaultSortColumn
+  );
   const activeTabId = tabs.some((tab) => tab.id === values.authoringTabId)
     ? values.authoringTabId
     : tabs[0]?.id || '';
@@ -300,7 +316,11 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
   const selectedGroupingOption = groupingOptions.find((option) => option.value === activeGrouping.column);
   const updateActiveTab = (patch: Partial<IBetterListTabConfig>): IBetterListTabConfig[] =>
     tabs.map((tab) => tab.id === activeTabId ? { ...tab, ...patch } : tab);
-  const patchTabsWithDerivedMetadata = (nextTabs: IBetterListTabConfig[]): void => {
+  const createDerivedMetadata = (
+    nextTabs: IBetterListTabConfig[],
+    defaultSort: BetterListDefaultSort = values.defaultSort,
+    defaultSortColumn: string = values.defaultSortColumn
+  ): ReturnType<typeof createBetterListMetadataMappings> => {
     const resolved = resolveBetterListTabConfigurations(nextTabs, {
       grouping: {
         column: values.groupsColumn,
@@ -317,10 +337,35 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
       }
       return result;
     }, []);
-    const metadata = createBetterListMetadataMappings(servicesAuthoringFields, paths);
+    const defaultSortFieldPath = getBetterListDefaultSortFieldPath(
+      defaultSort,
+      defaultSortColumn,
+      servicesAuthoringFields
+    );
+    if (defaultSortFieldPath) {
+      paths.push(defaultSortFieldPath);
+    }
+    return createBetterListMetadataMappings(servicesAuthoringFields, paths);
+  };
+  const patchTabsWithDerivedMetadata = (nextTabs: IBetterListTabConfig[]): void => {
+    const metadata = createDerivedMetadata(nextTabs);
     onChange({
       fieldMappingsJson: JSON.stringify({ ...mappings, metadata }),
       tabsJson: serializeTabConfiguration(nextTabs)
+    });
+  };
+  const patchDefaultSort = (
+    defaultSort: BetterListDefaultSort,
+    defaultSortColumn: string = values.defaultSortColumn
+  ): void => {
+    const column = defaultSort === 'column' ? defaultSortColumn : '';
+    onChange({
+      defaultSort,
+      defaultSortColumn: column,
+      fieldMappingsJson: JSON.stringify({
+        ...mappings,
+        metadata: createDerivedMetadata(tabs.slice(), defaultSort, column)
+      })
     });
   };
   const patchActiveGrouping = (nextGrouping: typeof activeGrouping): void => {
@@ -451,6 +496,50 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
           label="Show sorting options"
           onChange={(_event, data) => onChange({ showSortingOptions: data.checked })}
         />
+        <label className={classes.groupingField}>
+          <span>Default sorting</span>
+          <Dropdown
+            aria-label="Default sorting"
+            positioning={{ align: 'start', autoSize: 'height', position: 'below', strategy: 'fixed' }}
+            selectedOptions={[values.defaultSort]}
+            value={selectedDefaultSort?.label || 'List ordering'}
+            onOptionSelect={(_event, data) => {
+              const defaultSort = betterListDefaultSortOptions.find(
+                (option) => option.value === data.optionValue
+              )?.value;
+              if (defaultSort) {
+                patchDefaultSort(defaultSort);
+              }
+            }}
+          >
+            {betterListDefaultSortOptions.map((option) => (
+              <Option key={option.value} text={option.label} value={option.value}>
+                {option.label}
+              </Option>
+            ))}
+          </Dropdown>
+        </label>
+        {values.defaultSort === 'column' ? (
+          <label className={classes.groupingField}>
+            <span>Column</span>
+            <Dropdown
+              aria-label="Default sorting column"
+              placeholder="Select a column"
+              positioning={{ align: 'start', autoSize: 'height', position: 'below', strategy: 'fixed' }}
+              selectedOptions={values.defaultSortColumn ? [values.defaultSortColumn] : []}
+              value={selectedDefaultSortColumn?.label || ''}
+              onOptionSelect={(_event, data) =>
+                patchDefaultSort('column', data.optionValue || '')
+              }
+            >
+              {defaultSortColumnOptions.map((option) => (
+                <Option key={option.fieldPath} text={option.label} value={option.fieldPath}>
+                  {option.label}
+                </Option>
+              ))}
+            </Dropdown>
+          </label>
+        ) : null}
       </DisclosureSection>
 
       <DisclosureSection
