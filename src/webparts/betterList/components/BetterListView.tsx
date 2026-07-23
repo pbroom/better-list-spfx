@@ -1,12 +1,14 @@
 import * as React from 'react';
 import {
   Button,
+  Dropdown,
   Input,
   Link,
   MessageBar,
   MessageBarActions,
   MessageBarBody,
   MessageBarTitle,
+  Option,
   SelectTabData,
   SelectTabEvent,
   Spinner,
@@ -34,6 +36,7 @@ import {
   SearchRegular
 } from '@fluentui/react-icons';
 import {
+  betterListFluentSurfaceClassName,
   betterListFluentTooltipContentClassName,
   BetterListColumnCount,
   BetterListItemLayoutRows,
@@ -144,6 +147,7 @@ export interface IBetterListViewProps {
   itemColumns?: BetterListColumnCount;
   maxItemsPerPage?: number;
   showSearch?: boolean;
+  showSortingOptions?: boolean;
   listTitle?: string;
   onTabChange?: (tabKey: string) => void;
   onSearchChange?: (value: string) => void;
@@ -153,6 +157,7 @@ export interface IBetterListViewProps {
 
 type BetterListTemplateTokens = Readonly<Record<string, string | number | undefined>>;
 type BetterListTemplateSlotRenderer = (attributes: Record<string, unknown>, key: string) => React.ReactNode;
+type BetterListViewerSortDirection = 'ascending' | 'descending';
 
 interface IBetterListGroup {
   id: string;
@@ -203,7 +208,32 @@ const useStyles = makeStyles({
   },
   search: {
     width: 'min(100%, 440px)',
-    minHeight: '48px',
+    '@media (max-width: 760px)': {
+      width: '100%'
+    }
+  },
+  searchControls: {
+    display: 'flex',
+    alignItems: 'stretch',
+    columnGap: '12px',
+    minWidth: 0,
+    width: 'min(100%, 600px)',
+    '@media (max-width: 760px)': {
+      flexDirection: 'column',
+      rowGap: '8px',
+      width: '100%'
+    }
+  },
+  searchControlsSortOnly: {
+    width: '140px',
+    '@media (max-width: 760px)': {
+      width: '100%'
+    }
+  },
+  sort: {
+    flexShrink: 0,
+    minWidth: '140px',
+    width: '140px',
     '@media (max-width: 760px)': {
       width: '100%'
     }
@@ -389,6 +419,16 @@ const compareItems = (left: IBetterListItem, right: IBetterListItem): number => 
   return orderDifference || compareText(left.title, right.title);
 };
 
+const compareItemsByTitle = (
+  left: IBetterListItem,
+  right: IBetterListItem,
+  direction: BetterListViewerSortDirection
+): number => {
+  const titleDifference = compareText(left.title, right.title);
+  const directionMultiplier = direction === 'descending' ? -1 : 1;
+  return directionMultiplier * titleDifference || compareItems(left, right) || compareText(left.id, right.id);
+};
+
 const itemMatchesSearch = (item: IBetterListItem, searchText: string): boolean => {
   if (!searchText) {
     return true;
@@ -406,7 +446,10 @@ const itemMatchesSearch = (item: IBetterListItem, searchText: string): boolean =
   return searchableValues.some((value) => value?.toLocaleLowerCase().includes(searchText));
 };
 
-const groupItems = (items: readonly IBetterListItem[]): IBetterListGroup[] => {
+const groupItems = (
+  items: readonly IBetterListItem[],
+  compareGroupItems: (left: IBetterListItem, right: IBetterListItem) => number = compareItems
+): IBetterListGroup[] => {
   const groups = new Map<string, IBetterListGroup>();
 
   items.forEach((item) => {
@@ -428,7 +471,7 @@ const groupItems = (items: readonly IBetterListItem[]): IBetterListGroup[] => {
   });
 
   return Array.from(groups.values())
-    .map((group) => ({ ...group, items: group.items.slice().sort(compareItems) }))
+    .map((group) => ({ ...group, items: group.items.slice().sort(compareGroupItems) }))
     .sort((left, right) => left.sortOrder - right.sortOrder || compareText(left.title, right.title));
 };
 
@@ -660,6 +703,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   itemColumns,
   maxItemsPerPage = 0,
   showSearch,
+  showSortingOptions = false,
   listTitle = 'Better List',
   onTabChange,
   onSearchChange,
@@ -670,6 +714,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   const compiledTemplate = React.useMemo(() => resolveBetterListTemplate(htmlTemplate), [htmlTemplate]);
   const [selectedTabKey, setSelectedTabKey] = React.useState(activeTabKey);
   const [internalSearchValue, setInternalSearchValue] = React.useState(searchValue ?? '');
+  const [sortDirection, setSortDirection] = React.useState<BetterListViewerSortDirection>('ascending');
   const [collapsedGroups, setCollapsedGroups] = React.useState<Record<string, boolean>>({});
   const [editingGroup, setEditingGroup] = React.useState<IBetterListGroup | undefined>(undefined);
   const [currentPage, setCurrentPage] = React.useState(0);
@@ -699,6 +744,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   const density = selectedLayout?.density ?? 'comfortable';
   const showDescriptions = selectedLayout?.showDescriptions !== false;
   const searchVisible = (showSearch ?? true) && selectedLayout?.showSearch !== false;
+  const sortingVisible = showSortingOptions === true;
   const grouped = selectedTab?.grouped === true;
   const collapsible = grouped && selectedLayout?.collapsible !== false;
   const initiallyExpanded = selectedLayout?.initiallyExpanded !== false;
@@ -713,6 +759,11 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   const normalizedHeading = heading.trim();
   const normalizedMaxItemsPerPage =
     Number.isFinite(maxItemsPerPage) && maxItemsPerPage > 0 ? Math.floor(maxItemsPerPage) : 0;
+  const compareVisibleItems = React.useCallback(
+    (left: IBetterListItem, right: IBetterListItem): number =>
+      sortingVisible ? compareItemsByTitle(left, right, sortDirection) : compareItems(left, right),
+    [sortDirection, sortingVisible]
+  );
 
   const visibleItems = React.useMemo(() => {
     const tabItems = selectedTab?.items ?? items;
@@ -721,9 +772,18 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   }, [items, normalizedSearchText, selectedTab]);
 
   const displayedItems = React.useMemo(() => {
-    const orderedItems = grouped ? visibleItems : visibleItems.slice().sort(compareItems);
+    const orderedItems = grouped
+      ? sortingVisible
+        ? visibleItems.slice().sort((left, right) => {
+            const groupOrderDifference =
+              (left.groupSortOrder ?? Number.MAX_SAFE_INTEGER) -
+              (right.groupSortOrder ?? Number.MAX_SAFE_INTEGER);
+            return groupOrderDifference || compareText(left.groupTitle, right.groupTitle) || compareVisibleItems(left, right);
+          })
+        : visibleItems
+      : visibleItems.slice().sort(compareVisibleItems);
     return selectedTab?.maxItems ? orderedItems.slice(0, selectedTab.maxItems) : orderedItems;
-  }, [grouped, selectedTab?.maxItems, visibleItems]);
+  }, [compareVisibleItems, grouped, selectedTab?.maxItems, sortingVisible, visibleItems]);
   const totalPages = normalizedMaxItemsPerPage
     ? Math.max(1, Math.ceil(displayedItems.length / normalizedMaxItemsPerPage))
     : 1;
@@ -737,14 +797,22 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
       : displayedItems.slice(0, lazyItemCount),
     [displayedItems, lazyItemCount, normalizedMaxItemsPerPage, selectedPage]
   );
-  const groups = React.useMemo(() => (grouped ? groupItems(renderedItems) : []), [grouped, renderedItems]);
+  const groups = React.useMemo(
+    () => (grouped ? groupItems(renderedItems, compareVisibleItems) : []),
+    [compareVisibleItems, grouped, renderedItems]
+  );
   const hasMoreLazyItems = !normalizedMaxItemsPerPage && renderedItems.length < displayedItems.length;
   const hasAnyItems = items.length > 0 || tabs.some((tab) => Boolean(tab.items?.length));
 
   React.useEffect(() => {
     setCurrentPage(0);
     setLazyItemCount(lazyRenderBatchSize);
-  }, [normalizedMaxItemsPerPage, normalizedSearchText, selectedTab?.key]);
+  }, [
+    normalizedMaxItemsPerPage,
+    normalizedSearchText,
+    selectedTab?.key,
+    sortingVisible ? sortDirection : 'default'
+  ]);
 
   React.useEffect(() => {
     if (currentPage !== selectedPage) {
@@ -1216,23 +1284,67 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
         },
         {
       tabs: renderTabs,
-      search: (attributes, key) =>
-        searchVisible ? (
+      search: (attributes, key) => {
+        if (!searchVisible && !sortingVisible) {
+          return null;
+        }
+
+        const searchInput = searchVisible ? (
           <Input
-            {...attributes}
-            className={mergeClasses(String(attributes.className || ''), classes.search, 'better-list__search')}
+            className={mergeClasses(classes.search, 'better-list__search')}
             contentBefore={
               <SearchRegular className={mergeClasses(classes.searchIcon, 'better-list__search-icon')} aria-hidden="true" />
             }
-            size="large"
-            key={key}
             value={internalSearchValue}
             onChange={handleSearchChange}
             placeholder={searchPlaceholder}
             aria-label={searchPlaceholder}
             type="search"
           />
-        ) : null,
+        ) : null;
+
+        if (!sortingVisible) {
+          return React.cloneElement(searchInput as React.ReactElement, {
+            ...attributes,
+            className: mergeClasses(
+              String(attributes.className || ''),
+              classes.search,
+              'better-list__search'
+            ),
+            key
+          });
+        }
+
+        return (
+          <div
+            {...attributes}
+            className={mergeClasses(
+              String(attributes.className || ''),
+              classes.searchControls,
+              !searchVisible && classes.searchControlsSortOnly,
+              'better-list__search-controls'
+            )}
+            key={key}
+          >
+            <Dropdown
+              aria-label="Sort items"
+              className={mergeClasses(classes.sort, 'better-list__sort')}
+              listbox={{ className: betterListFluentSurfaceClassName }}
+              selectedOptions={[sortDirection]}
+              value={sortDirection === 'ascending' ? 'A → Z' : 'Z → A'}
+              onOptionSelect={(_event, data) => {
+                if (data.optionValue === 'ascending' || data.optionValue === 'descending') {
+                  setSortDirection(data.optionValue);
+                }
+              }}
+            >
+              <Option text="A → Z" value="ascending">A → Z</Option>
+              <Option text="Z → A" value="descending">Z → A</Option>
+            </Dropdown>
+            {searchInput}
+          </div>
+        );
+      },
       content: (attributes, key) => (
         <div
           {...attributes}

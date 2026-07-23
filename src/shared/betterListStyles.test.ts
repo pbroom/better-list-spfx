@@ -3,6 +3,8 @@ import { defaultBetterListScss, scopeBetterListStyles } from './betterListStyles
 describe('Better List author styles', () => {
   it('contains the stable visual targets rendered by the web part', () => {
     expect(defaultBetterListScss).toContain('.better-list__toolbar');
+    expect(defaultBetterListScss).toContain('.better-list__search-controls');
+    expect(defaultBetterListScss).toContain('.better-list__sort');
     expect(defaultBetterListScss).toContain('.better-list__group-button');
     expect(defaultBetterListScss).toContain('.better-list__item-description');
     expect(defaultBetterListScss).toContain('.better-list__item-row');

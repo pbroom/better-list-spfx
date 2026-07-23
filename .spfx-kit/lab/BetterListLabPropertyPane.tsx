@@ -53,6 +53,7 @@ export type BetterListLabProps = LabPropertyBag & {
   itemColumns: BetterListColumnCount;
   maxItemsPerPage: number;
   showSearch: boolean;
+  showSortingOptions: boolean;
   sourceListId: string;
   sourceListTitle: string;
   sourceWebUrl: string;
@@ -442,6 +443,13 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
           className={classes.switch}
           label="Search field"
           onChange={(_event, data) => onChange({ showSearch: data.checked })}
+        />
+        <Switch
+          aria-label="Show sorting options"
+          checked={values.showSortingOptions}
+          className={classes.switch}
+          label="Show sorting options"
+          onChange={(_event, data) => onChange({ showSortingOptions: data.checked })}
         />
       </DisclosureSection>
 

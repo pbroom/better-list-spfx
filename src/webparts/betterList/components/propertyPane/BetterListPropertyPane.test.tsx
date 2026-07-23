@@ -38,6 +38,7 @@ describe('BetterListPropertyPane', () => {
     itemColumns: 2,
     maxItemsPerPage: 0,
     showSearch: true,
+    showSortingOptions: false,
     sourceListId: 'services',
     sourceListTitle: 'Services',
     sourceWebUrl: 'https://contoso.sharepoint.com/sites/example',
@@ -217,7 +218,7 @@ describe('BetterListPropertyPane', () => {
     ReactDom.unmountComponentAtNode(container);
   });
 
-  it('authors global search field visibility', async () => {
+  it('authors global search and sorting-control visibility', async () => {
     const container = document.createElement('div');
     const onChange = jest.fn();
     const value = createValue();
@@ -246,15 +247,23 @@ describe('BetterListPropertyPane', () => {
       Simulate.click(searchSectionButton as HTMLButtonElement);
     });
 
-    const searchSwitch = container.querySelector<HTMLInputElement>('input[role="switch"]');
+    const searchSwitch = container.querySelector<HTMLInputElement>('input[aria-label="Search field"]');
+    const sortingSwitch = container.querySelector<HTMLInputElement>('input[aria-label="Show sorting options"]');
     expect(searchSwitch).not.toBeNull();
+    expect(sortingSwitch).not.toBeNull();
     expect(searchSwitch?.checked).toBe(true);
+    expect(sortingSwitch?.checked).toBe(false);
     await act(async () => {
       (searchSwitch as HTMLInputElement).checked = false;
       Simulate.change(searchSwitch as HTMLInputElement);
     });
 
     expect(onChange).toHaveBeenLastCalledWith({ ...value, showSearch: false });
+    await act(async () => {
+      (sortingSwitch as HTMLInputElement).checked = true;
+      Simulate.change(sortingSwitch as HTMLInputElement);
+    });
+    expect(onChange).toHaveBeenLastCalledWith({ ...value, showSortingOptions: true });
     ReactDom.unmountComponentAtNode(container);
   });
 

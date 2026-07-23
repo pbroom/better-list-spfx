@@ -63,6 +63,7 @@ const defaultProps: BetterListLabProps = {
   itemColumns: 2,
   maxItemsPerPage: 0,
   showSearch: true,
+  showSortingOptions: false,
   sourceListId: servicesListId,
   sourceListTitle: servicesListTitle,
   sourceWebUrl: 'https://contoso.sharepoint.com/sites/lab',
@@ -216,6 +217,7 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
         itemColumns={props.itemColumns}
         maxItemsPerPage={props.maxItemsPerPage}
         showSearch={props.showSearch}
+        showSortingOptions={props.showSortingOptions}
         listTitle={props.sourceListTitle}
         emptyMessage="There are no active Services items to display."
         onTabChange={(tabKey) => {

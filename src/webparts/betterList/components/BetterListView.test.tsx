@@ -320,6 +320,122 @@ describe('BetterListView', () => {
     ReactDom.unmountComponentAtNode(container);
   });
 
+  it('renders sorting options before search and independently of search visibility', () => {
+    const tabs: readonly IBetterListTab[] = [
+      { key: 'all', label: 'All items', grouped: false, items: [item] }
+    ];
+
+    const html = renderToStaticMarkup(
+      <BetterListView
+        activeTabKey="all"
+        items={[item]}
+        showSortingOptions
+        tabs={tabs}
+      />
+    );
+    const sortingOnlyHtml = renderToStaticMarkup(
+      <BetterListView
+        activeTabKey="all"
+        items={[item]}
+        showSearch={false}
+        showSortingOptions
+        tabs={tabs}
+      />
+    );
+
+    expect(html).toContain('better-list__search-controls');
+    expect(html).toContain('aria-label="Sort items"');
+    expect(html).toContain('A → Z');
+    expect(html.indexOf('aria-label="Sort items"')).toBeLessThan(html.indexOf('type="search"'));
+    expect(sortingOnlyHtml).toContain('aria-label="Sort items"');
+    expect(sortingOnlyHtml).not.toContain('type="search"');
+  });
+
+  it('lets visitors sort ungrouped items by title in either direction', async () => {
+    const container = document.createElement('div');
+    const alpha = { ...item, id: 'alpha', itemSortOrder: 2, title: 'Alpha service' };
+    const zulu = { ...item, id: 'zulu', itemSortOrder: 1, title: 'Zulu service' };
+    const items = [zulu, alpha];
+    const tabs: readonly IBetterListTab[] = [
+      { key: 'all', label: 'All items', grouped: false, items }
+    ];
+
+    await act(async () => {
+      ReactDom.render(
+        <BetterListView
+          activeTabKey="all"
+          items={items}
+          showSortingOptions
+          tabs={tabs}
+        />,
+        container
+      );
+    });
+
+    const itemTitles = (): string[] =>
+      Array.from(container.querySelectorAll('.better-list__item-title')).map((element) =>
+        element.textContent?.trim() || ''
+      );
+    expect(itemTitles()).toEqual(['Alpha service', 'Zulu service']);
+
+    const sortDropdown = container.querySelector<HTMLButtonElement>('button[aria-label="Sort items"]');
+    expect(sortDropdown).not.toBeNull();
+    await act(async () => {
+      Simulate.click(sortDropdown as HTMLButtonElement);
+      await Promise.resolve();
+    });
+    const descendingOption = Array.from(document.body.querySelectorAll<HTMLElement>('[role="option"]')).find(
+      (candidate) => candidate.textContent?.trim() === 'Z → A'
+    );
+    expect(descendingOption).toBeDefined();
+    await act(async () => {
+      Simulate.click(descendingOption as HTMLElement);
+    });
+
+    expect(itemTitles()).toEqual(['Zulu service', 'Alpha service']);
+    ReactDom.unmountComponentAtNode(container);
+  });
+
+  it('sorts within groups without changing authored group order', () => {
+    const firstGroupZulu = {
+      ...item,
+      id: 'first-zulu',
+      title: 'Zulu service',
+      groupId: 'first',
+      groupTitle: 'First group',
+      groupSortOrder: 1
+    };
+    const firstGroupAlpha = {
+      ...firstGroupZulu,
+      id: 'first-alpha',
+      title: 'Alpha service'
+    };
+    const secondGroupItem = {
+      ...item,
+      id: 'second',
+      title: 'Beta service',
+      groupId: 'second',
+      groupTitle: 'Second group',
+      groupSortOrder: 2
+    };
+    const items = [firstGroupZulu, firstGroupAlpha, secondGroupItem];
+    const tabs: readonly IBetterListTab[] = [
+      { key: 'grouped', label: 'Grouped', grouped: true, items }
+    ];
+
+    const html = renderToStaticMarkup(
+      <BetterListView
+        activeTabKey="grouped"
+        items={items}
+        showSortingOptions
+        tabs={tabs}
+      />
+    );
+
+    expect(html.indexOf('First group')).toBeLessThan(html.indexOf('Second group'));
+    expect(html.indexOf('Alpha service')).toBeLessThan(html.indexOf('Zulu service'));
+  });
+
   it('renders configured item elements in their authored order', () => {
     const tabs: readonly IBetterListTab[] = [
       {

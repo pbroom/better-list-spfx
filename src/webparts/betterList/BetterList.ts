@@ -89,6 +89,7 @@ export interface IBetterListWebPartProps {
   itemColumns: BetterListColumnCount;
   maxItemsPerPage: number;
   showSearch: boolean;
+  showSortingOptions: boolean;
   sourceListId: string;
   sourceListTitle: string;
   sourceWebUrl: string;
@@ -164,6 +165,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       itemColumns: this.properties.itemColumns,
       maxItemsPerPage: this.properties.maxItemsPerPage,
       showSearch: this.properties.showSearch,
+      showSortingOptions: this.properties.showSortingOptions,
       listTitle: this.properties.sourceListTitle,
       onTabChange: (tabKey: string): void => {
         this._activeTabKey = tabKey;
@@ -217,6 +219,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     this.properties.itemColumns = normalizeBetterListColumnCount(this.properties.itemColumns);
     this.properties.maxItemsPerPage = normalizeMaxItemsPerPage(this.properties.maxItemsPerPage);
     this.properties.showSearch = this.properties.showSearch !== false;
+    this.properties.showSortingOptions = this.properties.showSortingOptions === true;
     this.properties.sourceListId = this.properties.sourceListId || '';
     this.properties.sourceListTitle = this.properties.sourceListTitle || '';
     this.properties.sourceWebUrl = this.properties.sourceWebUrl || '';
@@ -380,6 +383,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       itemColumns: this.properties.itemColumns,
       maxItemsPerPage: this.properties.maxItemsPerPage,
       showSearch: this.properties.showSearch,
+      showSortingOptions: this.properties.showSortingOptions,
       sourceListId: this.properties.sourceListId,
       sourceListTitle: this.properties.sourceListTitle,
       sourceWebUrl: this.properties.sourceWebUrl,
@@ -423,6 +427,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       itemColumns: normalizeBetterListColumnCount(value.itemColumns),
       maxItemsPerPage: normalizeMaxItemsPerPage(value.maxItemsPerPage),
       showSearch: value.showSearch !== false,
+      showSortingOptions: value.showSortingOptions === true,
       sourceListId: value.sourceListId,
       sourceListTitle: value.sourceListTitle,
       sourceWebUrl: value.sourceWebUrl,

@@ -62,6 +62,15 @@ Edit these rules in the web part's Monaco field to restyle this instance.
   border-radius: 4px;
 }
 
+.better-list__search-controls {
+  column-gap: 12px;
+}
+
+.better-list__sort {
+  border-color: var(--better-list-border);
+  border-radius: 4px;
+}
+
 .better-list__search-icon {
   color: var(--better-list-heading);
   font-size: 22px;
@@ -210,6 +219,10 @@ Edit these rules in the web part's Monaco field to restyle this instance.
 @media (max-width: 760px) {
   .better-list {
     padding: 22px 16px 30px;
+  }
+
+  .better-list__search-controls {
+    row-gap: 8px;
   }
 
   .better-list__items {
