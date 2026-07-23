@@ -2,6 +2,7 @@ import * as React from 'react';
 import * as ReactDom from 'react-dom';
 import { act, Simulate } from 'react-dom/test-utils';
 
+import { installTestResizeObserver } from '../../../../test/installTestResizeObserver';
 import { ColumnPickerMenu } from './ItemPropertyBuilder';
 
 describe('ColumnPickerMenu', () => {
@@ -10,6 +11,7 @@ describe('ColumnPickerMenu', () => {
     const frame = document.createElement('iframe');
     document.body.append(container, frame);
     const targetDocument = frame.contentDocument as Document;
+    const restoreResizeObserver = installTestResizeObserver(targetDocument.defaultView as Window);
 
     await act(async () => {
       ReactDom.render(
@@ -38,6 +40,7 @@ describe('ColumnPickerMenu', () => {
     act(() => {
       ReactDom.unmountComponentAtNode(container);
     });
+    restoreResizeObserver();
     container.remove();
     frame.remove();
   });
