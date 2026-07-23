@@ -337,8 +337,32 @@ function readGroupingOverride(value: unknown): IBetterListTabGroupingOverride | 
     column,
     collapsible: value.collapsible !== false,
     icons,
-    filter: value.filter === undefined ? undefined : readFilter(value.filter)
+    filter: value.filter === undefined ? undefined : readFilter(value.filter),
+    groupOrder: readGroupOrder(value.groupOrder)
   };
+}
+
+function readGroupOrder(
+  value: unknown
+): IBetterListTabGroupingOverride['groupOrder'] {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!Array.isArray(value)) {
+    throw new Error('A tab group order must be an array.');
+  }
+  const seen = new Set<string>();
+  return value.reduce<NonNullable<IBetterListTabGroupingOverride['groupOrder']>>((entries, entry) => {
+    if (!isRecord(entry) || typeof entry.key !== 'string' || !entry.key.trim()) {
+      throw new Error('Each tab group order entry must include a key.');
+    }
+    const key = entry.key.trim();
+    if (seen.has(key)) {
+      return entries;
+    }
+    seen.add(key);
+    return entries.concat(entry.hidden === true ? { key, hidden: true } : { key });
+  }, []);
 }
 
 function readItemLayoutOverride(value: unknown): IBetterListTabItemLayoutOverride | undefined {

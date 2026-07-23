@@ -18,6 +18,8 @@ import * as strings from 'WebPartStrings';
 import {
   addTabFilterMappings,
   alignTabQueryFieldKinds,
+  applyBetterListGroupOrder,
+  BetterListFilter,
   BetterListFieldValue,
   BetterListGroupIconOverride,
   BetterListItemElementLinks,
@@ -62,6 +64,7 @@ import {
   IBetterListPickerDataSource,
   ISharePointFieldOption
 } from './components/propertyPane/BetterListPropertyPane';
+import type { IBetterListGroupOption } from './components/propertyPane/GroupOrderEditorDialog';
 import {
   IBetterListDataSource,
   ISharePointImageAssetProvider,
@@ -331,6 +334,8 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
                 value: this._createAuthoringState(),
                 pickerDataSource: this._pickerDataSource,
                 imageAssetProvider: this._imageAssetProvider,
+                loadGroupOptions: (tabId, column, filter) =>
+                  this._loadGroupOptions(tabId, column, filter),
                 onChange: (value): void => this._applyAuthoringState(value, changeCallback),
                 onActiveTabChange: (tabId: string): void => {
                   this._activeTabKey = tabId;
@@ -493,6 +498,30 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     this.render();
   }
 
+  private async _loadGroupOptions(
+    tabId: string,
+    column: string,
+    filter: BetterListFilter
+  ): Promise<readonly IBetterListGroupOption[]> {
+    const configuration =
+      this._createEffectiveTabConfigurations().find((entry) => entry.tab.id === tabId);
+    if (!configuration || !column) {
+      return [];
+    }
+    const richTextFieldPaths = getRichTextItemPropertyPaths(this._readMappings());
+    return groupItemsBySourceField(
+      processItems(this._items, configuration.tab),
+      column,
+      filter,
+      'Other',
+      richTextFieldPaths.has(column)
+    ).map((group) => ({
+      key: group.key,
+      label: group.label,
+      itemCount: group.items.length
+    }));
+  }
+
   private _createPresentationTab(
     configuration: IBetterListEffectiveTabConfiguration,
     descriptionFieldPath: string | undefined,
@@ -515,7 +544,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       }
     };
     const processed = processItems(this._items, tab);
-    const groups: readonly IBetterListGroupResult[] = group
+    const discoveredGroups: readonly IBetterListGroupResult[] = group
       ? groupItemsBySourceField(
           processed,
           configuration.grouping.column,
@@ -524,6 +553,9 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
           richTextFieldPaths.has(configuration.grouping.column)
         )
       : [{ key: 'all', label: this.properties.sourceListTitle || 'Items', items: processed }];
+    const groups = group
+      ? applyBetterListGroupOrder(discoveredGroups, configuration.grouping.groupOrder)
+      : discoveredGroups;
     const items: IBetterListItem[] = [];
     groups.forEach((group, groupIndex) => {
       group.items.forEach((item) => {

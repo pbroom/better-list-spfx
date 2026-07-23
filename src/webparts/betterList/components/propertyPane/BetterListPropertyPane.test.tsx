@@ -268,4 +268,102 @@ describe('BetterListPropertyPane', () => {
     expect((input as HTMLInputElement).value).toBe('Different list');
     ReactDom.unmountComponentAtNode(container);
   });
+
+  /* eslint-disable @rushstack/pair-react-dom-render-unmount --
+   * The regression intentionally rerenders one mounted pane before the finally-block cleanup. */
+  it('discards group discovery results after the active tab changes', async () => {
+    const container = document.createElement('div');
+    const onChange = jest.fn();
+    const allTab = createDefaultTabs()[0];
+    const value: IBetterListAuthoringState = {
+      ...createValue(),
+      fieldMappings: {
+        title: { kind: 'text', internalName: 'Title', displayName: 'Title' }
+      },
+      groupsColumn: 'Category',
+      tabs: [
+        allTab,
+        { ...allTab, id: 'second', label: 'Second' }
+      ]
+    };
+    let finishGroupLoad: ((groups: readonly {
+      key: string;
+      label: string;
+      itemCount: number;
+    }[]) => void) | undefined;
+    const groupLoad = new Promise<readonly {
+      key: string;
+      label: string;
+      itemCount: number;
+    }[]>((resolve) => {
+      finishGroupLoad = resolve;
+    });
+    const loadGroupOptions = jest.fn(async () => groupLoad);
+    const pickerDataSource = {
+      loadFields: async () => [
+        { internalName: 'Title', title: 'Title', typeAsString: 'Text' },
+        { internalName: 'Category', title: 'Category', typeAsString: 'Choice' }
+      ],
+      loadLists: async () => [{ id: 'services', title: 'Services' }],
+      resolveListUrl: async () => ({ id: 'services', title: 'Services' })
+    };
+
+    try {
+      await act(async () => {
+        ReactDom.render(
+          <BetterListPropertyPane
+            activeTabId="all"
+            loadGroupOptions={loadGroupOptions}
+            pickerDataSource={pickerDataSource}
+            value={value}
+            onChange={onChange}
+          />,
+          container
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      const groupsSection = Array.from(container.querySelectorAll('button')).find(
+        (button) => button.textContent?.trim() === 'Groups'
+      );
+      expect(groupsSection).toBeDefined();
+      await act(async () => {
+        Simulate.click(groupsSection as HTMLButtonElement);
+      });
+      const editGroups = Array.from(container.querySelectorAll('button')).find(
+        (button) => button.textContent?.trim() === 'Edit groups'
+      );
+      expect(editGroups).toBeDefined();
+      await act(async () => {
+        Simulate.click(editGroups as HTMLButtonElement);
+        await Promise.resolve();
+      });
+      expect(loadGroupOptions).toHaveBeenCalledWith('all', 'Category', { kind: 'all' });
+
+      await act(async () => {
+        ReactDom.render(
+          <BetterListPropertyPane
+            activeTabId="second"
+            loadGroupOptions={loadGroupOptions}
+            pickerDataSource={pickerDataSource}
+            value={value}
+            onChange={onChange}
+          />,
+          container
+        );
+        await Promise.resolve();
+      });
+      await act(async () => {
+        finishGroupLoad?.([{ key: 'alpha', label: 'Alpha', itemCount: 2 }]);
+        await groupLoad;
+        await Promise.resolve();
+      });
+
+      expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+      expect(container.textContent).not.toContain('Loading groups…');
+    } finally {
+      ReactDom.unmountComponentAtNode(container);
+    }
+  });
+  /* eslint-enable @rushstack/pair-react-dom-render-unmount */
 });

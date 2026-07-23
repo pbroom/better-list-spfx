@@ -48,7 +48,11 @@ describe('Better List tab configuration', () => {
                 }
               }
             }]
-          }
+          },
+          groupOrder: [
+            { key: 'organization:42' },
+            { key: 'organization:7', hidden: true }
+          ]
         },
         itemLayoutOverride: {
           itemProperties: ['Title', 'Description'],
@@ -91,7 +95,11 @@ describe('Better List tab configuration', () => {
             }
           }
         }]
-      }
+      },
+      groupOrder: [
+        { key: 'organization:42' },
+        { key: 'organization:7', hidden: true }
+      ]
     });
     expect(tabs[0].itemLayoutOverride).toEqual({
       itemProperties: ['Title', 'Description'],

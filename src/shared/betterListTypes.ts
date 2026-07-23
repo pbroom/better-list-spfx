@@ -208,6 +208,13 @@ export interface IBetterListGroup {
   ungroupedLabel?: string;
 }
 
+export interface IBetterListGroupOrderEntry {
+  /** Stable group identity produced by the Better List grouping pipeline. */
+  key: string;
+  /** Hidden groups remain in the authored order so they can be restored later. */
+  hidden?: boolean;
+}
+
 export type BetterListIconMode = 'none' | 'field' | 'fixed';
 
 export type BetterListTabIcon = 'list' | 'communications' | 'policy' | 'support';
@@ -235,6 +242,8 @@ export interface IBetterListTabGroupingOverride {
   icons?: IBetterListGroupIconsConfiguration;
   /** Optional query evaluated against each distinct grouping relationship. */
   filter?: BetterListFilter;
+  /** Optional author-defined order and visibility for known group identities. */
+  groupOrder?: readonly IBetterListGroupOrderEntry[];
 }
 
 export interface IBetterListTabItemLayoutOverride {
