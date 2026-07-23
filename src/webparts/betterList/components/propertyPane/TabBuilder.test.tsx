@@ -7,12 +7,14 @@ import { IBetterListTabConfig } from '../../../../shared';
 import {
   appendNewTab,
   IBetterListTabFilterField,
+  patchTabsById,
   reorderTabsById,
   resolveTabHeaderClick,
   resolveTabNameDraft,
   shouldToggleTabAccordion,
   tabSortKeyboardCodes,
-  TabBuilder
+  TabBuilder,
+  TabNameField
 } from './TabBuilder';
 
 describe('TabBuilder', () => {
@@ -103,6 +105,157 @@ describe('TabBuilder', () => {
     });
   });
 
+  it('debounces tab-name commits and flushes the latest draft on blur', async () => {
+    jest.useFakeTimers();
+    const container = document.createElement('div');
+    const onCommit = jest.fn();
+
+    try {
+      await act(async () => {
+        ReactDom.render(<TabNameField value="Featured" onCommit={onCommit} />, container);
+      });
+
+      const input = container.querySelector<HTMLInputElement>('input') as HTMLInputElement;
+      await act(async () => {
+        input.value = 'Featured services';
+        Simulate.change(input);
+        jest.advanceTimersByTime(499);
+      });
+      expect(onCommit).not.toHaveBeenCalled();
+
+      await act(async () => {
+        jest.advanceTimersByTime(1);
+      });
+      expect(onCommit).toHaveBeenCalledTimes(1);
+      expect(onCommit).toHaveBeenLastCalledWith('Featured services');
+
+      await act(async () => {
+        input.value = 'Priority services';
+        Simulate.change(input);
+        Simulate.blur(input);
+      });
+      expect(onCommit).toHaveBeenCalledTimes(2);
+      expect(onCommit).toHaveBeenLastCalledWith('Priority services');
+
+      await act(async () => {
+        jest.advanceTimersByTime(500);
+      });
+      expect(onCommit).toHaveBeenCalledTimes(2);
+    } finally {
+      await act(async () => {
+        ReactDom.unmountComponentAtNode(container);
+      });
+      jest.useRealTimers();
+    }
+  });
+
+  it('flushes a pending tab-name draft when the field unmounts', async () => {
+    jest.useFakeTimers();
+    const container = document.createElement('div');
+    const onCommit = jest.fn();
+
+    try {
+      await act(async () => {
+        ReactDom.render(<TabNameField value="Featured" onCommit={onCommit} />, container);
+      });
+
+      const input = container.querySelector<HTMLInputElement>('input') as HTMLInputElement;
+      await act(async () => {
+        input.value = 'Featured services';
+        Simulate.change(input);
+        ReactDom.unmountComponentAtNode(container);
+      });
+
+      expect(onCommit).toHaveBeenCalledTimes(1);
+      expect(onCommit).toHaveBeenCalledWith('Featured services');
+    } finally {
+      if (container.childNodes.length > 0) {
+        await act(async () => {
+          ReactDom.unmountComponentAtNode(container);
+        });
+      }
+      jest.useRealTimers();
+    }
+  });
+
+  it('cancels a stale tab-name draft when an external value arrives', async () => {
+    jest.useFakeTimers();
+    const container = document.createElement('div');
+    const onCommit = jest.fn();
+
+    try {
+      await act(async () => {
+        ReactDom.render(<TabNameField value="Featured" onCommit={onCommit} />, container);
+      });
+
+      const input = container.querySelector<HTMLInputElement>('input') as HTMLInputElement;
+      await act(async () => {
+        input.value = 'Pending rename';
+        Simulate.change(input);
+        ReactDom.render(<TabNameField value="Externally renamed" onCommit={onCommit} />, container);
+      });
+      await act(async () => {
+        jest.advanceTimersByTime(500);
+      });
+
+      expect(input.value).toBe('Externally renamed');
+      expect(onCommit).not.toHaveBeenCalled();
+    } finally {
+      await act(async () => {
+        ReactDom.unmountComponentAtNode(container);
+      });
+      jest.useRealTimers();
+    }
+  });
+
+  it('preserves an overlapping tab edit before the delayed name update renders', async () => {
+    jest.useFakeTimers();
+    const container = document.createElement('div');
+    const tabs: readonly IBetterListTabConfig[] = [
+      { id: 'featured', label: 'Featured', filter: { kind: 'all' } },
+      { id: 'all-services', label: 'All Services', filter: { kind: 'all' } }
+    ];
+    const onChange = jest.fn();
+
+    try {
+      await act(async () => {
+        ReactDom.render(
+          <TabBuilder fields={[]} selectedTabId="featured" tabs={tabs} onChange={onChange} />,
+          container
+        );
+      });
+
+      const nameInput = container.querySelector<HTMLInputElement>('input[required]') as HTMLInputElement;
+      const maximumItemsInput = container.querySelector<HTMLInputElement>('input[type="number"]') as HTMLInputElement;
+
+      await act(async () => {
+        nameInput.value = 'Featured services';
+        Simulate.change(nameInput);
+        maximumItemsInput.value = '5';
+        Simulate.change(maximumItemsInput);
+      });
+
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange.mock.calls[0][0][0]).toMatchObject({ id: 'featured', label: 'Featured', maxItems: 5 });
+
+      await act(async () => {
+        jest.advanceTimersByTime(500);
+      });
+
+      expect(onChange).toHaveBeenCalledTimes(2);
+      expect(onChange.mock.calls[1][0][0]).toMatchObject({
+        id: 'featured',
+        label: 'Featured services',
+        maxItems: 5
+      });
+    } finally {
+      await act(async () => {
+        ReactDom.unmountComponentAtNode(container);
+      });
+      jest.useRealTimers();
+    }
+  });
+
   it('reserves Enter for disclosure while Space controls keyboard sorting', () => {
     expect(tabSortKeyboardCodes).toEqual({
       start: ['Space'],
@@ -176,6 +329,21 @@ describe('TabBuilder', () => {
     expect(reordered.map((tab) => tab.id)).toEqual(['all-services', 'featured']);
     expect(tabs.map((tab) => tab.id)).toEqual(['featured', 'all-services']);
     expect(reorderTabsById(tabs, 'missing', 'featured')).toBe(tabs);
+  });
+
+  it('patches deferred tab-name updates by stable id after reorder and ignores removed tabs', () => {
+    const tabs: readonly IBetterListTabConfig[] = [
+      { id: 'featured', label: 'Featured', filter: { kind: 'all' } },
+      { id: 'all-services', label: 'All Services', filter: { kind: 'all' } }
+    ];
+    const reordered = reorderTabsById(tabs, 'featured', 'all-services');
+    const renamed = patchTabsById(reordered, 'featured', { label: 'Featured services' });
+
+    expect(renamed.map((tab) => `${tab.id}:${tab.label}`)).toEqual([
+      'all-services:All Services',
+      'featured:Featured services'
+    ]);
+    expect(patchTabsById(reordered, 'removed', { label: 'Restored tab' })).toBe(reordered);
   });
 
   it('adds an inheriting tab without copying presentation overrides', () => {
