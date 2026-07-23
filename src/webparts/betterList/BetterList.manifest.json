@@ -18,7 +18,7 @@
         "default": "Better List"
       },
       "description": {
-        "default": "Better List"
+        "default": "Display SharePoint list content as searchable, grouped, configurable list items. Developed by M/EX - Executive Office."
       },
       "officeFabricIconFontName": "Page",
       "properties": {
