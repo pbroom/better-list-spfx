@@ -6,6 +6,7 @@ import { RendererProvider } from '@griffel/react';
 import { FluentProvider, webDarkTheme, webLightTheme } from '@fluentui/react-components';
 
 import {
+  applyBetterListGroupOrder,
   BetterListFieldValue,
   createBetterListGroupingOverride,
   defaultBetterListHtmlTemplate,
@@ -16,7 +17,7 @@ import {
   getBetterListRenderer,
   getItemPropertyUrl,
   parseBetterListGroupIconsConfiguration,
-  groupItems,
+  groupItemsBySourceField,
   IBetterListFieldMappings,
   IBetterListGroupResult,
   IBetterListEffectiveTabConfiguration,
@@ -58,6 +59,7 @@ import {
 import './betterListLab.css';
 
 const defaultProps: BetterListLabProps = {
+  heading: '',
   sourceListId: servicesListId,
   sourceListTitle: servicesListTitle,
   sourceWebUrl: 'https://contoso.sharepoint.com/sites/lab',
@@ -207,6 +209,7 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
         groupIcons={groupIcons}
         groupImageAssetProvider={imageAssetProvider}
         isEditMode={lab.displayMode === 'edit'}
+        heading={props.heading}
         listTitle={props.sourceListTitle}
         emptyMessage="There are no active Services items to display."
         onTabChange={(tabKey) => {
@@ -340,23 +343,19 @@ function createPresentationTab(
       collapsible: group ? configuration.grouping.collapsible : false
     }
   };
-  const groupedItems = configuration.grouping.column
-    ? sourceItems.map((item) => ({
-        ...item,
-        values: {
-          ...item.values,
-          group: formatItemPropertyValue(
-            item.source,
-            configuration.grouping.column,
-            richTextFieldPaths.has(configuration.grouping.column)
-          )
-        }
-      }))
-    : sourceItems;
-  const processed = processItems(groupedItems, tab);
-  const groups: readonly IBetterListGroupResult[] = group
-    ? groupItems(processed, group)
+  const processed = processItems(sourceItems, tab);
+  const discoveredGroups: readonly IBetterListGroupResult[] = group
+    ? groupItemsBySourceField(
+        processed,
+        configuration.grouping.column,
+        configuration.grouping.filter,
+        group.ungroupedLabel,
+        richTextFieldPaths.has(configuration.grouping.column)
+      )
     : [{ key: 'all', label: sourceListTitle || 'Items', items: processed }];
+  const groups = group
+    ? applyBetterListGroupOrder(discoveredGroups, configuration.grouping.groupOrder)
+    : discoveredGroups;
   const itemProperties = configuration.itemLayout.itemProperties;
   const itemElementLinks = configuration.itemLayout.links;
   const items: IBetterListItem[] = [];

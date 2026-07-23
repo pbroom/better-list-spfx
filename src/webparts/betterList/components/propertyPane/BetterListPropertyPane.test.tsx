@@ -69,7 +69,10 @@ describe('BetterListPropertyPane', () => {
     expect(html).toContain('fui-FluentProvider');
     expect(html).toContain('fui-Combobox');
     expect(html).toContain('bl-pane__source-dropdown');
-    expect(html).toContain('aria-label="Heading"');
+    expect(html).toContain('aria-label="Title"');
+    expect(html).toContain('placeholder="Title (optional)"');
+    expect(html.indexOf('aria-label="Source list"')).toBeLessThan(html.indexOf('aria-label="Title"'));
+    expect(html.indexOf('aria-label="Title"')).toBeLessThan(html.indexOf('aria-label="Add tab"'));
     expect(html).toContain('--bl-font-mono: &quot;Geist Mono Variable&quot;');
     expect(html.match(/bl-property-pane-section/g)).toHaveLength(4);
     expect(html).toContain('data-property-pane-section-heading="true"');
@@ -86,7 +89,7 @@ describe('BetterListPropertyPane', () => {
     expect(html).not.toContain('aria-label="Split"');
   });
 
-  it('authors an optional heading without changing the source-list selection', async () => {
+  it('authors an optional title without changing the source-list selection', async () => {
     const container = document.createElement('div');
     const onChange = jest.fn();
     const value = createValue();
@@ -107,7 +110,7 @@ describe('BetterListPropertyPane', () => {
       await Promise.resolve();
     });
 
-    const input = container.querySelector<HTMLInputElement>('input[aria-label="Heading"]');
+    const input = container.querySelector<HTMLInputElement>('input[aria-label="Title"]');
     expect(input).not.toBeNull();
     await act(async () => {
       (input as HTMLInputElement).value = 'Service directory';
@@ -125,44 +128,162 @@ describe('BetterListPropertyPane', () => {
     ReactDom.unmountComponentAtNode(container);
   });
 
-  it('commits a focused heading draft when the property pane unmounts', async () => {
+  it('commits the title after the debounce interval', async () => {
+    jest.useFakeTimers();
     const container = document.createElement('div');
     const onChange = jest.fn();
     const value = createValue();
 
-    await act(async () => {
-      ReactDom.render(
-        <BetterListPropertyPane
-          pickerDataSource={{
-            loadFields: async () => [],
-            loadLists: async () => [{ id: 'services', title: 'Services' }],
-            resolveListUrl: async () => ({ id: 'services', title: 'Services' })
-          }}
-          value={value}
-          onChange={onChange}
-        />,
-        container
-      );
-      await Promise.resolve();
-    });
+    try {
+      await act(async () => {
+        ReactDom.render(
+          <BetterListPropertyPane
+            pickerDataSource={{
+              loadFields: async () => [],
+              loadLists: async () => [{ id: 'services', title: 'Services' }],
+              resolveListUrl: async () => ({ id: 'services', title: 'Services' })
+            }}
+            value={value}
+            onChange={onChange}
+          />,
+          container
+        );
+        await Promise.resolve();
+      });
 
-    const input = container.querySelector<HTMLInputElement>('input[aria-label="Heading"]');
-    expect(input).not.toBeNull();
-    await act(async () => {
-      (input as HTMLInputElement).value = 'Service directory';
-      Simulate.change(input as HTMLInputElement);
-    });
-    expect(onChange).not.toHaveBeenCalled();
+      const input = container.querySelector<HTMLInputElement>('input[aria-label="Title"]') as HTMLInputElement;
+      await act(async () => {
+        input.value = 'Service directory';
+        Simulate.change(input);
+      });
 
-    await act(async () => {
+      act(() => {
+        jest.advanceTimersByTime(499);
+      });
+      expect(onChange).not.toHaveBeenCalled();
+
+      act(() => {
+        jest.advanceTimersByTime(1);
+      });
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange).toHaveBeenLastCalledWith({
+        ...value,
+        heading: 'Service directory'
+      });
+    } finally {
       ReactDom.unmountComponentAtNode(container);
-    });
+      jest.useRealTimers();
+    }
+  });
 
-    expect(onChange).toHaveBeenCalledTimes(1);
-    expect(onChange).toHaveBeenCalledWith({
-      ...value,
-      heading: 'Service directory'
-    });
+  it('resets the title debounce and cancels the pending commit after blur', async () => {
+    jest.useFakeTimers();
+    const container = document.createElement('div');
+    const onChange = jest.fn();
+    const value = createValue();
+
+    try {
+      await act(async () => {
+        ReactDom.render(
+          <BetterListPropertyPane
+            pickerDataSource={{
+              loadFields: async () => [],
+              loadLists: async () => [{ id: 'services', title: 'Services' }],
+              resolveListUrl: async () => ({ id: 'services', title: 'Services' })
+            }}
+            value={value}
+            onChange={onChange}
+          />,
+          container
+        );
+        await Promise.resolve();
+      });
+
+      const input = container.querySelector<HTMLInputElement>('input[aria-label="Title"]') as HTMLInputElement;
+      await act(async () => {
+        input.value = 'Service';
+        Simulate.change(input);
+      });
+      act(() => {
+        jest.advanceTimersByTime(300);
+      });
+
+      await act(async () => {
+        input.value = 'Service directory';
+        Simulate.change(input);
+      });
+      act(() => {
+        jest.advanceTimersByTime(200);
+      });
+      expect(onChange).not.toHaveBeenCalled();
+
+      await act(async () => {
+        Simulate.blur(input);
+      });
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange).toHaveBeenLastCalledWith({
+        ...value,
+        heading: 'Service directory'
+      });
+
+      act(() => {
+        jest.runOnlyPendingTimers();
+      });
+      expect(onChange).toHaveBeenCalledTimes(1);
+    } finally {
+      ReactDom.unmountComponentAtNode(container);
+      jest.useRealTimers();
+    }
+  });
+
+  it('commits a focused title draft when the property pane unmounts', async () => {
+    jest.useFakeTimers();
+    const container = document.createElement('div');
+    const onChange = jest.fn();
+    const value = createValue();
+
+    try {
+      await act(async () => {
+        ReactDom.render(
+          <BetterListPropertyPane
+            pickerDataSource={{
+              loadFields: async () => [],
+              loadLists: async () => [{ id: 'services', title: 'Services' }],
+              resolveListUrl: async () => ({ id: 'services', title: 'Services' })
+            }}
+            value={value}
+            onChange={onChange}
+          />,
+          container
+        );
+        await Promise.resolve();
+      });
+
+      const input = container.querySelector<HTMLInputElement>('input[aria-label="Title"]');
+      expect(input).not.toBeNull();
+      await act(async () => {
+        (input as HTMLInputElement).value = 'Service directory';
+        Simulate.change(input as HTMLInputElement);
+      });
+      expect(onChange).not.toHaveBeenCalled();
+
+      await act(async () => {
+        ReactDom.unmountComponentAtNode(container);
+      });
+
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange).toHaveBeenCalledWith({
+        ...value,
+        heading: 'Service directory'
+      });
+      act(() => {
+        jest.runOnlyPendingTimers();
+      });
+      expect(onChange).toHaveBeenCalledTimes(1);
+    } finally {
+      ReactDom.unmountComponentAtNode(container);
+      jest.useRealTimers();
+    }
   });
 
   it('resolves a pasted URL before replacing the selected list', async () => {
