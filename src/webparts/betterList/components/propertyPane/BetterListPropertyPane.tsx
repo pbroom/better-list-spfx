@@ -24,7 +24,6 @@ import {
   parseBetterListFieldPath,
   collectBetterListQueryFields,
   createDefaultTabs,
-  betterListDefaultSortOptions,
   betterListSemanticSlots,
   defaultBetterListHtmlTemplate,
   betterListTemplateMaxBytes,
@@ -52,6 +51,7 @@ import {
 import { ISourceEditorTarget } from '../../../../vendor/source-editor/SourceEditorField';
 import { SourceWorkspaceField } from '../../../../vendor/source-editor/SourceWorkspaceField';
 import { GroupIconColorField } from '../GroupIconColorField';
+import { DefaultSortingMenu } from './DefaultSortingMenu';
 import {
   GroupOrderEditorDialog,
   IBetterListGroupOption
@@ -591,12 +591,6 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
   const groupingOptions = createGroupingColumnOptions(groupingFields);
   const selectedGroupingOption = groupingOptions.find((option) => option.value === activeGrouping.column);
   const defaultSortColumnOptions = createBetterListSortableFieldOptions(fields);
-  const selectedDefaultSort = betterListDefaultSortOptions.find(
-    (option) => option.value === props.value.defaultSort
-  ) || betterListDefaultSortOptions[0];
-  const selectedDefaultSortColumn = defaultSortColumnOptions.find(
-    (option) => option.fieldPath === props.value.defaultSortColumn
-  );
   const tabFilterFields = createTabFilterFields(props.value.fieldMappings, fields);
   const groupFilterFields = createGroupFilterFields(fields, activeGrouping.column);
   const groupQueryFields = groupFilterFields.map(toGroupQueryField);
@@ -744,55 +738,14 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
           />
           <label className="bl-pane__field">
             <span className="bl-pane__label">Default sorting</span>
-            <Dropdown
-              aria-label="Default sorting"
-              listbox={{ className: betterListFluentSurfaceClassName }}
-              mountNode={betterListPortalMountNodeProps}
-              positioning={createBetterListPortalPositioning(targetDocument)}
-              selectedOptions={[props.value.defaultSort]}
-              value={selectedDefaultSort?.label || 'None (default list order)'}
-              onOptionSelect={(_event, data) => {
-                const defaultSort = betterListDefaultSortOptions.find(
-                  (option) => option.value === data.optionValue
-                )?.value;
-                if (defaultSort) {
-                  patchDefaultSort(defaultSort);
-                }
-              }}
-            >
-              {betterListDefaultSortOptions.map((option) => (
-                <Option key={option.value} text={option.label} value={option.value}>
-                  {option.label}
-                </Option>
-              ))}
-            </Dropdown>
+            <DefaultSortingMenu
+              columnOptions={defaultSortColumnOptions}
+              selectedColumn={props.value.defaultSortColumn}
+              selectedMode={props.value.defaultSort}
+              targetDocument={targetDocument}
+              onChange={patchDefaultSort}
+            />
           </label>
-          {props.value.defaultSort === 'column' ? (
-            <label className="bl-pane__field">
-              <span className="bl-pane__label">Column</span>
-              <Dropdown
-                aria-label="Default sorting column"
-                listbox={{
-                  className: betterListFluentSurfaceClassName,
-                  style: { maxHeight: 'min(360px, calc(100vh - 16px))', overflowY: 'auto' }
-                }}
-                mountNode={betterListPortalMountNodeProps}
-                placeholder="Select a column"
-                positioning={createBetterListPortalPositioning(targetDocument)}
-                selectedOptions={props.value.defaultSortColumn ? [props.value.defaultSortColumn] : []}
-                value={selectedDefaultSortColumn?.label || ''}
-                onOptionSelect={(_event, data) =>
-                  patchDefaultSort('column', data.optionValue || '')
-                }
-              >
-                {defaultSortColumnOptions.map((option) => (
-                  <Option key={option.fieldPath} text={option.label} value={option.fieldPath}>
-                    {option.label}
-                  </Option>
-                ))}
-              </Dropdown>
-            </label>
-          ) : null}
         </PropertyPaneSection>
 
         <PropertyPaneSection
