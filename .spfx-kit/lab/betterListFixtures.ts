@@ -12,7 +12,7 @@ export const categoriesListId = '26b8db39-7a13-4fe5-9a88-bdbfe54676a4';
 
 const categoryLookupFields: readonly IBetterListFieldDescriptor[] = [
   descriptor('Title', 'Title', 'Text', true),
-  descriptor('Description', 'Description', 'Note'),
+  { ...descriptor('Description', 'Description', 'Note'), richText: true, richTextMode: 'FullHtml' },
   descriptor('Modified', 'Last updated', 'DateTime'),
   descriptor('SortOrder', 'Sort order', 'Number'),
   descriptor('Active', 'Active', 'Boolean')
@@ -20,7 +20,7 @@ const categoryLookupFields: readonly IBetterListFieldDescriptor[] = [
 
 export const servicesFields: readonly IBetterListFieldInfo[] = [
   field('Title', 'Title', 'Text', true),
-  field('Description', 'Description', 'Note'),
+  { ...field('Description', 'Description', 'Note'), richText: true, richTextMode: 'FullHtml' },
   field('URL', 'URL', 'URL'),
   field('UrlLabel', 'URL label', 'Text'),
   field('Category', 'Category', 'Lookup', false, false, 'Title', categoriesListId),
@@ -38,6 +38,8 @@ export const servicesAuthoringFields: readonly IBetterListFieldDescriptor[] =
     internalName: sourceField.internalName,
     title: sourceField.title,
     typeAsString: sourceField.typeAsString,
+    richText: sourceField.richText,
+    richTextMode: sourceField.richTextMode,
     allowMultipleValues: sourceField.allowMultipleValues,
     lookupListId: sourceField.lookupListId,
     lookupField: sourceField.lookupField,
@@ -48,7 +50,13 @@ export const servicesAuthoringFields: readonly IBetterListFieldDescriptor[] =
 
 export const servicesFieldMappings: IBetterListFieldMappings = {
   title: { kind: 'text', internalName: 'Title', displayName: 'Title' },
-  description: { kind: 'text', internalName: 'Description', displayName: 'Description' },
+  description: {
+    kind: 'text',
+    internalName: 'Description',
+    displayName: 'Description',
+    fieldType: 'Note',
+    richText: true
+  },
   url: { kind: 'url', internalName: 'URL', displayName: 'URL', valueProperty: 'url' },
   urlLabel: { kind: 'text', internalName: 'UrlLabel', displayName: 'URL label' },
   category: { kind: 'lookup', internalName: 'Category', displayName: 'Category', valueProperty: 'title' },

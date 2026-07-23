@@ -450,6 +450,58 @@ describe('Better List item processing', () => {
     expect(filteredGroups[0].source).toEqual({ PoC: { Id: 8, Title: 'Grace', Department: 'Research' } });
   });
 
+  it('groups by normalized metadata instead of raw rich-text markup', () => {
+    const item = normalizeItem(
+      {
+        Id: 14,
+        Title: 'Rich group',
+        Summary: '<div class="ExternalClassFixture"><p>General&nbsp;services</p></div>'
+      },
+      {
+        title: { internalName: 'Title', kind: 'text' },
+        metadata: [{
+          key: 'Summary',
+          label: 'Summary',
+          mapping: { internalName: 'Summary', kind: 'text', richText: true }
+        }]
+      }
+    );
+
+    expect(groupItemsBySourceField([item], 'Summary', { kind: 'all' }, 'Other', true)[0].label)
+      .toBe('General services');
+  });
+
+  it('keeps normalized multi-lookup group labels aligned when an earlier target value is empty', () => {
+    const item = normalizeItem(
+      {
+        Id: 15,
+        Title: 'Lookup groups',
+        Category: [
+          { Id: 1, Description: '' },
+          { Id: 2, Description: '<p>Second&nbsp;group</p>' }
+        ]
+      },
+      {
+        title: { internalName: 'Title', kind: 'text' },
+        metadata: [{
+          key: 'Category/Description',
+          label: 'Category description',
+          mapping: {
+            internalName: 'Category',
+            fieldPath: 'Category/Description',
+            kind: 'lookup',
+            lookupValueField: 'Description',
+            richText: true,
+            multi: true
+          }
+        }]
+      }
+    );
+
+    expect(groupItemsBySourceField([item], 'Category.Description', { kind: 'all' }, 'Other', true)
+      .map((group) => group.label)).toEqual(['Other', 'Second group']);
+  });
+
   it('treats missing relationship properties as null in group filters', () => {
     expect(sourceMatchesFilter(
       { PoC: { Id: 7, Title: 'Ada' } },

@@ -29,10 +29,13 @@ import {
   createBetterListLoadSignature,
   defaultBetterListScss,
   defaultBetterListHtmlTemplate,
+  formatItemPropertyDisplayValue,
   formatItemPropertyValue,
+  getRichTextItemPropertyPaths,
   getBetterListRenderer,
   getItemPropertyUrl,
   groupItemsBySourceField,
+  itemPropertyFieldPathsEqual,
   IBetterListFieldMappings,
   IBetterListFieldInfo,
   IBetterListGroupResult,
@@ -113,10 +116,8 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
   public render(): void {
     const tabs = this._createEffectiveTabConfigurations();
     const fieldMappings = this._readMappings();
-    const descriptionFieldPath = fieldMappings.description?.internalName;
-    const richTextFieldPaths = new Set(
-      (fieldMappings.metadata || []).filter((entry) => entry.mapping.richText).map((entry) => entry.key)
-    );
+    const descriptionFieldPath = fieldMappings.description?.fieldPath || fieldMappings.description?.internalName;
+    const richTextFieldPaths = getRichTextItemPropertyPaths(fieldMappings);
     const itemLayout = parseItemLayoutConfiguration(
       this.properties.itemLayoutJson,
       parseItemPropertyFields(this.properties.itemPropertiesJson)
@@ -519,7 +520,8 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
           processed,
           configuration.grouping.column,
           configuration.grouping.filter,
-          group.ungroupedLabel
+          group.ungroupedLabel,
+          richTextFieldPaths.has(configuration.grouping.column)
         )
       : [{ key: 'all', label: this.properties.sourceListTitle || 'Items', items: processed }];
     const items: IBetterListItem[] = [];
@@ -570,12 +572,15 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     const elements = itemProperties
       .filter((fieldPath) => fieldPath !== 'Title')
       .map((fieldPath) => {
-        const isDescription = fieldPath === descriptionFieldPath;
-        const value = formatItemPropertyValue(
-          item.source,
-          fieldPath,
-          isDescription || richTextFieldPaths.has(fieldPath)
+        const isDescription = Boolean(
+          descriptionFieldPath && itemPropertyFieldPathsEqual(fieldPath, descriptionFieldPath)
         );
+        const normalizedMetadata = item.metadata.find((entry) => itemPropertyFieldPathsEqual(entry.key, fieldPath));
+        const value = isDescription
+          ? item.description
+          : normalizedMetadata
+            ? formatItemPropertyDisplayValue(normalizedMetadata.value)
+            : formatItemPropertyValue(item.source, fieldPath, richTextFieldPaths.has(fieldPath));
         return value
           ? {
               key: fieldPath,

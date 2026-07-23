@@ -1,4 +1,5 @@
 import { toPlainText } from './plainText';
+import { IBetterListFieldMappings } from './betterListTypes';
 
 const REQUIRED_TITLE_FIELD = 'Title';
 export const betterListMaxItemRows = 5;
@@ -11,6 +12,40 @@ export interface IBetterListItemLayoutConfiguration {
   itemProperties: readonly string[];
   rows: BetterListItemLayoutRows;
   links: BetterListItemElementLinks;
+}
+
+export function itemPropertyFieldPathsEqual(left: string, right: string): boolean {
+  return normalizeComparableFieldPath(left) === normalizeComparableFieldPath(right);
+}
+
+/** Returns item-layout field paths whose SharePoint schema marks them as rich text. */
+export function getRichTextItemPropertyPaths(mappings: Partial<IBetterListFieldMappings>): ReadonlySet<string> {
+  const paths = new Set<string>();
+  const addPath = (fieldPath: string): void => {
+    const normalized = normalizeComparableFieldPath(fieldPath);
+    paths.add(fieldPath);
+    paths.add(normalized);
+    paths.add(normalized.replace('/', '.'));
+  };
+  const description = mappings.description;
+  if (description?.richText) {
+    addPath(description.internalName);
+    if (description.fieldPath) {
+      addPath(description.fieldPath);
+    }
+  }
+  (mappings.metadata || []).forEach((entry) => {
+    if (!entry.mapping.richText) {
+      return;
+    }
+    addPath(entry.key);
+    addPath(entry.mapping.fieldPath || entry.mapping.internalName);
+  });
+  return paths;
+}
+
+function normalizeComparableFieldPath(fieldPath: string): string {
+  return fieldPath.trim().split(/[/.]/).filter(Boolean).join('/');
 }
 
 interface IBetterListItemLayoutConfigurationV2 {
@@ -207,6 +242,11 @@ export function formatItemPropertyValue(
 ): string | undefined {
   const value = readPath(source, fieldPath);
   return formatValue(value, richText);
+}
+
+/** Formats an already-normalized field value for item-layout display. */
+export function formatItemPropertyDisplayValue(value: unknown): string | undefined {
+  return formatValue(value, false);
 }
 
 export function readItemPropertyValue(

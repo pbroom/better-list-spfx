@@ -5,6 +5,7 @@ import {
   IBetterListAudienceIdentity,
   IBetterListFieldInfo,
   IBetterListFieldMappings,
+  IBetterListLookupFieldMapping,
   IBetterListPersonFieldMapping,
   IBetterListRelationshipTarget,
   IBetterListItem,
@@ -189,7 +190,11 @@ function richTextModeFromSchema(schemaXml: string): string | undefined {
 function mappingsNeedSchemaResolution(mappings: IBetterListFieldMappings): boolean {
   return allMappings(mappings).some((mapping) => {
     const source = mapping.sourceInternalName || mapping.internalName;
-    return source.startsWith('_') ||
+    const legacyTextMapping = mapping !== mappings.title &&
+      mapping.richText === undefined &&
+      (mapping.kind === 'text' || mapping.kind === 'lookup');
+    return legacyTextMapping ||
+      source.startsWith('_') ||
       Boolean(mapping.queryName && mapping.queryName !== source) ||
       (mapping.kind === 'person' && (
         mapping.valueProperty === 'loginName' ||
@@ -233,7 +238,9 @@ function resolveFieldMappings(
       fieldPath: targetInternalName ? `${sourceInternalName}/${targetInternalName}` : sourceInternalName,
       queryName: field.entityPropertyName || sourceInternalName,
       fieldType: mapping.fieldType || field.typeAsString,
-      richText: mapping.richText ?? field.richText,
+      richText: relationshipKind === 'lookup'
+        ? mapping.richText ?? target?.richText
+        : mapping.richText ?? field.richText,
       ...(relationshipKind && target ? {
         relationship: {
           ...mapping.relationship,
@@ -591,12 +598,13 @@ export class SharePointBetterListDataSource implements IBetterListDataSource {
 
   public async loadItems(request: IBetterListLoadRequest): Promise<IBetterListLoadResult> {
     const webUrl: string = this._webUrlFor(request.list);
-    // Hydrate any authored/stale alias and relationship mappings against the
-    // live schema. Plain fields without an alias retain the zero-discovery path.
+    // Hydrate legacy mappings that predate schema-authored rich-text metadata,
+    // plus any authored/stale alias and relationship mappings, against the live schema.
     const fields = mappingsNeedSchemaResolution(request.mappings)
       ? await this.discoverFields(request.list)
       : undefined;
     const mappings = fields ? resolveFieldMappings(request.mappings, fields) : request.mappings;
+    await this._hydrateLookupTargetSchemas(webUrl, mappings);
     const parts: { select: readonly string[]; expand: readonly string[] } = queryParts(mappings);
     const requiredSelect = queryParts({
       title: mappings.title,
@@ -732,6 +740,66 @@ export class SharePointBetterListDataSource implements IBetterListDataSource {
       });
     }
     return result;
+  }
+
+  private async _hydrateLookupTargetSchemas(
+    webUrl: string,
+    mappings: IBetterListFieldMappings
+  ): Promise<void> {
+    const unresolved = allMappings(mappings).filter(
+      (mapping): mapping is IBetterListLookupFieldMapping =>
+        mapping.kind === 'lookup' &&
+        mapping.richText === undefined &&
+        Boolean(mapping.relationship?.lookupListId && mapping.relationship.target.internalName)
+    );
+    if (unresolved.length === 0) {
+      return;
+    }
+
+    const byLookupList = new Map<string, IBetterListLookupFieldMapping[]>();
+    unresolved.forEach((mapping) => {
+      const lookupListId = mapping.relationship?.lookupListId;
+      if (!lookupListId) {
+        return;
+      }
+      const listMappings = byLookupList.get(lookupListId) || [];
+      listMappings.push(mapping);
+      byLookupList.set(lookupListId, listMappings);
+    });
+
+    for (const [lookupListId, listMappings] of Array.from(byLookupList.entries())) {
+      let targetFields: readonly IBetterListFieldInfo[];
+      try {
+        targetFields = await this.discoverFields({ id: lookupListId, webUrl });
+      } catch {
+        continue;
+      }
+      const byInternalName = new Map(targetFields.map((field) => [
+        field.internalName.toLocaleLowerCase(),
+        field
+      ] as const));
+      listMappings.forEach((mapping) => {
+        const relationship = mapping.relationship;
+        const target = relationship?.target;
+        if (!relationship || !target) {
+          return;
+        }
+        const targetField = byInternalName.get(target.internalName.toLocaleLowerCase());
+        if (!targetField) {
+          return;
+        }
+        mapping.richText = targetField.richText;
+        mapping.lookupValueQueryName = targetField.entityPropertyName || targetField.internalName;
+        mapping.relationship = {
+          ...relationship,
+          target: {
+            ...target,
+            queryName: targetField.entityPropertyName || target.queryName || target.internalName,
+            richText: targetField.richText
+          }
+        };
+      });
+    }
   }
 
   private async _loadUserInformationRows(

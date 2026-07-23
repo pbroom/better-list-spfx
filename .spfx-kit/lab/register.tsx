@@ -10,7 +10,9 @@ import {
   createBetterListGroupingOverride,
   defaultBetterListHtmlTemplate,
   defaultBetterListScss,
+  formatItemPropertyDisplayValue,
   formatItemPropertyValue,
+  getRichTextItemPropertyPaths,
   getBetterListRenderer,
   getItemPropertyUrl,
   parseBetterListGroupIconsConfiguration,
@@ -20,6 +22,7 @@ import {
   IBetterListEffectiveTabConfiguration,
   IBetterListItem as ICoreBetterListItem,
   IBetterListTabConfig,
+  itemPropertyFieldPathsEqual,
   parseItemLayoutConfiguration,
   parseItemPropertyFields,
   parseTabConfiguration,
@@ -160,9 +163,10 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
     () => effectiveTabs.map((tab) => createPresentationTab(
       items,
       tab,
-      props.sourceListTitle
+      props.sourceListTitle,
+      effectiveMappings
     )),
-    [effectiveTabs, items, props.sourceListTitle]
+    [effectiveMappings, effectiveTabs, items, props.sourceListTitle]
   );
   const activeConfiguration = effectiveTabs.find((entry) => entry.tab.id === activeTabKey) ?? effectiveTabs[0];
 
@@ -319,8 +323,11 @@ function readTabs(serialized: string): readonly IBetterListTabConfig[] {
 function createPresentationTab(
   sourceItems: readonly ICoreBetterListItem[],
   configuration: IBetterListEffectiveTabConfiguration,
-  sourceListTitle: string
+  sourceListTitle: string,
+  mappings: IBetterListFieldMappings
 ): IBetterListTab {
+  const richTextFieldPaths = getRichTextItemPropertyPaths(mappings);
+  const descriptionFieldPath = mappings.description?.fieldPath || mappings.description?.internalName;
   const group = configuration.grouping.column
     ? { field: 'group' as const, direction: 'ascending' as const, ungroupedLabel: 'Other' }
     : undefined;
@@ -338,7 +345,11 @@ function createPresentationTab(
         ...item,
         values: {
           ...item.values,
-          group: formatItemPropertyValue(item.source, configuration.grouping.column)
+          group: formatItemPropertyValue(
+            item.source,
+            configuration.grouping.column,
+            richTextFieldPaths.has(configuration.grouping.column)
+          )
         }
       }))
     : sourceItems;
@@ -354,11 +365,19 @@ function createPresentationTab(
       const elements = itemProperties
         .filter((fieldPath) => fieldPath !== 'Title')
         .map((fieldPath) => {
-          const value = formatItemPropertyValue(item.source, fieldPath);
+          const isDescription = Boolean(
+            descriptionFieldPath && itemPropertyFieldPathsEqual(fieldPath, descriptionFieldPath)
+          );
+          const normalizedMetadata = item.metadata.find((entry) => itemPropertyFieldPathsEqual(entry.key, fieldPath));
+          const value = isDescription
+            ? item.description
+            : normalizedMetadata
+              ? formatItemPropertyDisplayValue(normalizedMetadata.value)
+              : formatItemPropertyValue(item.source, fieldPath, richTextFieldPaths.has(fieldPath));
           return value
             ? {
                 key: fieldPath,
-                kind: fieldPath === 'Description' ? ('description' as const) : ('metadata' as const),
+                kind: isDescription ? ('description' as const) : ('metadata' as const),
                 value,
                 href: itemElementLinks[fieldPath]
                   ? getItemPropertyUrl(item.source, itemElementLinks[fieldPath])
@@ -377,7 +396,8 @@ function createPresentationTab(
         id: String(item.id),
         title: item.title,
         href: itemElementLinks.Title ? getItemPropertyUrl(item.source, itemElementLinks.Title) : undefined,
-        description: itemProperties.indexOf('Description') >= 0 ? formatItemPropertyValue(item.source, 'Description') : undefined,
+        description:
+          descriptionFieldPath && itemProperties.indexOf(descriptionFieldPath) >= 0 ? item.description : undefined,
         metadata,
         elements,
         groupId: group.key,
