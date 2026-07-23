@@ -6,6 +6,7 @@ import {
   appendNewTab,
   IBetterListTabFilterField,
   reorderTabsById,
+  resolveTabHeaderClick,
   resolveTabNameDraft,
   shouldToggleTabAccordion,
   tabSortKeyboardCodes,
@@ -109,6 +110,14 @@ describe('TabBuilder', () => {
     expect(tabSortKeyboardCodes.start).not.toContain('Enter');
     expect(shouldToggleTabAccordion(true)).toBe(false);
     expect(shouldToggleTabAccordion(false)).toBe(true);
+  });
+
+  it('keeps header selection and disclosure behavior independent', () => {
+    expect(resolveTabHeaderClick(false, true, true)).toEqual({ select: false, toggle: true });
+    expect(resolveTabHeaderClick(true, true, true)).toEqual({ select: false, toggle: true });
+    expect(resolveTabHeaderClick(false, false, true)).toEqual({ select: true, toggle: false });
+    expect(resolveTabHeaderClick(true, false, true)).toEqual({ select: false, toggle: true });
+    expect(resolveTabHeaderClick(false, false, false)).toEqual({ select: false, toggle: true });
   });
 
   it('reorders tabs by stable id without mutating the source', () => {

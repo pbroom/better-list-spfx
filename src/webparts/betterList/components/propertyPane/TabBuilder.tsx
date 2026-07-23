@@ -102,20 +102,6 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({
     })
   );
 
-  React.useEffect(() => {
-    if (!selectedTabId) {
-      return;
-    }
-    setClosedTabIds((current) => {
-      if (!current.has(selectedTabId)) {
-        return current;
-      }
-      const next = new Set(current);
-      next.delete(selectedTabId);
-      return next;
-    });
-  }, [selectedTabId]);
-
   const patchTab = (index: number, patch: Partial<IBetterListTabConfig>): void => {
     onChange(tabs.map((tab, candidateIndex) => (candidateIndex === index ? { ...tab, ...patch } : tab)));
   };
@@ -202,10 +188,6 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({
               }
               const nextOpenTabIds = new Set(data.openItems);
               setClosedTabIds(new Set(tabs.filter((tab) => !nextOpenTabIds.has(tab.id)).map((tab) => tab.id)));
-              const newlyOpened = data.openItems.find((tabId) => closedTabIds.has(tabId));
-              if (newlyOpened) {
-                onSelectedTabChange?.(newlyOpened);
-              }
             }}
           >
             {tabs.map((tab, index) => {
@@ -224,7 +206,7 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({
                   selected={tab.id === selectedTabId}
                   tab={tab}
                   tabsLength={tabs.length}
-                  onSelect={() => onSelectedTabChange?.(tab.id)}
+                  onSelect={onSelectedTabChange ? () => onSelectedTabChange(tab.id) : undefined}
                   onRemove={() => removeTab(index)}
                 >
                   {open ? (
@@ -369,7 +351,7 @@ interface ISortableTabCardProps {
   selected: boolean;
   tab: IBetterListTabConfig;
   tabsLength: number;
-  onSelect: () => void;
+  onSelect?: () => void;
   onRemove: () => void;
 }
 
@@ -397,8 +379,16 @@ const SortableTabCard: React.FunctionComponent<ISortableTabCardProps> = ({
       className={`bl-tabs-builder__card${isDragging ? ' is-dragging' : ''}`}
       data-tab-selected={selected || undefined}
       data-tab-sortable={tab.id}
-      onFocusCapture={onSelect}
-      onPointerDown={onSelect}
+      onFocusCapture={(event) => {
+        if (!isWithinTabCardHeading(event.target)) {
+          onSelect?.();
+        }
+      }}
+      onPointerDown={(event) => {
+        if (!isWithinTabCardHeading(event.target)) {
+          onSelect?.();
+        }
+      }}
       ref={setNodeRef}
       style={style}
       value={tab.id}
@@ -418,6 +408,19 @@ const SortableTabCard: React.FunctionComponent<ISortableTabCardProps> = ({
               'aria-label': `Tab ${index + 1}: ${tab.label}. ${reorderInstructions}`,
               className: 'bl-tabs-builder__accordion-button',
               id: headerId,
+              onClick: (event: React.MouseEvent<HTMLButtonElement>) => {
+                const action = resolveTabHeaderClick(
+                  selected,
+                  isWithinTabExpandIcon(event.target),
+                  onSelect !== undefined
+                );
+                if (!action.toggle) {
+                  event.preventDefault();
+                }
+                if (action.select) {
+                  onSelect?.();
+                }
+              },
               ref: setActivatorNodeRef
             } as unknown as NonNullable<React.ComponentProps<typeof AccordionHeader>['button']>
           }
@@ -449,6 +452,25 @@ const SortableTabCard: React.FunctionComponent<ISortableTabCardProps> = ({
     </AccordionItem>
   );
 };
+
+export function resolveTabHeaderClick(
+  selected: boolean,
+  expandIcon: boolean,
+  canSelect: boolean
+): { select: boolean; toggle: boolean } {
+  if (expandIcon || !canSelect || selected) {
+    return { select: false, toggle: true };
+  }
+  return { select: true, toggle: false };
+}
+
+function isWithinTabCardHeading(target: EventTarget): boolean {
+  return target instanceof Element && target.closest('.bl-tabs-builder__card-heading') !== null;
+}
+
+function isWithinTabExpandIcon(target: EventTarget): boolean {
+  return target instanceof Element && target.closest('.bl-tabs-builder__accordion-expand-icon') !== null;
+}
 
 export const TabNameField: React.FunctionComponent<{
   value: string;
