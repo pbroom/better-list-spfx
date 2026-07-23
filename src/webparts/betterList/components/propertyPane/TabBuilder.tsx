@@ -76,6 +76,7 @@ export interface ITabBuilderProps {
 }
 
 const reorderInstructions = 'Drag to reorder. For keyboard sorting, focus this row and press Space.';
+const tabNameCommitDelayMs = 500;
 
 export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({
   fields,
@@ -90,6 +91,8 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({
   const [activeTabId, setActiveTabId] = React.useState<string>();
   const [iconPickerTabId, setIconPickerTabId] = React.useState<string>();
   const keyboardSortingRef = React.useRef(false);
+  const tabsRef = React.useRef(tabs);
+  const onChangeRef = React.useRef(onChange);
   const openTabIds = tabs.filter((tab) => !closedTabIds.has(tab.id)).map((tab) => tab.id);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -116,9 +119,20 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({
     });
   }, [selectedTabId]);
 
+  tabsRef.current = tabs;
+  onChangeRef.current = onChange;
+
   const patchTab = (index: number, patch: Partial<IBetterListTabConfig>): void => {
     onChange(tabs.map((tab, candidateIndex) => (candidateIndex === index ? { ...tab, ...patch } : tab)));
   };
+
+  const patchTabById = React.useCallback((tabId: string, patch: Partial<IBetterListTabConfig>): void => {
+    const latestTabs = tabsRef.current;
+    const nextTabs = patchTabsById(latestTabs, tabId, patch);
+    if (nextTabs !== latestTabs) {
+      onChangeRef.current(nextTabs);
+    }
+  }, []);
 
   const addTab = (): void => {
     const nextTabs = appendNewTab(tabs);
@@ -225,7 +239,7 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({
                 >
                   {open ? (
                     <AccordionPanel aria-labelledby={headerId} className="bl-tabs-builder__card-body" id={panelId}>
-                      <TabNameField value={tab.label} onCommit={(label) => patchTab(index, { label })} />
+                      <TabNameField value={tab.label} onCommit={(label) => patchTabById(tab.id, { label })} />
 
                       <div className="bl-tabs-builder__grid">
                         <div className="bl-tabs-builder__field">
@@ -492,24 +506,53 @@ export const TabNameField: React.FunctionComponent<{
 }> = ({ value, onCommit }) => {
   const [draft, setDraft] = React.useState(value);
   const cancelBlur = React.useRef(false);
+  const commitTimerRef = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const draftRef = React.useRef(value);
+  const valueRef = React.useRef(value);
+  const onCommitRef = React.useRef(onCommit);
 
-  React.useEffect(() => {
-    setDraft(value);
-  }, [value]);
+  valueRef.current = value;
+  onCommitRef.current = onCommit;
 
-  const commit = (): void => {
+  const clearCommitTimer = React.useCallback((): void => {
+    if (commitTimerRef.current !== undefined) {
+      clearTimeout(commitTimerRef.current);
+      commitTimerRef.current = undefined;
+    }
+  }, []);
+
+  const commit = React.useCallback((updateLocalDraft: boolean): void => {
+    clearCommitTimer();
     if (cancelBlur.current) {
       cancelBlur.current = false;
       return;
     }
-    const resolved = resolveTabNameDraft(draft, value);
+    const resolved = resolveTabNameDraft(draftRef.current, valueRef.current);
     if (resolved.commit) {
-      onCommit(resolved.commit);
+      valueRef.current = resolved.commit;
+      onCommitRef.current(resolved.commit);
     }
-    if (resolved.draft !== draft) {
+    if (updateLocalDraft && resolved.draft !== draftRef.current) {
+      draftRef.current = resolved.draft;
       setDraft(resolved.draft);
     }
-  };
+  }, [clearCommitTimer]);
+
+  const commitVisibleDraft = React.useCallback((): void => commit(true), [commit]);
+
+  const scheduleCommit = React.useCallback((): void => {
+    clearCommitTimer();
+    commitTimerRef.current = setTimeout(commitVisibleDraft, tabNameCommitDelayMs);
+  }, [clearCommitTimer, commitVisibleDraft]);
+
+  React.useEffect(() => () => commit(false), [commit]);
+
+  React.useEffect(() => {
+    clearCommitTimer();
+    draftRef.current = value;
+    valueRef.current = value;
+    setDraft(value);
+  }, [clearCommitTimer, value]);
 
   return (
     <label className="bl-tabs-builder__field">
@@ -517,16 +560,22 @@ export const TabNameField: React.FunctionComponent<{
       <input
         required
         value={draft}
-        onBlur={commit}
-        onChange={(event) => setDraft(event.currentTarget.value)}
+        onBlur={commitVisibleDraft}
+        onChange={(event) => {
+          draftRef.current = event.currentTarget.value;
+          setDraft(event.currentTarget.value);
+          scheduleCommit();
+        }}
         onKeyDown={(event) => {
           if (event.key === 'Enter') {
             event.preventDefault();
             event.currentTarget.blur();
           } else if (event.key === 'Escape') {
             event.preventDefault();
+            clearCommitTimer();
             cancelBlur.current = true;
-            setDraft(value);
+            draftRef.current = valueRef.current;
+            setDraft(valueRef.current);
             event.currentTarget.blur();
           }
         }}
@@ -544,6 +593,17 @@ export const resolveTabNameDraft = (
     return { draft: currentValue };
   }
   return next === currentValue ? { draft: next } : { draft: next, commit: next };
+};
+
+export const patchTabsById = (
+  tabs: readonly IBetterListTabConfig[],
+  tabId: string,
+  patch: Partial<IBetterListTabConfig>
+): readonly IBetterListTabConfig[] => {
+  if (!tabs.some((tab) => tab.id === tabId)) {
+    return tabs;
+  }
+  return tabs.map((tab) => (tab.id === tabId ? { ...tab, ...patch } : tab));
 };
 
 export const FilterQueryEditor: React.FunctionComponent<{
