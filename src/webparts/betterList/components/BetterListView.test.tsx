@@ -345,7 +345,9 @@ describe('BetterListView', () => {
 
     expect(html).toContain('better-list__search-controls');
     expect(html).toContain('aria-label="Sort items"');
-    expect(html).toContain('>Sort<');
+    expect(html).toContain('better-list__sort-trigger');
+    expect(html).toContain('aria-haspopup="menu"');
+    expect(html).not.toContain('better-list__sort-tag');
     expect(html.indexOf('aria-label="Sort items"')).toBeLessThan(html.indexOf('type="search"'));
     expect(sortingOnlyHtml).toContain('aria-label="Sort items"');
     expect(sortingOnlyHtml).not.toContain('type="search"');
@@ -353,6 +355,7 @@ describe('BetterListView', () => {
 
   it('preserves list ordering until a visitor chooses a title sort direction', async () => {
     const container = document.createElement('div');
+    document.body.appendChild(container);
     const alpha = { ...item, id: 'alpha', itemSortOrder: 2, title: 'Alpha service' };
     const zulu = { ...item, id: 'zulu', itemSortOrder: 1, title: 'Zulu service' };
     const items = [zulu, alpha];
@@ -378,13 +381,14 @@ describe('BetterListView', () => {
       );
     expect(itemTitles()).toEqual(['Zulu service', 'Alpha service']);
 
-    const sortDropdown = container.querySelector<HTMLButtonElement>('button[aria-label="Sort items"]');
-    expect(sortDropdown).not.toBeNull();
+    const sortTrigger = container.querySelector<HTMLButtonElement>('button[aria-label="Sort items"]');
+    expect(sortTrigger).not.toBeNull();
+    expect(container.querySelector('.better-list__sort-tag')).toBeNull();
     await act(async () => {
-      Simulate.click(sortDropdown as HTMLButtonElement);
+      Simulate.click(sortTrigger as HTMLButtonElement);
       await Promise.resolve();
     });
-    const ascendingOption = Array.from(document.body.querySelectorAll<HTMLElement>('[role="option"]')).find(
+    const ascendingOption = Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')).find(
       (candidate) => candidate.textContent?.trim() === 'A → Z'
     );
     expect(ascendingOption).toBeDefined();
@@ -392,12 +396,14 @@ describe('BetterListView', () => {
       Simulate.click(ascendingOption as HTMLElement);
     });
     expect(itemTitles()).toEqual(['Alpha service', 'Zulu service']);
+    expect(container.querySelectorAll('.better-list__sort-tag')).toHaveLength(1);
+    expect(container.querySelector('.better-list__sort-tag')?.textContent).toContain('A → Z');
 
     await act(async () => {
-      Simulate.click(sortDropdown as HTMLButtonElement);
+      Simulate.click(sortTrigger as HTMLButtonElement);
       await Promise.resolve();
     });
-    const descendingOption = Array.from(document.body.querySelectorAll<HTMLElement>('[role="option"]')).find(
+    const descendingOption = Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')).find(
       (candidate) => candidate.textContent?.trim() === 'Z → A'
     );
     expect(descendingOption).toBeDefined();
@@ -406,7 +412,23 @@ describe('BetterListView', () => {
     });
 
     expect(itemTitles()).toEqual(['Zulu service', 'Alpha service']);
+    expect(container.querySelectorAll('.better-list__sort-tag')).toHaveLength(1);
+    expect(container.querySelector('.better-list__sort-tag')?.textContent).toContain('Z → A');
+
+    const activeSortTag = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Remove Z → A sorting"]'
+    );
+    expect(activeSortTag).not.toBeNull();
+    await act(async () => {
+      activeSortTag?.focus();
+      Simulate.click(activeSortTag as HTMLButtonElement);
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+    expect(container.querySelector('.better-list__sort-tag')).toBeNull();
+    expect(itemTitles()).toEqual(['Zulu service', 'Alpha service']);
+    expect(document.activeElement).toBe(sortTrigger);
     ReactDom.unmountComponentAtNode(container);
+    container.remove();
   });
 
   it('sorts within groups without changing authored group order', () => {

@@ -1,19 +1,24 @@
 import * as React from 'react';
 import {
   Button,
-  Dropdown,
   Input,
   Link,
+  Menu,
+  MenuItemRadio,
+  MenuList,
+  MenuPopover,
+  MenuTrigger,
   MessageBar,
   MessageBarActions,
   MessageBarBody,
   MessageBarTitle,
-  Option,
   SelectTabData,
   SelectTabEvent,
   Spinner,
   Tab,
   TabList,
+  Tag,
+  TagGroup,
   Text,
   Tooltip,
   makeStyles,
@@ -23,6 +28,7 @@ import {
 import {
   AppsListDetailRegular,
   ArrowClockwiseRegular,
+  ArrowSortRegular,
   ChevronDownRegular,
   ChevronLeftRegular,
   ChevronRightRegular,
@@ -237,18 +243,23 @@ const useStyles = makeStyles({
     }
   },
   searchControlsSortOnly: {
-    width: '140px',
+    width: 'fit-content',
     '@media (max-width: 760px)': {
       width: '100%'
     }
   },
-  sort: {
+  sortControls: {
+    display: 'flex',
+    alignItems: 'center',
+    columnGap: '6px',
     flexShrink: 0,
-    minWidth: '140px',
-    width: '140px',
-    '@media (max-width: 760px)': {
-      width: '100%'
-    }
+    minWidth: 0
+  },
+  sortTrigger: {
+    flexShrink: 0
+  },
+  sortTags: {
+    minWidth: 0
   },
   searchIcon: {},
   content: {},
@@ -807,6 +818,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   const [currentPage, setCurrentPage] = React.useState(0);
   const [lazyItemCount, setLazyItemCount] = React.useState(lazyRenderBatchSize);
   const loadMoreRef = React.useRef<HTMLDivElement | null>(null);
+  const sortTriggerRef = React.useRef<HTMLButtonElement | null>(null);
   const [instanceId] = React.useState(() => {
     betterListInstanceCount += 1;
     return betterListInstanceCount;
@@ -852,6 +864,12 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   const normalizedMaxItemsPerPage =
     Number.isFinite(maxItemsPerPage) && maxItemsPerPage > 0 ? Math.floor(maxItemsPerPage) : 0;
   const activeSortOverride = sortingVisible ? sortOverride : undefined;
+  const activeSortLabel =
+    activeSortOverride === 'ascending'
+      ? 'A → Z'
+      : activeSortOverride === 'descending'
+        ? 'Z → A'
+        : undefined;
   const sortActive = Boolean(activeSortOverride) || normalizedDefaultSort !== 'listOrder';
   const compareVisibleItems = React.useCallback(
     (left: IBetterListItem, right: IBetterListItem): number =>
@@ -1423,32 +1441,67 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
             )}
             key={key}
           >
-            <Dropdown
-              aria-label="Sort items"
-              className={mergeClasses(classes.sort, 'better-list__sort')}
-              listbox={{ className: betterListFluentSurfaceClassName }}
-              placeholder="Sort"
-              selectedOptions={
-                activeSortOverride
-                  ? [activeSortOverride]
-                  : normalizedDefaultSort === 'titleAscending'
-                    ? ['ascending']
-                    : []
-              }
-              value={
-                activeSortOverride
-                  ? activeSortOverride === 'ascending' ? 'A → Z' : 'Z → A'
-                  : normalizedDefaultSort === 'titleAscending' ? 'A → Z' : ''
-              }
-              onOptionSelect={(_event, data) => {
-                if (data.optionValue === 'ascending' || data.optionValue === 'descending') {
-                  setSortOverride(data.optionValue);
-                }
-              }}
+            <div
+              className={mergeClasses(classes.sortControls, 'better-list__sort-controls')}
             >
-              <Option text="A → Z" value="ascending">A → Z</Option>
-              <Option text="Z → A" value="descending">Z → A</Option>
-            </Dropdown>
+              <Menu
+                checkedValues={{
+                  sortDirection: activeSortOverride ? [activeSortOverride] : []
+                }}
+                onCheckedValueChange={(_event, data) => {
+                  const nextSort = data.checkedItems[0];
+                  if (nextSort === 'ascending' || nextSort === 'descending') {
+                    setSortOverride(nextSort);
+                  }
+                }}
+              >
+                <MenuTrigger disableButtonEnhancement>
+                  <Button
+                    appearance="subtle"
+                    aria-label="Sort items"
+                    className={mergeClasses(
+                      classes.sortTrigger,
+                      'better-list__sort',
+                      'better-list__sort-trigger'
+                    )}
+                    icon={<ArrowSortRegular />}
+                    ref={sortTriggerRef}
+                    size="small"
+                    title="Sort items"
+                  />
+                </MenuTrigger>
+                <MenuPopover className={betterListFluentSurfaceClassName}>
+                  <MenuList aria-label="Sort items">
+                    <MenuItemRadio name="sortDirection" value="ascending">
+                      A → Z
+                    </MenuItemRadio>
+                    <MenuItemRadio name="sortDirection" value="descending">
+                      Z → A
+                    </MenuItemRadio>
+                  </MenuList>
+                </MenuPopover>
+              </Menu>
+              {activeSortOverride && activeSortLabel ? (
+                <TagGroup
+                  aria-label="Active sorting"
+                  className={mergeClasses(classes.sortTags, 'better-list__sort-tags')}
+                  dismissible
+                  onDismiss={() => {
+                    setSortOverride(undefined);
+                    window.setTimeout(() => sortTriggerRef.current?.focus(), 0);
+                  }}
+                  size="small"
+                >
+                  <Tag
+                    aria-label={`Remove ${activeSortLabel} sorting`}
+                    className="better-list__sort-tag"
+                    value={activeSortOverride}
+                  >
+                    {activeSortLabel}
+                  </Tag>
+                </TagGroup>
+              ) : null}
+            </div>
             {searchInput}
           </div>
         );
