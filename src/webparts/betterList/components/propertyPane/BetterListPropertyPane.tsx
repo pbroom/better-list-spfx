@@ -44,6 +44,7 @@ import {
   IBetterListGroupOrderEntry,
   IBetterListQueryField,
   IBetterListTabConfig,
+  normalizeBetterListDefaultSortSelection,
   resolveBetterListTabConfigurations,
   validateBetterListTemplateStructure
 } from '../../../../shared';
@@ -288,8 +289,34 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
       })
       .then((nextFields) => {
         if (!cancelled) {
-          setFields(nextFields.filter((field) => !field.hidden));
+          const visibleFields = nextFields.filter((field) => !field.hidden);
+          const currentValue = latestValueRef.current;
+          const defaultSortSelection = normalizeBetterListDefaultSortSelection(
+            currentValue.defaultSort,
+            currentValue.defaultSortColumn,
+            visibleFields
+          );
+          setFields(visibleFields);
           setFieldError('');
+          if (
+            defaultSortSelection.defaultSort !== currentValue.defaultSort ||
+            defaultSortSelection.defaultSortColumn !== currentValue.defaultSortColumn
+          ) {
+            onChangeRef.current({
+              ...currentValue,
+              ...defaultSortSelection,
+              fieldMappings: {
+                ...currentValue.fieldMappings,
+                metadata: createDerivedMetadata(
+                  currentValue.tabs,
+                  defaultSortSelection.defaultSort,
+                  defaultSortSelection.defaultSortColumn,
+                  visibleFields,
+                  currentValue
+                )
+              }
+            });
+          }
         }
       })
       .catch((loadError: Error) => {
@@ -355,19 +382,21 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
   const createDerivedMetadata = (
     tabs: IBetterListTabConfig[],
     defaultSort: BetterListDefaultSort = props.value.defaultSort,
-    defaultSortColumn: string = props.value.defaultSortColumn
+    defaultSortColumn: string = props.value.defaultSortColumn,
+    sourceFields: readonly IBetterListFieldDescriptor[] = fields,
+    value: IBetterListAuthoringState = props.value
   ): ReturnType<typeof createBetterListMetadataMappings> => {
     const resolved = resolveBetterListTabConfigurations(tabs, {
       grouping: {
-        column: props.value.groupsColumn,
-        collapsible: props.value.groupsCollapsible,
-        icons: props.value.groupIcons,
+        column: value.groupsColumn,
+        collapsible: value.groupsCollapsible,
+        icons: value.groupIcons,
         filter: { kind: 'all' }
       },
       itemLayout: {
-        itemProperties: props.value.itemProperties,
-        rows: props.value.itemLayoutRows,
-        links: props.value.itemElementLinks
+        itemProperties: value.itemProperties,
+        rows: value.itemLayoutRows,
+        links: value.itemElementLinks
       }
     });
     const paths = resolved.reduce<string[]>((result, entry) => {
@@ -388,12 +417,12 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
     const defaultSortFieldPath = getBetterListDefaultSortFieldPath(
       defaultSort,
       defaultSortColumn,
-      fields
+      sourceFields
     );
     if (defaultSortFieldPath) {
       paths.push(defaultSortFieldPath);
     }
-    return createBetterListMetadataMappings(fields, paths);
+    return createBetterListMetadataMappings(sourceFields, paths);
   };
 
   const patchTabsWithDerivedMetadata = (tabs: IBetterListTabConfig[]): void => {

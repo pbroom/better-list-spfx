@@ -32,6 +32,7 @@ import {
   BetterListDefaultSort,
   getBetterListDefaultSortFieldPath,
   IBetterListTabConfig,
+  normalizeBetterListDefaultSortSelection,
   resolveBetterListTabConfigurations
 } from '../../src/shared';
 import { GroupIconColorField } from '../../src/webparts/betterList/components/GroupIconColorField';
@@ -368,6 +369,21 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
       })
     });
   };
+  React.useEffect(() => {
+    const selection = normalizeBetterListDefaultSortSelection(
+      values.defaultSort,
+      values.defaultSortColumn,
+      servicesAuthoringFields
+    );
+    if (
+      selection.defaultSort !== values.defaultSort ||
+      selection.defaultSortColumn !== values.defaultSortColumn
+    ) {
+      patchDefaultSort(selection.defaultSort, selection.defaultSortColumn);
+    }
+    // The lab field catalog is static; only persisted selection changes require reconciliation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [values.defaultSort, values.defaultSortColumn]);
   const patchActiveGrouping = (nextGrouping: typeof activeGrouping): void => {
     patchTabsWithDerivedMetadata(updateActiveTab({
       groupingOverride: createBetterListGroupingOverride(nextGrouping)

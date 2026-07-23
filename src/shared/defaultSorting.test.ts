@@ -2,7 +2,8 @@ import {
   betterListDefaultSortOptions,
   createBetterListSortableFieldOptions,
   getBetterListDefaultSortFieldPath,
-  normalizeBetterListDefaultSort
+  normalizeBetterListDefaultSort,
+  normalizeBetterListDefaultSortSelection
 } from './defaultSorting';
 import type { IBetterListFieldDescriptor } from './fieldMappingAuthoring';
 
@@ -51,5 +52,20 @@ describe('default sorting authoring', () => {
       'ViewsRecent',
       'Priority'
     ]);
+  });
+
+  it('reconciles unavailable authored columns to list ordering', () => {
+    expect(normalizeBetterListDefaultSortSelection('column', 'Priority', fields)).toEqual({
+      defaultSort: 'column',
+      defaultSortColumn: 'Priority'
+    });
+    expect(normalizeBetterListDefaultSortSelection('column', 'RemovedColumn', fields)).toEqual({
+      defaultSort: 'listOrder',
+      defaultSortColumn: ''
+    });
+    expect(normalizeBetterListDefaultSortSelection('titleAscending', 'Priority', fields)).toEqual({
+      defaultSort: 'titleAscending',
+      defaultSortColumn: ''
+    });
   });
 });

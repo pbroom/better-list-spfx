@@ -10,6 +10,11 @@ export interface IBetterListDefaultSortOption {
   value: BetterListDefaultSort;
 }
 
+export interface IBetterListDefaultSortSelection {
+  defaultSort: BetterListDefaultSort;
+  defaultSortColumn: string;
+}
+
 export const betterListDefaultSortOptions: readonly IBetterListDefaultSortOption[] = [
   { label: 'List ordering', value: 'listOrder' },
   { label: 'A to Z', value: 'titleAscending' },
@@ -57,6 +62,23 @@ export function createBetterListSortableFieldOptions(
       type.indexOf('url') >= 0;
     return supported && !sourceIsMultiValue && field.richText !== true && type.indexOf('note') < 0;
   });
+}
+
+export function normalizeBetterListDefaultSortSelection(
+  defaultSort: unknown,
+  defaultSortColumn: unknown,
+  fields: readonly IBetterListFieldDescriptor[]
+): IBetterListDefaultSortSelection {
+  const mode = normalizeBetterListDefaultSort(defaultSort);
+  if (mode !== 'column') {
+    return { defaultSort: mode, defaultSortColumn: '' };
+  }
+  const column = typeof defaultSortColumn === 'string' ? defaultSortColumn : '';
+  const available = createBetterListSortableFieldOptions(fields)
+    .some((option) => option.fieldPath === column);
+  return available
+    ? { defaultSort: mode, defaultSortColumn: column }
+    : { defaultSort: 'listOrder', defaultSortColumn: '' };
 }
 
 export function getBetterListDefaultSortFieldPath(

@@ -8,7 +8,11 @@ import {
   defaultBetterListHtmlTemplate,
   parseBetterListGroupIconsConfiguration
 } from '../../../../shared';
-import { BetterListPropertyPane, IBetterListAuthoringState } from './BetterListPropertyPane';
+import {
+  BetterListPropertyPane,
+  IBetterListAuthoringState,
+  IBetterListPickerDataSource
+} from './BetterListPropertyPane';
 
 class TestResizeObserver implements ResizeObserver {
   public disconnect(): void {
@@ -293,6 +297,68 @@ describe('BetterListPropertyPane', () => {
       Simulate.change(sortingSwitch as HTMLInputElement);
     });
     expect(onChange).toHaveBeenLastCalledWith({ ...value, showSortingOptions: true });
+    ReactDom.unmountComponentAtNode(container);
+  });
+
+  it('reconciles a saved sort column when the field catalog changes', async () => {
+    const container = document.createElement('div');
+    const onChange = jest.fn();
+    const value: IBetterListAuthoringState = {
+      ...createValue(),
+      defaultSort: 'column',
+      defaultSortColumn: 'Priority',
+      fieldMappings: {
+        title: { kind: 'text', internalName: 'Title', displayName: 'Title' }
+      }
+    };
+    const createPickerDataSource = (includePriority: boolean): IBetterListPickerDataSource => ({
+      loadFields: async () => [
+        { internalName: 'Title', title: 'Title', typeAsString: 'Text' },
+        ...(includePriority
+          ? [{ internalName: 'Priority', title: 'Priority', typeAsString: 'Number' }]
+          : [])
+      ],
+      loadLists: async () => [{ id: 'services', title: 'Services' }],
+      resolveListUrl: async () => ({ id: 'services', title: 'Services' })
+    });
+
+    await act(async () => {
+      ReactDom.render(
+        <BetterListPropertyPane
+          pickerDataSource={createPickerDataSource(true)}
+          value={value}
+          onChange={onChange}
+        />,
+        container
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(onChange).not.toHaveBeenCalled();
+
+    await act(async () => {
+      ReactDom.render(
+        <BetterListPropertyPane
+          pickerDataSource={createPickerDataSource(false)}
+          value={value}
+          onChange={onChange}
+        />,
+        container
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenLastCalledWith({
+      ...value,
+      defaultSort: 'listOrder',
+      defaultSortColumn: '',
+      fieldMappings: {
+        ...value.fieldMappings,
+        metadata: []
+      }
+    });
     ReactDom.unmountComponentAtNode(container);
   });
 
