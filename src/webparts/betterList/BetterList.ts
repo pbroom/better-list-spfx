@@ -21,12 +21,16 @@ import {
   applyBetterListGroupOrder,
   BetterListFilter,
   BetterListColumnCount,
+  BetterListDefaultSort,
   BetterListFieldValue,
+  BetterListFieldKind,
   BetterListGroupIconOverride,
   BetterListItemElementLinks,
   BetterListRequestEpoch,
   betterListStylePresetVersion,
   createDefaultTabs,
+  betterListPopularityFieldNames,
+  betterListTrendingFieldNames,
   createBetterListGroupingOverride,
   createBetterListFieldCatalog,
   createBetterListLoadSignature,
@@ -51,6 +55,7 @@ import {
   parseTabConfiguration,
   processItems,
   normalizeBetterListColumnCount,
+  normalizeBetterListDefaultSort,
   resolveBetterListTabConfigurations,
   scopeBetterListStyles,
   serializeItemLayoutConfiguration,
@@ -84,12 +89,42 @@ const normalizeMaxItemsPerPage = (value: unknown): number => {
   return Number.isFinite(numericValue) && numericValue > 0 ? Math.floor(numericValue) : 0;
 };
 
+function resolveDefaultSortMetadata(
+  mode: BetterListDefaultSort,
+  column: string,
+  mappings: Partial<IBetterListFieldMappings>
+): { key: string; kind: BetterListFieldKind } | undefined {
+  const metadata = mappings.metadata || [];
+  if (mode === 'column') {
+    const entry = metadata.find((candidate) =>
+      itemPropertyFieldPathsEqual(candidate.key, column)
+    );
+    return entry ? { key: entry.key, kind: entry.mapping.kind } : undefined;
+  }
+  const names = mode === 'recentlyUpdated'
+    ? ['Modified']
+    : mode === 'popularity'
+      ? betterListPopularityFieldNames
+      : mode === 'trending'
+        ? betterListTrendingFieldNames
+        : [];
+  const normalizedNames = names.map((name) => name.toLocaleLowerCase());
+  const entry = metadata.find((candidate) => {
+    const mapping = candidate.mapping;
+    return normalizedNames.indexOf(mapping.internalName.toLocaleLowerCase()) >= 0 ||
+      Boolean(mapping.queryName && normalizedNames.indexOf(mapping.queryName.toLocaleLowerCase()) >= 0);
+  });
+  return entry ? { key: entry.key, kind: entry.mapping.kind } : undefined;
+}
+
 export interface IBetterListWebPartProps {
   heading: string;
   itemColumns: BetterListColumnCount;
   maxItemsPerPage: number;
   showSearch: boolean;
   showSortingOptions: boolean;
+  defaultSort: BetterListDefaultSort;
+  defaultSortColumn: string;
   sourceListId: string;
   sourceListTitle: string;
   sourceWebUrl: string;
@@ -137,8 +172,14 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       parseItemPropertyFields(this.properties.itemPropertiesJson)
     );
     const groupIcons = parseBetterListGroupIconsConfiguration(this.properties.groupIconsJson);
+    const defaultSort = normalizeBetterListDefaultSort(this.properties.defaultSort);
+    const defaultSortMetadata = resolveDefaultSortMetadata(
+      defaultSort,
+      this.properties.defaultSortColumn,
+      fieldMappings
+    );
     const presentationTabs = tabs.map((tab) =>
-      this._createPresentationTab(tab, descriptionFieldPath, richTextFieldPaths)
+      this._createPresentationTab(tab, descriptionFieldPath, richTextFieldPaths, defaultSortMetadata)
     );
     const firstTab = presentationTabs[0];
     if (!this._activeTabKey || !presentationTabs.some((tab) => tab.key === this._activeTabKey)) {
@@ -166,6 +207,8 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       maxItemsPerPage: this.properties.maxItemsPerPage,
       showSearch: this.properties.showSearch,
       showSortingOptions: this.properties.showSortingOptions,
+      defaultSort,
+      defaultSortFieldPath: defaultSortMetadata?.key || this.properties.defaultSortColumn,
       listTitle: this.properties.sourceListTitle,
       onTabChange: (tabKey: string): void => {
         this._activeTabKey = tabKey;
@@ -220,6 +263,8 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     this.properties.maxItemsPerPage = normalizeMaxItemsPerPage(this.properties.maxItemsPerPage);
     this.properties.showSearch = this.properties.showSearch !== false;
     this.properties.showSortingOptions = this.properties.showSortingOptions === true;
+    this.properties.defaultSort = normalizeBetterListDefaultSort(this.properties.defaultSort);
+    this.properties.defaultSortColumn = this.properties.defaultSortColumn || '';
     this.properties.sourceListId = this.properties.sourceListId || '';
     this.properties.sourceListTitle = this.properties.sourceListTitle || '';
     this.properties.sourceWebUrl = this.properties.sourceWebUrl || '';
@@ -384,6 +429,8 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       maxItemsPerPage: this.properties.maxItemsPerPage,
       showSearch: this.properties.showSearch,
       showSortingOptions: this.properties.showSortingOptions,
+      defaultSort: this.properties.defaultSort,
+      defaultSortColumn: this.properties.defaultSortColumn,
       sourceListId: this.properties.sourceListId,
       sourceListTitle: this.properties.sourceListTitle,
       sourceWebUrl: this.properties.sourceWebUrl,
@@ -428,6 +475,8 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       maxItemsPerPage: normalizeMaxItemsPerPage(value.maxItemsPerPage),
       showSearch: value.showSearch !== false,
       showSortingOptions: value.showSortingOptions === true,
+      defaultSort: normalizeBetterListDefaultSort(value.defaultSort),
+      defaultSortColumn: value.defaultSort === 'column' ? value.defaultSortColumn : '',
       sourceListId: value.sourceListId,
       sourceListTitle: value.sourceListTitle,
       sourceWebUrl: value.sourceWebUrl,
@@ -552,7 +601,8 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
   private _createPresentationTab(
     configuration: IBetterListEffectiveTabConfiguration,
     descriptionFieldPath: string | undefined,
-    richTextFieldPaths: ReadonlySet<string>
+    richTextFieldPaths: ReadonlySet<string>,
+    defaultSortMetadata?: { key: string; kind: BetterListFieldKind }
   ): IBetterListTab {
     const group = configuration.grouping.column
       ? {
@@ -595,7 +645,9 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
             configuration.itemLayout.itemProperties,
             configuration.itemLayout.links,
             descriptionFieldPath,
-            richTextFieldPaths
+            richTextFieldPaths,
+            defaultSortMetadata,
+            items.length
           )
         );
       });
@@ -626,7 +678,9 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     itemProperties: readonly string[],
     itemElementLinks: BetterListItemElementLinks,
     descriptionFieldPath: string | undefined,
-    richTextFieldPaths: ReadonlySet<string>
+    richTextFieldPaths: ReadonlySet<string>,
+    defaultSortMetadata: { key: string; kind: BetterListFieldKind } | undefined,
+    presentationOrder: number
   ): IBetterListItem {
     const elements = itemProperties
       .filter((fieldPath) => fieldPath !== 'Title')
@@ -662,6 +716,11 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
         } => Boolean(element)
       );
     const metadata = elements.filter((element) => element.kind === 'metadata').map((element) => element.value);
+    const defaultSortValue = defaultSortMetadata
+      ? item.metadata.find((entry) =>
+          itemPropertyFieldPathsEqual(entry.key, defaultSortMetadata.key)
+        )?.value
+      : undefined;
     return {
       id: String(item.id),
       title: item.title,
@@ -674,7 +733,10 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       groupTitle: group.label,
       groupIcon: getGroupIcon(tab, group.items[0]),
       groupSortOrder: groupIndex,
-      itemSortOrder: item.sortOrder
+      itemSortOrder: item.sortOrder,
+      presentationOrder,
+      defaultSortKind: defaultSortMetadata?.kind,
+      defaultSortValue
     };
   }
 

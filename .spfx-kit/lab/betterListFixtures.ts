@@ -28,6 +28,9 @@ export const servicesFields: readonly IBetterListFieldInfo[] = [
   field('Org', 'Organization short name', 'Text'),
   field('Featured', 'Featured', 'Boolean'),
   field('OrderPriority', 'Order priority', 'Number'),
+  field('Modified', 'Modified', 'DateTime'),
+  field('ViewsLifeTime', 'Popularity', 'Number'),
+  field('ViewsRecent', 'Trending', 'Number'),
   field('Active', 'Active', 'Boolean'),
   field('Audience', 'Audience', 'UserMulti', false, true),
   field('Icon', 'Icon', 'Text')
@@ -313,6 +316,9 @@ function service(
     OrgFullName: options.organization,
     Featured: options.featured ?? false,
     OrderPriority: options.order,
+    Modified: `2026-07-${String(Math.min(id + 8, 28)).padStart(2, '0')}T14:30:00Z`,
+    ViewsLifeTime: Math.max(1, 140 - options.order * 7),
+    ViewsRecent: Math.max(1, ((id * 17) + options.order) % 53),
     Active: options.active ?? true,
     Audience: options.audience ?? [],
     Icon: options.icon

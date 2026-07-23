@@ -39,6 +39,10 @@ import {
   betterListFluentSurfaceClassName,
   betterListFluentTooltipContentClassName,
   BetterListColumnCount,
+  BetterListComparableValue,
+  BetterListDefaultSort,
+  BetterListFieldKind,
+  BetterListFieldValue,
   BetterListItemLayoutRows,
   BetterListGroupIconOverride,
   BetterListTabIcon,
@@ -50,6 +54,7 @@ import {
   defaultBetterListGroupIconsConfiguration,
   getBetterListGroupIconOverride,
   normalizeBetterListColumnCount,
+  normalizeBetterListDefaultSort,
   resolveBetterListTemplate,
   substituteBetterListTokens
 } from '../../../shared';
@@ -117,6 +122,9 @@ export interface IBetterListItem {
   groupIcon?: BetterListGroupIcon;
   groupSortOrder?: number;
   itemSortOrder?: number;
+  presentationOrder?: number;
+  defaultSortKind?: BetterListFieldKind;
+  defaultSortValue?: BetterListFieldValue;
 }
 
 export interface IBetterListItemElement {
@@ -148,6 +156,8 @@ export interface IBetterListViewProps {
   maxItemsPerPage?: number;
   showSearch?: boolean;
   showSortingOptions?: boolean;
+  defaultSort?: BetterListDefaultSort;
+  defaultSortFieldPath?: string;
   listTitle?: string;
   onTabChange?: (tabKey: string) => void;
   onSearchChange?: (value: string) => void;
@@ -415,8 +425,11 @@ const normalizeSearchText = (value: string): string => value.trim().toLocaleLowe
 const compareText = (left: string, right: string): number => left.localeCompare(right, undefined, { sensitivity: 'base' });
 
 const compareItems = (left: IBetterListItem, right: IBetterListItem): number => {
+  const presentationDifference =
+    (left.presentationOrder ?? Number.MAX_SAFE_INTEGER) -
+    (right.presentationOrder ?? Number.MAX_SAFE_INTEGER);
   const orderDifference = (left.itemSortOrder ?? Number.MAX_SAFE_INTEGER) - (right.itemSortOrder ?? Number.MAX_SAFE_INTEGER);
-  return orderDifference || compareText(left.title, right.title);
+  return presentationDifference || orderDifference || compareText(left.title, right.title) || compareText(left.id, right.id);
 };
 
 const compareItemsByTitle = (
@@ -428,6 +441,75 @@ const compareItemsByTitle = (
   const directionMultiplier = direction === 'descending' ? -1 : 1;
   return directionMultiplier * titleDifference || compareItems(left, right) || compareText(left.id, right.id);
 };
+
+function firstSortValue(value: BetterListFieldValue | undefined): BetterListComparableValue | undefined {
+  if (
+    value === undefined ||
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    return value;
+  }
+  return value.find((entry) => entry !== null && entry !== '');
+}
+
+function compareDefaultSortValues(
+  left: BetterListFieldValue | undefined,
+  right: BetterListFieldValue | undefined,
+  kind: BetterListFieldKind | undefined,
+  direction: BetterListViewerSortDirection
+): number {
+  const leftValue = firstSortValue(left);
+  const rightValue = firstSortValue(right);
+  const leftEmpty = leftValue === undefined || leftValue === null || leftValue === '';
+  const rightEmpty = rightValue === undefined || rightValue === null || rightValue === '';
+  if (leftEmpty !== rightEmpty) {
+    return leftEmpty ? 1 : -1;
+  }
+  if (leftEmpty || rightEmpty) {
+    return 0;
+  }
+  let comparison: number;
+  if (kind === 'number') {
+    comparison = Number(leftValue) - Number(rightValue);
+  } else if (kind === 'dateTime') {
+    comparison = new Date(String(leftValue)).getTime() - new Date(String(rightValue)).getTime();
+  } else if (kind === 'boolean') {
+    comparison = Number(Boolean(leftValue)) - Number(Boolean(rightValue));
+  } else {
+    comparison = String(leftValue).localeCompare(String(rightValue), undefined, {
+      numeric: true,
+      sensitivity: 'base'
+    });
+  }
+  if (!Number.isFinite(comparison)) {
+    return 0;
+  }
+  return direction === 'descending' ? -comparison : comparison;
+}
+
+function compareItemsByDefaultSort(
+  left: IBetterListItem,
+  right: IBetterListItem,
+  mode: BetterListDefaultSort
+): number {
+  if (mode === 'titleAscending') {
+    return compareItemsByTitle(left, right, 'ascending');
+  }
+  if (mode === 'listOrder') {
+    return compareItems(left, right);
+  }
+  const direction: BetterListViewerSortDirection =
+    mode === 'column' ? 'ascending' : 'descending';
+  return compareDefaultSortValues(
+    left.defaultSortValue,
+    right.defaultSortValue,
+    left.defaultSortKind || right.defaultSortKind,
+    direction
+  ) || compareItems(left, right);
+}
 
 const itemMatchesSearch = (item: IBetterListItem, searchText: string): boolean => {
   if (!searchText) {
@@ -704,6 +786,8 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   maxItemsPerPage = 0,
   showSearch,
   showSortingOptions = false,
+  defaultSort = 'listOrder',
+  defaultSortFieldPath = '',
   listTitle = 'Better List',
   onTabChange,
   onSearchChange,
@@ -714,7 +798,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   const compiledTemplate = React.useMemo(() => resolveBetterListTemplate(htmlTemplate), [htmlTemplate]);
   const [selectedTabKey, setSelectedTabKey] = React.useState(activeTabKey);
   const [internalSearchValue, setInternalSearchValue] = React.useState(searchValue ?? '');
-  const [sortDirection, setSortDirection] = React.useState<BetterListViewerSortDirection>('ascending');
+  const [sortOverride, setSortOverride] = React.useState<BetterListViewerSortDirection | undefined>(undefined);
   const [collapsedGroups, setCollapsedGroups] = React.useState<Record<string, boolean>>({});
   const [editingGroup, setEditingGroup] = React.useState<IBetterListGroup | undefined>(undefined);
   const [currentPage, setCurrentPage] = React.useState(0);
@@ -734,6 +818,11 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
       setInternalSearchValue(searchValue);
     }
   }, [searchValue]);
+
+  const normalizedDefaultSort = normalizeBetterListDefaultSort(defaultSort);
+  React.useEffect(() => {
+    setSortOverride(undefined);
+  }, [defaultSortFieldPath, normalizedDefaultSort]);
 
   const selectedTab = tabs.find((tab) => tab.key === selectedTabKey) ?? tabs[0];
   const selectedItemPropertyFields = selectedTab?.itemPropertyFields ?? itemPropertyFields;
@@ -759,10 +848,14 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   const normalizedHeading = heading.trim();
   const normalizedMaxItemsPerPage =
     Number.isFinite(maxItemsPerPage) && maxItemsPerPage > 0 ? Math.floor(maxItemsPerPage) : 0;
+  const activeSortOverride = sortingVisible ? sortOverride : undefined;
+  const sortActive = Boolean(activeSortOverride) || normalizedDefaultSort !== 'listOrder';
   const compareVisibleItems = React.useCallback(
     (left: IBetterListItem, right: IBetterListItem): number =>
-      sortingVisible ? compareItemsByTitle(left, right, sortDirection) : compareItems(left, right),
-    [sortDirection, sortingVisible]
+      activeSortOverride
+        ? compareItemsByTitle(left, right, activeSortOverride)
+        : compareItemsByDefaultSort(left, right, normalizedDefaultSort),
+    [activeSortOverride, normalizedDefaultSort]
   );
 
   const visibleItems = React.useMemo(() => {
@@ -773,7 +866,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
 
   const displayedItems = React.useMemo(() => {
     const orderedItems = grouped
-      ? sortingVisible
+      ? sortActive
         ? visibleItems.slice().sort((left, right) => {
             const groupOrderDifference =
               (left.groupSortOrder ?? Number.MAX_SAFE_INTEGER) -
@@ -783,7 +876,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
         : visibleItems
       : visibleItems.slice().sort(compareVisibleItems);
     return selectedTab?.maxItems ? orderedItems.slice(0, selectedTab.maxItems) : orderedItems;
-  }, [compareVisibleItems, grouped, selectedTab?.maxItems, sortingVisible, visibleItems]);
+  }, [compareVisibleItems, grouped, selectedTab?.maxItems, sortActive, visibleItems]);
   const totalPages = normalizedMaxItemsPerPage
     ? Math.max(1, Math.ceil(displayedItems.length / normalizedMaxItemsPerPage))
     : 1;
@@ -811,7 +904,8 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
     normalizedMaxItemsPerPage,
     normalizedSearchText,
     selectedTab?.key,
-    sortingVisible ? sortDirection : 'default'
+    activeSortOverride || normalizedDefaultSort,
+    defaultSortFieldPath
   ]);
 
   React.useEffect(() => {
@@ -1330,11 +1424,22 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
               aria-label="Sort items"
               className={mergeClasses(classes.sort, 'better-list__sort')}
               listbox={{ className: betterListFluentSurfaceClassName }}
-              selectedOptions={[sortDirection]}
-              value={sortDirection === 'ascending' ? 'A → Z' : 'Z → A'}
+              placeholder="Sort"
+              selectedOptions={
+                activeSortOverride
+                  ? [activeSortOverride]
+                  : normalizedDefaultSort === 'titleAscending'
+                    ? ['ascending']
+                    : []
+              }
+              value={
+                activeSortOverride
+                  ? activeSortOverride === 'ascending' ? 'A → Z' : 'Z → A'
+                  : normalizedDefaultSort === 'titleAscending' ? 'A → Z' : ''
+              }
               onOptionSelect={(_event, data) => {
                 if (data.optionValue === 'ascending' || data.optionValue === 'descending') {
-                  setSortDirection(data.optionValue);
+                  setSortOverride(data.optionValue);
                 }
               }}
             >

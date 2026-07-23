@@ -345,13 +345,13 @@ describe('BetterListView', () => {
 
     expect(html).toContain('better-list__search-controls');
     expect(html).toContain('aria-label="Sort items"');
-    expect(html).toContain('A → Z');
+    expect(html).toContain('>Sort<');
     expect(html.indexOf('aria-label="Sort items"')).toBeLessThan(html.indexOf('type="search"'));
     expect(sortingOnlyHtml).toContain('aria-label="Sort items"');
     expect(sortingOnlyHtml).not.toContain('type="search"');
   });
 
-  it('lets visitors sort ungrouped items by title in either direction', async () => {
+  it('preserves list ordering until a visitor chooses a title sort direction', async () => {
     const container = document.createElement('div');
     const alpha = { ...item, id: 'alpha', itemSortOrder: 2, title: 'Alpha service' };
     const zulu = { ...item, id: 'zulu', itemSortOrder: 1, title: 'Zulu service' };
@@ -376,10 +376,23 @@ describe('BetterListView', () => {
       Array.from(container.querySelectorAll('.better-list__item-title')).map((element) =>
         element.textContent?.trim() || ''
       );
-    expect(itemTitles()).toEqual(['Alpha service', 'Zulu service']);
+    expect(itemTitles()).toEqual(['Zulu service', 'Alpha service']);
 
     const sortDropdown = container.querySelector<HTMLButtonElement>('button[aria-label="Sort items"]');
     expect(sortDropdown).not.toBeNull();
+    await act(async () => {
+      Simulate.click(sortDropdown as HTMLButtonElement);
+      await Promise.resolve();
+    });
+    const ascendingOption = Array.from(document.body.querySelectorAll<HTMLElement>('[role="option"]')).find(
+      (candidate) => candidate.textContent?.trim() === 'A → Z'
+    );
+    expect(ascendingOption).toBeDefined();
+    await act(async () => {
+      Simulate.click(ascendingOption as HTMLElement);
+    });
+    expect(itemTitles()).toEqual(['Alpha service', 'Zulu service']);
+
     await act(async () => {
       Simulate.click(sortDropdown as HTMLButtonElement);
       await Promise.resolve();
@@ -426,6 +439,7 @@ describe('BetterListView', () => {
     const html = renderToStaticMarkup(
       <BetterListView
         activeTabKey="grouped"
+        defaultSort="titleAscending"
         items={items}
         showSortingOptions
         tabs={tabs}
@@ -434,6 +448,60 @@ describe('BetterListView', () => {
 
     expect(html.indexOf('First group')).toBeLessThan(html.indexOf('Second group'));
     expect(html.indexOf('Alpha service')).toBeLessThan(html.indexOf('Zulu service'));
+  });
+
+  it('applies the authored default sorting before a visitor override', () => {
+    const lower = {
+      ...item,
+      id: 'lower',
+      title: 'Zulu service',
+      presentationOrder: 1,
+      defaultSortKind: 'number' as const,
+      defaultSortValue: 10
+    };
+    const higher = {
+      ...item,
+      id: 'higher',
+      title: 'Alpha service',
+      presentationOrder: 2,
+      defaultSortKind: 'number' as const,
+      defaultSortValue: 40
+    };
+    const tabs: readonly IBetterListTab[] = [
+      { key: 'all', label: 'All items', grouped: false, items: [lower, higher] }
+    ];
+
+    const listOrderHtml = renderToStaticMarkup(
+      <BetterListView activeTabKey="all" defaultSort="listOrder" items={[lower, higher]} tabs={tabs} />
+    );
+    const titleHtml = renderToStaticMarkup(
+      <BetterListView activeTabKey="all" defaultSort="titleAscending" items={[lower, higher]} tabs={tabs} />
+    );
+    const popularityHtml = renderToStaticMarkup(
+      <BetterListView activeTabKey="all" defaultSort="popularity" items={[lower, higher]} tabs={tabs} />
+    );
+    const columnHtml = renderToStaticMarkup(
+      <BetterListView activeTabKey="all" defaultSort="column" items={[lower, higher]} tabs={tabs} />
+    );
+
+    expect(listOrderHtml.indexOf('Zulu service')).toBeLessThan(listOrderHtml.indexOf('Alpha service'));
+    expect(titleHtml.indexOf('Alpha service')).toBeLessThan(titleHtml.indexOf('Zulu service'));
+    expect(popularityHtml.indexOf('Alpha service')).toBeLessThan(popularityHtml.indexOf('Zulu service'));
+    expect(columnHtml.indexOf('Zulu service')).toBeLessThan(columnHtml.indexOf('Alpha service'));
+  });
+
+  it('falls back to list ordering when a metric is unavailable', () => {
+    const first = { ...item, id: 'first', title: 'Zulu service', presentationOrder: 1 };
+    const second = { ...item, id: 'second', title: 'Alpha service', presentationOrder: 2 };
+    const tabs: readonly IBetterListTab[] = [
+      { key: 'all', label: 'All items', grouped: false, items: [first, second] }
+    ];
+
+    const html = renderToStaticMarkup(
+      <BetterListView activeTabKey="all" defaultSort="trending" items={[first, second]} tabs={tabs} />
+    );
+
+    expect(html.indexOf('Zulu service')).toBeLessThan(html.indexOf('Alpha service'));
   });
 
   it('renders configured item elements in their authored order', () => {

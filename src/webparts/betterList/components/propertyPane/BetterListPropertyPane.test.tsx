@@ -8,7 +8,11 @@ import {
   defaultBetterListHtmlTemplate,
   parseBetterListGroupIconsConfiguration
 } from '../../../../shared';
-import { BetterListPropertyPane, IBetterListAuthoringState } from './BetterListPropertyPane';
+import {
+  BetterListPropertyPane,
+  IBetterListAuthoringState,
+  IBetterListPickerDataSource
+} from './BetterListPropertyPane';
 
 class TestResizeObserver implements ResizeObserver {
   public disconnect(): void {
@@ -39,6 +43,8 @@ describe('BetterListPropertyPane', () => {
     maxItemsPerPage: 0,
     showSearch: true,
     showSortingOptions: false,
+    defaultSort: 'listOrder',
+    defaultSortColumn: '',
     sourceListId: 'services',
     sourceListTitle: 'Services',
     sourceWebUrl: 'https://contoso.sharepoint.com/sites/example',
@@ -79,13 +85,13 @@ describe('BetterListPropertyPane', () => {
     expect(html).toContain('fui-Dropdown');
     expect(html).toContain('bl-pane__compact-dropdown');
     expect(html).not.toContain('fui-Select');
-    expect(html).toContain('aria-label="Maximum items per page"');
+    expect(html).toContain('aria-label="Max items per page"');
     expect(html).toContain('placeholder="No maximum"');
     expect(html).toContain('Search &amp; sorting');
     expect(html.indexOf('aria-label="Source list"')).toBeLessThan(html.indexOf('aria-label="Title"'));
     expect(html.indexOf('aria-label="Title"')).toBeLessThan(html.indexOf('aria-label="Columns"'));
-    expect(html.indexOf('aria-label="Columns"')).toBeLessThan(html.indexOf('aria-label="Maximum items per page"'));
-    expect(html.indexOf('aria-label="Maximum items per page"')).toBeLessThan(html.indexOf('aria-label="Add tab"'));
+    expect(html.indexOf('aria-label="Columns"')).toBeLessThan(html.indexOf('aria-label="Max items per page"'));
+    expect(html.indexOf('aria-label="Max items per page"')).toBeLessThan(html.indexOf('aria-label="Add tab"'));
     expect(html).toContain('--bl-font-mono: &quot;Geist Mono Variable&quot;');
     expect(html.indexOf('Search &amp; sorting')).toBeLessThan(html.indexOf('aria-label="Add tab"'));
     expect(html.match(/bl-property-pane-section/g)).toHaveLength(5);
@@ -163,7 +169,7 @@ describe('BetterListPropertyPane', () => {
       await Promise.resolve();
     });
 
-    const input = container.querySelector<HTMLInputElement>('input[aria-label="Maximum items per page"]');
+    const input = container.querySelector<HTMLInputElement>('input[aria-label="Max items per page"]');
     expect(input).not.toBeNull();
     await act(async () => {
       (input as HTMLInputElement).value = '6';
@@ -249,10 +255,37 @@ describe('BetterListPropertyPane', () => {
 
     const searchSwitch = container.querySelector<HTMLInputElement>('input[aria-label="Search field"]');
     const sortingSwitch = container.querySelector<HTMLInputElement>('input[aria-label="Show sorting options"]');
+    const defaultSorting = container.querySelector<HTMLButtonElement>('button[aria-label="Default sorting"]');
     expect(searchSwitch).not.toBeNull();
     expect(sortingSwitch).not.toBeNull();
+    expect(defaultSorting).not.toBeNull();
+    expect(defaultSorting?.textContent).toContain('List ordering');
     expect(searchSwitch?.checked).toBe(true);
     expect(sortingSwitch?.checked).toBe(false);
+    await act(async () => {
+      Simulate.click(defaultSorting as HTMLButtonElement);
+      await Promise.resolve();
+    });
+    const defaultSortOptions = Array.from(document.body.querySelectorAll<HTMLElement>('[role="option"]'));
+    expect(defaultSortOptions.map((candidate) => candidate.textContent?.trim())).toEqual([
+      'List ordering',
+      'A to Z',
+      'Popularity',
+      'Trending',
+      'Recently updated',
+      'Column (select)...'
+    ]);
+    await act(async () => {
+      Simulate.click(
+        defaultSortOptions.find((candidate) => candidate.textContent?.trim() === 'Recently updated') as HTMLElement
+      );
+    });
+    expect(onChange).toHaveBeenLastCalledWith({
+      ...value,
+      defaultSort: 'recentlyUpdated',
+      defaultSortColumn: '',
+      fieldMappings: { ...value.fieldMappings, metadata: [] }
+    });
     await act(async () => {
       (searchSwitch as HTMLInputElement).checked = false;
       Simulate.change(searchSwitch as HTMLInputElement);
@@ -264,6 +297,68 @@ describe('BetterListPropertyPane', () => {
       Simulate.change(sortingSwitch as HTMLInputElement);
     });
     expect(onChange).toHaveBeenLastCalledWith({ ...value, showSortingOptions: true });
+    ReactDom.unmountComponentAtNode(container);
+  });
+
+  it('reconciles a saved sort column when the field catalog changes', async () => {
+    const container = document.createElement('div');
+    const onChange = jest.fn();
+    const value: IBetterListAuthoringState = {
+      ...createValue(),
+      defaultSort: 'column',
+      defaultSortColumn: 'Priority',
+      fieldMappings: {
+        title: { kind: 'text', internalName: 'Title', displayName: 'Title' }
+      }
+    };
+    const createPickerDataSource = (includePriority: boolean): IBetterListPickerDataSource => ({
+      loadFields: async () => [
+        { internalName: 'Title', title: 'Title', typeAsString: 'Text' },
+        ...(includePriority
+          ? [{ internalName: 'Priority', title: 'Priority', typeAsString: 'Number' }]
+          : [])
+      ],
+      loadLists: async () => [{ id: 'services', title: 'Services' }],
+      resolveListUrl: async () => ({ id: 'services', title: 'Services' })
+    });
+
+    await act(async () => {
+      ReactDom.render(
+        <BetterListPropertyPane
+          pickerDataSource={createPickerDataSource(true)}
+          value={value}
+          onChange={onChange}
+        />,
+        container
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(onChange).not.toHaveBeenCalled();
+
+    await act(async () => {
+      ReactDom.render(
+        <BetterListPropertyPane
+          pickerDataSource={createPickerDataSource(false)}
+          value={value}
+          onChange={onChange}
+        />,
+        container
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenLastCalledWith({
+      ...value,
+      defaultSort: 'listOrder',
+      defaultSortColumn: '',
+      fieldMappings: {
+        ...value.fieldMappings,
+        metadata: []
+      }
+    });
     ReactDom.unmountComponentAtNode(container);
   });
 

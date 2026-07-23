@@ -3,6 +3,7 @@ export * from './authoringLoadSignature';
 export * from './betterListStyles';
 export * from './betterListRenderer';
 export * from './betterListTemplate';
+export * from './defaultSorting';
 export * from './effectiveTabConfiguration';
 export * from './fieldMappingAuthoring';
 export * from './filterQuery';
