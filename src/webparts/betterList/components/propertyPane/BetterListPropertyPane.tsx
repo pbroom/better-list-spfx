@@ -29,6 +29,7 @@ import {
   BetterListItemLayoutRows,
   BetterListItemElementLinks,
   betterListFluentSurfaceClassName,
+  betterListPortalMountNodeProps,
   createBetterListPortalPositioning,
   getBetterListPortalMountNode,
   IBetterListFieldDescriptor,
@@ -474,7 +475,7 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
             aria-busy={resolvingSource}
             className="bl-pane__source-dropdown"
             freeform
-            mountNode={portalMountNode}
+            mountNode={betterListPortalMountNodeProps}
             listbox={{
               className: `bl-pane__source-listbox ${betterListFluentSurfaceClassName}`,
               style: { maxHeight: 'min(320px, 70vh)', overflowY: 'auto' }
@@ -571,7 +572,7 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
               className: betterListFluentSurfaceClassName,
               style: { maxHeight: 'min(360px, calc(100vh - 16px))', overflowY: 'auto' }
             }}
-            mountNode={portalMountNode}
+            mountNode={betterListPortalMountNodeProps}
             positioning={createBetterListPortalPositioning(targetDocument)}
             selectedOptions={[activeGrouping.column || noGroupingValue]}
             value={selectedGroupingOption?.label || 'No grouping'}

@@ -214,6 +214,7 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({
               const headerId = `tab-${safeId(tab.id)}-header`;
               const panelId = `tab-${safeId(tab.id)}-panel`;
               const open = !closedTabIds.has(tab.id);
+              const iconLabel = tabIconLabel(tab.tabIconOverride, tab.tabIcon);
               return (
                 <SortableTabCard
                   headerId={headerId}
@@ -237,9 +238,10 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({
                             appearance="secondary"
                             className="bl-tabs-builder__icon-picker"
                             icon={renderTabIcon(tab.tabIconOverride, tab.tabIcon)}
+                            title={iconLabel}
                             onClick={() => setIconPickerTabId(tab.id)}
                           >
-                            {tabIconLabel(tab.tabIconOverride, tab.tabIcon)}
+                            <span className="bl-tabs-builder__icon-picker-label">{iconLabel}</span>
                           </Button>
                         </div>
                         <label className="bl-tabs-builder__field">
@@ -721,7 +723,8 @@ function safeId(value: string): string {
 }
 
 const tabBuilderCss = `
-.bl-tabs-builder { color: #242424; container-type: inline-size; font: 12px/1.4 "Segoe UI", sans-serif; }
+.bl-tabs-builder { color: #242424; container-type: inline-size; font: 12px/1.4 "Segoe UI", sans-serif; position: relative; }
+.bl-tabs-builder:focus-within { z-index: 2; }
 .bl-tabs-builder *, .bl-tabs-builder *::before, .bl-tabs-builder *::after { box-sizing: border-box; }
 .bl-tabs-builder__heading, .bl-tabs-builder__actions { align-items: center; display: flex; }
 .bl-tabs-builder__heading { justify-content: flex-end; }
@@ -743,7 +746,9 @@ const tabBuilderCss = `
 .bl-tabs-builder .bl-tabs-builder__remove { color: ${tokens.colorNeutralForeground3}; height: 28px; min-height: 28px; min-width: 28px; padding: 0; transition: opacity 100ms ease-out; width: 28px; }
 .bl-tabs-builder__field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .bl-tabs-builder__field > span, .bl-tabs-builder__filter legend { color: #424242; font-weight: 600; }
-.bl-tabs-builder .bl-tabs-builder__icon-picker { justify-content: flex-start; min-height: 32px; width: 100%; }
+.bl-tabs-builder .bl-tabs-builder__icon-picker { font-size: ${tokens.fontSizeBase300}; font-weight: ${tokens.fontWeightRegular}; justify-content: flex-start; line-height: ${tokens.lineHeightBase300}; min-height: 32px; min-width: 0; text-align: left; width: 100%; }
+.bl-tabs-builder .bl-tabs-builder__icon-picker .fui-Button__icon { flex: 0 0 auto; }
+.bl-tabs-builder .bl-tabs-builder__icon-picker-label { display: block; flex: 1 1 auto; min-width: 0; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 .bl-tabs-builder .bl-tabs-builder__icon-picker svg, .bl-tabs-builder .bl-tabs-builder__icon-picker img { height: 20px; object-fit: contain; width: 20px; }
 .bl-tabs-builder input:not([type="checkbox"]), .bl-tabs-builder select { background: #fff; border: 1px solid #8a8886; border-radius: 4px; color: #242424; font: inherit; min-height: 32px; padding: 5px 8px; width: 100%; }
 .bl-tabs-builder input:focus, .bl-tabs-builder select:focus { outline: 2px solid #0f6cbd; outline-offset: 1px; }

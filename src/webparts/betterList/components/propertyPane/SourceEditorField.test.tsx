@@ -286,6 +286,7 @@ describe('SourceEditorField', () => {
 
       const collapsedTrigger = toolbar?.querySelector<HTMLButtonElement>('[aria-label="Open SCSS editor shortcuts"]');
       expect(collapsedTrigger).not.toBeNull();
+      expect(collapsedTrigger?.classList.contains('fui-MenuButton')).toBe(true);
       act(() => Simulate.click(collapsedTrigger as HTMLButtonElement));
       expect(document.body.querySelector('[role="menu"][aria-label="SCSS editor shortcuts"]')).not.toBeNull();
 

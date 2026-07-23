@@ -13,7 +13,11 @@ const sectionValue = 'content';
 
 const useStyles = makeStyles({
   root: {
-    borderTop: `1px solid ${tokens.colorNeutralStroke2}`
+    borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
+    position: 'relative',
+    '&:focus-within': {
+      zIndex: 1
+    }
   },
   rootWithoutDivider: {
     borderTopWidth: 0
@@ -82,7 +86,7 @@ export const PropertyPaneSection: React.FunctionComponent<IPropertyPaneSectionPr
 
   return (
     <Accordion
-      className={mergeClasses(classes.root, !divider && classes.rootWithoutDivider)}
+      className={mergeClasses('bl-property-pane-section', classes.root, !divider && classes.rootWithoutDivider)}
       collapsible
       data-property-pane-section-divider={divider ? 'before' : 'none'}
       openItems={expanded ? [sectionValue] : []}

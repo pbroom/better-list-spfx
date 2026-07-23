@@ -55,9 +55,14 @@ describe('TabBuilder', () => {
     expect(html).toContain('Show item count');
     expect(html).toContain('Megaphone');
     expect(html).toContain('bl-tabs-builder__icon-picker');
+    expect(html).toContain('bl-tabs-builder__icon-picker-label');
+    expect(html).toContain('title="Megaphone"');
+    expect(html).toContain('font-weight: var(--fontWeightRegular);');
+    expect(html).toContain('text-overflow: ellipsis; white-space: nowrap;');
     expect(html).not.toContain('<option value="communications">');
     expect(html).not.toContain('Move Featured up');
     expect(html).not.toContain('Move Featured down');
+    expect(html).toContain('.bl-tabs-builder:focus-within { z-index: 2; }');
     expect(html).toContain('.bl-tabs-builder__card-heading { border-bottom: 0;');
     expect(html).toContain(
       'font-family: var(--bl-font-mono, &quot;Geist Mono Variable&quot;, &quot;Geist Mono&quot;, ui-monospace, SFMono-Regular, Consolas, &quot;Liberation Mono&quot;, monospace) !important;'

@@ -36,11 +36,13 @@ import {
   MenuPopover,
   MenuTrigger,
   Portal,
+  PortalMountNodeProvider,
   makeStyles,
   mergeClasses,
   tokens,
   useFluent
 } from '@fluentui/react-components';
+import type { PortalProps } from '@fluentui/react-components';
 import {
   AddRegular,
   CalendarLtrRegular,
@@ -57,6 +59,7 @@ import {
 
 import {
   betterListFluentSurfaceClassName,
+  betterListPortalMountNodeProps,
   betterListMaxItemRows,
   BetterListItemElementLinks,
   BetterListItemLayoutRows,
@@ -64,7 +67,6 @@ import {
   flattenItemLayoutRows,
   getBetterListFieldPathLabel,
   getBetterListFieldTargetFields,
-  getBetterListPortalMountNode,
   IBetterListFieldDescriptor,
   isBetterListLookupLikeField,
   normalizeItemElementLinks,
@@ -110,7 +112,7 @@ const noItemLinkValue = '__no_item_link__';
 const BetterListAuthoringDocumentContext = React.createContext<Document | undefined>(undefined);
 
 function useBetterListAuthoringSurface(explicitDocument?: Document): {
-  mountNode: HTMLElement | undefined;
+  mountNode: PortalProps['mountNode'];
   rootPositioning: ReturnType<typeof createBetterListPortalPositioning>;
   submenuPositioning: ReturnType<typeof createBetterListPortalPositioning>;
   targetDocument: Document | undefined;
@@ -120,7 +122,10 @@ function useBetterListAuthoringSurface(explicitDocument?: Document): {
   const targetDocument = explicitDocument || contextDocument || fluent.targetDocument;
   return React.useMemo(
     () => ({
-      mountNode: getBetterListPortalMountNode(targetDocument),
+      // Passing the document body directly bypasses Fluent's themed portal
+      // wrapper. Let Fluent create that wrapper inside PortalMountNodeProvider
+      // so Menu/MenuItem token variables resolve exactly as they do upstream.
+      mountNode: betterListPortalMountNodeProps,
       rootPositioning: createBetterListPortalPositioning(targetDocument),
       submenuPositioning: createBetterListPortalPositioning(targetDocument, 'submenu'),
       targetDocument
@@ -278,15 +283,9 @@ const useStyles = makeStyles({
     fontSize: '12px'
   },
   menuPopover: {
-    width: '260px',
-    maxWidth: 'calc(100vw - 32px)',
     maxHeight: 'min(480px, calc(100vh - 16px))',
     overflowY: 'auto',
-    overscrollBehavior: 'contain',
-    backgroundColor: tokens.colorNeutralBackground1,
-    border: `1px solid ${tokens.colorNeutralStroke2}`,
-    borderRadius: tokens.borderRadiusMedium,
-    boxShadow: tokens.shadow16
+    overscrollBehavior: 'contain'
   },
   menuIcon: {
     color: tokens.colorNeutralForeground3
@@ -906,8 +905,8 @@ export function ColumnPickerMenu({
     );
   }
 
-  return (
-    <Menu mountNode={surface.mountNode} positioning={surface.rootPositioning}>
+  const menu = (
+    <Menu hasIcons mountNode={surface.mountNode} positioning={surface.rootPositioning}>
       <MenuTrigger disableButtonEnhancement>
         <Button
           appearance="subtle"
@@ -931,6 +930,7 @@ export function ColumnPickerMenu({
           {fields.map((field) =>
             isBetterListLookupLikeField(field) ? (
               <Menu
+                hasIcons
                 key={field.internalName}
                 mountNode={surface.mountNode}
                 positioning={surface.submenuPositioning}
@@ -987,6 +987,12 @@ export function ColumnPickerMenu({
       </MenuPopover>
     </Menu>
   );
+
+  return surface.targetDocument ? (
+    <PortalMountNodeProvider value={surface.targetDocument.body}>
+      {menu}
+    </PortalMountNodeProvider>
+  ) : menu;
 }
 
 function createLookupFieldPath(
