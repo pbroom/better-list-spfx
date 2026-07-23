@@ -20,12 +20,12 @@ const fields: readonly IBetterListFieldDescriptor[] = [
 describe('default sorting authoring', () => {
   it('exposes the requested default-sort choices in order', () => {
     expect(betterListDefaultSortOptions).toEqual([
-      { label: 'List ordering', value: 'listOrder' },
+      { label: 'None (default list order)', value: 'listOrder' },
       { label: 'A to Z', value: 'titleAscending' },
       { label: 'Popularity', value: 'popularity' },
       { label: 'Trending', value: 'trending' },
       { label: 'Recently updated', value: 'recentlyUpdated' },
-      { label: 'Column (select)...', value: 'column' }
+      { label: 'Column', value: 'column' }
     ]);
   });
 

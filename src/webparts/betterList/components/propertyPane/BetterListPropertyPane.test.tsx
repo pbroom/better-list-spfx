@@ -259,21 +259,23 @@ describe('BetterListPropertyPane', () => {
     expect(searchSwitch).not.toBeNull();
     expect(sortingSwitch).not.toBeNull();
     expect(defaultSorting).not.toBeNull();
-    expect(defaultSorting?.textContent).toContain('List ordering');
+    expect(defaultSorting?.textContent).toContain('None (default list order)');
     expect(searchSwitch?.checked).toBe(true);
     expect(sortingSwitch?.checked).toBe(false);
     await act(async () => {
       Simulate.click(defaultSorting as HTMLButtonElement);
       await Promise.resolve();
     });
-    const defaultSortOptions = Array.from(document.body.querySelectorAll<HTMLElement>('[role="option"]'));
+    const defaultSortOptions = Array.from(
+      document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"], [role="menuitem"]')
+    );
     expect(defaultSortOptions.map((candidate) => candidate.textContent?.trim())).toEqual([
-      'List ordering',
+      'None (default list order)',
       'A to Z',
       'Popularity',
       'Trending',
       'Recently updated',
-      'Column (select)...'
+      'Column'
     ]);
     await act(async () => {
       Simulate.click(
@@ -359,6 +361,76 @@ describe('BetterListPropertyPane', () => {
         metadata: []
       }
     });
+    ReactDom.unmountComponentAtNode(container);
+  });
+
+  it('authors a default-sort column from the Column submenu', async () => {
+    const container = document.createElement('div');
+    const onChange = jest.fn();
+    const value = createValue();
+
+    await act(async () => {
+      ReactDom.render(
+        <BetterListPropertyPane
+          pickerDataSource={{
+            loadFields: async () => [
+              { internalName: 'Title', title: 'Title', typeAsString: 'Text' },
+              { internalName: 'Modified', title: 'Modified', typeAsString: 'DateTime' }
+            ],
+            loadLists: async () => [{ id: 'services', title: 'Services' }],
+            resolveListUrl: async () => ({ id: 'services', title: 'Services' })
+          }}
+          value={value}
+          onChange={onChange}
+        />,
+        container
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const searchSectionButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Search & sorting'
+    );
+    await act(async () => {
+      Simulate.click(searchSectionButton as HTMLButtonElement);
+    });
+
+    const defaultSorting = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Default sorting"]'
+    );
+    await act(async () => {
+      Simulate.click(defaultSorting as HTMLButtonElement);
+      await Promise.resolve();
+    });
+
+    const columnMenuItem = Array.from(
+      document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')
+    ).find((candidate) => candidate.textContent?.trim() === 'Column');
+    expect(columnMenuItem).toBeDefined();
+    expect(columnMenuItem?.getAttribute('aria-haspopup')).toBe('menu');
+    await act(async () => {
+      Simulate.keyDown(columnMenuItem as HTMLElement, {
+        key: 'ArrowRight'
+      });
+      await Promise.resolve();
+    });
+
+    const modifiedOption = Array.from(
+      document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')
+    ).find((candidate) => candidate.textContent?.trim() === 'Modified');
+    expect(modifiedOption).toBeDefined();
+    await act(async () => {
+      Simulate.click(modifiedOption as HTMLElement);
+    });
+
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      defaultSort: 'column',
+      defaultSortColumn: 'Modified'
+    }));
+    expect(
+      container.querySelector('button[aria-label="Default sorting column"]')
+    ).toBeNull();
     ReactDom.unmountComponentAtNode(container);
   });
 

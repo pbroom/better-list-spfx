@@ -23,7 +23,6 @@ import {
   normalizeItem,
   processItems,
   betterListSemanticSlots,
-  betterListDefaultSortOptions,
   betterListTemplateMaxBytes,
   defaultBetterListHtmlTemplate,
   validateBetterListTemplateStructure,
@@ -37,6 +36,7 @@ import {
   resolveBetterListTabConfigurations
 } from '../../src/shared';
 import { GroupIconColorField } from '../../src/webparts/betterList/components/GroupIconColorField';
+import { DefaultSortingMenu } from '../../src/webparts/betterList/components/propertyPane/DefaultSortingMenu';
 import { ItemPropertyBuilder } from '../../src/webparts/betterList/components/propertyPane/ItemPropertyBuilder';
 import { PropertyPaneSection } from '../../src/webparts/betterList/components/propertyPane/PropertyPaneSection';
 import { GroupOrderEditorDialog } from '../../src/webparts/betterList/components/propertyPane/GroupOrderEditorDialog';
@@ -265,12 +265,6 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
   const defaultSortColumnOptions = React.useMemo(
     () => createBetterListSortableFieldOptions(servicesAuthoringFields),
     []
-  );
-  const selectedDefaultSort = betterListDefaultSortOptions.find(
-    (option) => option.value === values.defaultSort
-  ) || betterListDefaultSortOptions[0];
-  const selectedDefaultSortColumn = defaultSortColumnOptions.find(
-    (option) => option.fieldPath === values.defaultSortColumn
   );
   const activeTabId = tabs.some((tab) => tab.id === values.authoringTabId)
     ? values.authoringTabId
@@ -515,48 +509,14 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
         />
         <label className={classes.groupingField}>
           <span>Default sorting</span>
-          <Dropdown
-            aria-label="Default sorting"
-            positioning={{ align: 'start', autoSize: 'height', position: 'below', strategy: 'fixed' }}
-            selectedOptions={[values.defaultSort]}
-            value={selectedDefaultSort?.label || 'List ordering'}
-            onOptionSelect={(_event, data) => {
-              const defaultSort = betterListDefaultSortOptions.find(
-                (option) => option.value === data.optionValue
-              )?.value;
-              if (defaultSort) {
-                patchDefaultSort(defaultSort);
-              }
-            }}
-          >
-            {betterListDefaultSortOptions.map((option) => (
-              <Option key={option.value} text={option.label} value={option.value}>
-                {option.label}
-              </Option>
-            ))}
-          </Dropdown>
+          <DefaultSortingMenu
+            columnOptions={defaultSortColumnOptions}
+            selectedColumn={values.defaultSortColumn}
+            selectedMode={values.defaultSort}
+            targetDocument={typeof document === 'undefined' ? undefined : document}
+            onChange={patchDefaultSort}
+          />
         </label>
-        {values.defaultSort === 'column' ? (
-          <label className={classes.groupingField}>
-            <span>Column</span>
-            <Dropdown
-              aria-label="Default sorting column"
-              placeholder="Select a column"
-              positioning={{ align: 'start', autoSize: 'height', position: 'below', strategy: 'fixed' }}
-              selectedOptions={values.defaultSortColumn ? [values.defaultSortColumn] : []}
-              value={selectedDefaultSortColumn?.label || ''}
-              onOptionSelect={(_event, data) =>
-                patchDefaultSort('column', data.optionValue || '')
-              }
-            >
-              {defaultSortColumnOptions.map((option) => (
-                <Option key={option.fieldPath} text={option.label} value={option.fieldPath}>
-                  {option.label}
-                </Option>
-              ))}
-            </Dropdown>
-          </label>
-        ) : null}
       </DisclosureSection>
 
       <DisclosureSection

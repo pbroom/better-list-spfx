@@ -16,12 +16,12 @@ export interface IBetterListDefaultSortSelection {
 }
 
 export const betterListDefaultSortOptions: readonly IBetterListDefaultSortOption[] = [
-  { label: 'List ordering', value: 'listOrder' },
+  { label: 'None (default list order)', value: 'listOrder' },
   { label: 'A to Z', value: 'titleAscending' },
   { label: 'Popularity', value: 'popularity' },
   { label: 'Trending', value: 'trending' },
   { label: 'Recently updated', value: 'recentlyUpdated' },
-  { label: 'Column (select)...', value: 'column' }
+  { label: 'Column', value: 'column' }
 ];
 
 export const betterListPopularityFieldNames: readonly string[] = [
