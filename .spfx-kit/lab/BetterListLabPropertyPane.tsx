@@ -1,6 +1,6 @@
 import * as React from 'react';
-import { Button, Combobox, Dropdown, Option, Switch, makeStyles, tokens } from '@fluentui/react-components';
-import { AddRegular } from '@fluentui/react-icons';
+import { Button, Combobox, Dropdown, Input, Option, Switch, makeStyles, tokens } from '@fluentui/react-components';
+import { AddRegular, EditRegular } from '@fluentui/react-icons';
 import type {
   LabCssEditorTarget,
   LabPropertyBag,
@@ -12,10 +12,14 @@ import {
   createBetterListMetadataMappings,
   createBetterListGroupingOverride,
   createBetterListItemLayoutOverride,
+  getRichTextItemPropertyPaths,
   parseBetterListGroupIconsConfiguration,
   parseItemLayoutConfiguration,
   parseItemPropertyFields,
   parseTabConfiguration,
+  groupItemsBySourceField,
+  normalizeItem,
+  processItems,
   betterListSemanticSlots,
   betterListTemplateMaxBytes,
   defaultBetterListHtmlTemplate,
@@ -28,14 +32,23 @@ import {
 import { GroupIconColorField } from '../../src/webparts/betterList/components/GroupIconColorField';
 import { ItemPropertyBuilder } from '../../src/webparts/betterList/components/propertyPane/ItemPropertyBuilder';
 import { PropertyPaneSection } from '../../src/webparts/betterList/components/propertyPane/PropertyPaneSection';
+import { GroupOrderEditorDialog } from '../../src/webparts/betterList/components/propertyPane/GroupOrderEditorDialog';
 import {
   appendNewTab,
   IBetterListTabFilterField,
   TabBuilder
 } from '../../src/webparts/betterList/components/propertyPane/TabBuilder';
-import { servicesAuthoringFields, servicesListId, servicesListTitle } from './betterListFixtures';
+import {
+  createServicesFixtureRecords,
+  servicesAuthoringFields,
+  servicesListId,
+  servicesListTitle
+} from './betterListFixtures';
+
+const titleCommitDelayMs = 500;
 
 export type BetterListLabProps = LabPropertyBag & {
+  heading: string;
   sourceListId: string;
   sourceListTitle: string;
   sourceWebUrl: string;
@@ -101,6 +114,10 @@ const useStyles = makeStyles({
   switch: {
     marginTop: '8px'
   },
+  editGroups: {
+    alignSelf: 'flex-start',
+    marginBottom: '4px'
+  },
   advancedBody: {
     paddingTop: '2px'
   },
@@ -165,7 +182,43 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
   const classes = useStyles();
   const [sourceInput, setSourceInput] = React.useState(values.sourceListTitle);
   const [sourceError, setSourceError] = React.useState('');
+  const [headingInput, setHeadingInput] = React.useState(values.heading);
+  const [groupEditorOpen, setGroupEditorOpen] = React.useState(false);
+  const headingInputRef = React.useRef(values.heading);
+  const headingCommitTimerRef = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const latestValuesRef = React.useRef(values);
+  const onChangeRef = React.useRef(onChange);
+
+  latestValuesRef.current = values;
+  onChangeRef.current = onChange;
+
+  const clearHeadingCommitTimer = React.useCallback((): void => {
+    if (headingCommitTimerRef.current !== undefined) {
+      clearTimeout(headingCommitTimerRef.current);
+      headingCommitTimerRef.current = undefined;
+    }
+  }, []);
+
+  const commitHeading = React.useCallback((): void => {
+    clearHeadingCommitTimer();
+    const headingDraft = headingInputRef.current;
+    if (headingDraft !== latestValuesRef.current.heading) {
+      latestValuesRef.current = { ...latestValuesRef.current, heading: headingDraft };
+      onChangeRef.current({ heading: headingDraft });
+    }
+  }, [clearHeadingCommitTimer]);
+
+  const scheduleHeadingCommit = React.useCallback((): void => {
+    clearHeadingCommitTimer();
+    headingCommitTimerRef.current = setTimeout(commitHeading, titleCommitDelayMs);
+  }, [clearHeadingCommitTimer, commitHeading]);
+
   React.useEffect(() => setSourceInput(values.sourceListTitle), [values.sourceListId, values.sourceListTitle]);
+  React.useEffect(() => {
+    headingInputRef.current = values.heading;
+    setHeadingInput(values.heading);
+  }, [values.heading]);
+  React.useEffect(() => () => commitHeading(), [commitHeading]);
   const itemLayout = React.useMemo(
     () => parseItemLayoutConfiguration(
       values.itemLayoutJson,
@@ -200,8 +253,33 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
   const activeGrouping = activeConfiguration?.grouping ?? {
     column: '',
     collapsible: false,
-    icons: groupIcons
+    icons: groupIcons,
+    filter: { kind: 'all' as const },
+    groupOrder: []
   };
+  const groupOptions = React.useMemo(() => {
+    if (!activeConfiguration || !activeGrouping.column) {
+      return [];
+    }
+    const sourceItems = createServicesFixtureRecords({
+      displayName: 'Lab User',
+      email: 'lab.user@contoso.com',
+      loginName: 'i:0#.f|membership|lab.user@contoso.com'
+    }).map((record) => normalizeItem(record, mappings as IBetterListFieldMappings));
+    const processed = processItems(sourceItems, activeConfiguration.tab);
+    const richTextFieldPaths = getRichTextItemPropertyPaths(mappings as IBetterListFieldMappings);
+    return groupItemsBySourceField(
+      processed,
+      activeGrouping.column,
+      activeGrouping.filter,
+      'Other',
+      richTextFieldPaths.has(activeGrouping.column)
+    ).map((group) => ({
+      key: group.key,
+      label: group.label,
+      itemCount: group.items.length
+    }));
+  }, [activeConfiguration, activeGrouping.column, activeGrouping.filter, mappings]);
   const activeItemLayout = activeConfiguration?.itemLayout ?? itemLayout;
   const selectedGroupingOption = groupingOptions.find((option) => option.value === activeGrouping.column);
   const updateActiveTab = (patch: Partial<IBetterListTabConfig>): IBetterListTabConfig[] =>
@@ -286,6 +364,20 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
         <Option value={servicesListId}>{servicesListTitle}</Option>
       </Combobox>
       {sourceError ? <div role="alert">{sourceError}</div> : null}
+      <label className={classes.groupingField}>
+        <span>Title</span>
+        <Input
+          aria-label="Title"
+          placeholder="Title (optional)"
+          value={headingInput}
+          onBlur={commitHeading}
+          onChange={(_event, data) => {
+            headingInputRef.current = data.value;
+            setHeadingInput(data.value);
+            scheduleHeadingCommit();
+          }}
+        />
+      </label>
 
       <DisclosureSection
         action={
@@ -361,7 +453,11 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
                 collapsible: groupsColumn ? activeGrouping.collapsible : false,
                 icons: groupsColumn === activeGrouping.column
                   ? activeGrouping.icons
-                  : { ...activeGrouping.icons, overrides: [] }
+                  : { ...activeGrouping.icons, overrides: [] },
+                filter: groupsColumn === activeGrouping.column
+                  ? activeGrouping.filter
+                  : { kind: 'all' },
+                groupOrder: groupsColumn === activeGrouping.column ? activeGrouping.groupOrder : []
               });
             }}
           >
@@ -375,6 +471,14 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
         </label>
         {activeGrouping.column ? (
           <>
+            <Button
+              appearance="secondary"
+              className={classes.editGroups}
+              icon={<EditRegular />}
+              onClick={() => setGroupEditorOpen(true)}
+            >
+              Edit groups
+            </Button>
             <Switch
               checked={activeGrouping.collapsible}
               className={classes.switch}
@@ -428,6 +532,15 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
           </>
         ) : null}
       </DisclosureSection>
+
+      {groupEditorOpen ? (
+        <GroupOrderEditorDialog
+          groups={groupOptions}
+          value={activeGrouping.groupOrder}
+          onApply={(groupOrder) => patchActiveGrouping({ ...activeGrouping, groupOrder })}
+          onOpenChange={setGroupEditorOpen}
+        />
+      ) : null}
 
       <ItemPropertyBuilder
         context={(

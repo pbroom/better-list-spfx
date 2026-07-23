@@ -60,6 +60,8 @@ import {
 } from './TabBuilder';
 import type { ISharePointImageAssetProvider } from '../../services';
 
+const titleCommitDelayMs = 500;
+
 export interface IBetterListAuthoringState {
   heading: string;
   sourceListId: string;
@@ -171,6 +173,7 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
   const [groupOptions, setGroupOptions] = React.useState<readonly IBetterListGroupOption[]>([]);
   const [groupOptionsError, setGroupOptionsError] = React.useState('');
   const headingInputRef = React.useRef(props.value.heading);
+  const headingCommitTimerRef = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const latestValueRef = React.useRef(props.value);
   const onChangeRef = React.useRef(props.onChange);
   const sourceRequest = React.useRef(0);
@@ -180,18 +183,35 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
   latestValueRef.current = props.value;
   onChangeRef.current = props.onChange;
 
+  const clearHeadingCommitTimer = React.useCallback((): void => {
+    if (headingCommitTimerRef.current !== undefined) {
+      clearTimeout(headingCommitTimerRef.current);
+      headingCommitTimerRef.current = undefined;
+    }
+  }, []);
+
+  const commitHeading = React.useCallback((): void => {
+    clearHeadingCommitTimer();
+    const latestValue = latestValueRef.current;
+    const headingDraft = headingInputRef.current;
+    if (headingDraft !== latestValue.heading) {
+      const nextValue = { ...latestValue, heading: headingDraft };
+      latestValueRef.current = nextValue;
+      onChangeRef.current(nextValue);
+    }
+  }, [clearHeadingCommitTimer]);
+
+  const scheduleHeadingCommit = React.useCallback((): void => {
+    clearHeadingCommitTimer();
+    headingCommitTimerRef.current = setTimeout(commitHeading, titleCommitDelayMs);
+  }, [clearHeadingCommitTimer, commitHeading]);
+
   React.useEffect(() => () => {
     sourceRequest.current += 1;
     groupOptionsRequest.current += 1;
   }, []);
 
-  React.useEffect(() => () => {
-    const latestValue = latestValueRef.current;
-    const headingDraft = headingInputRef.current;
-    if (headingDraft !== latestValue.heading) {
-      onChangeRef.current({ ...latestValue, heading: headingDraft });
-    }
-  }, []);
+  React.useEffect(() => () => commitHeading(), [commitHeading]);
 
   React.useEffect(() => {
     setSourceInput(props.value.sourceListTitle);
@@ -263,16 +283,6 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
 
   const patchValue = (patch: Partial<IBetterListAuthoringState>): void => {
     props.onChange({ ...props.value, ...patch });
-  };
-
-  const commitHeading = (): void => {
-    const latestValue = latestValueRef.current;
-    const headingDraft = headingInputRef.current;
-    if (headingDraft !== latestValue.heading) {
-      const nextValue = { ...latestValue, heading: headingDraft };
-      latestValueRef.current = nextValue;
-      onChangeRef.current(nextValue);
-    }
   };
 
   const activeTabId = props.value.tabs.some((tab) => tab.id === props.activeTabId)
@@ -566,12 +576,13 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
             <span className="bl-pane__label">Title</span>
             <Input
               aria-label="Title"
-              placeholder="Optional title"
+              placeholder="Title (optional)"
               value={headingInput}
               onBlur={commitHeading}
               onChange={(_event, data) => {
                 headingInputRef.current = data.value;
                 setHeadingInput(data.value);
+                scheduleHeadingCommit();
               }}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
