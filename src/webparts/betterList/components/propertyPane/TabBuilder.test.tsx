@@ -208,6 +208,54 @@ describe('TabBuilder', () => {
     }
   });
 
+  it('preserves an overlapping tab edit before the delayed name update renders', async () => {
+    jest.useFakeTimers();
+    const container = document.createElement('div');
+    const tabs: readonly IBetterListTabConfig[] = [
+      { id: 'featured', label: 'Featured', filter: { kind: 'all' } },
+      { id: 'all-services', label: 'All Services', filter: { kind: 'all' } }
+    ];
+    const onChange = jest.fn();
+
+    try {
+      await act(async () => {
+        ReactDom.render(
+          <TabBuilder fields={[]} selectedTabId="featured" tabs={tabs} onChange={onChange} />,
+          container
+        );
+      });
+
+      const nameInput = container.querySelector<HTMLInputElement>('input[required]') as HTMLInputElement;
+      const maximumItemsInput = container.querySelector<HTMLInputElement>('input[type="number"]') as HTMLInputElement;
+
+      await act(async () => {
+        nameInput.value = 'Featured services';
+        Simulate.change(nameInput);
+        maximumItemsInput.value = '5';
+        Simulate.change(maximumItemsInput);
+      });
+
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange.mock.calls[0][0][0]).toMatchObject({ id: 'featured', label: 'Featured', maxItems: 5 });
+
+      await act(async () => {
+        jest.advanceTimersByTime(500);
+      });
+
+      expect(onChange).toHaveBeenCalledTimes(2);
+      expect(onChange.mock.calls[1][0][0]).toMatchObject({
+        id: 'featured',
+        label: 'Featured services',
+        maxItems: 5
+      });
+    } finally {
+      await act(async () => {
+        ReactDom.unmountComponentAtNode(container);
+      });
+      jest.useRealTimers();
+    }
+  });
+
   it('reserves Enter for disclosure while Space controls keyboard sorting', () => {
     expect(tabSortKeyboardCodes).toEqual({
       start: ['Space'],

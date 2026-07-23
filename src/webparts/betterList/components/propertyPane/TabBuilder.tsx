@@ -92,6 +92,7 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({
   const [iconPickerTabId, setIconPickerTabId] = React.useState<string>();
   const keyboardSortingRef = React.useRef(false);
   const tabsRef = React.useRef(tabs);
+  const receivedTabsRef = React.useRef(tabs);
   const onChangeRef = React.useRef(onChange);
   const openTabIds = tabs.filter((tab) => !closedTabIds.has(tab.id)).map((tab) => tab.id);
   const sensors = useSensors(
@@ -119,38 +120,50 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({
     });
   }, [selectedTabId]);
 
-  tabsRef.current = tabs;
+  if (receivedTabsRef.current !== tabs) {
+    receivedTabsRef.current = tabs;
+    tabsRef.current = tabs;
+  }
   onChangeRef.current = onChange;
 
-  const patchTab = (index: number, patch: Partial<IBetterListTabConfig>): void => {
-    onChange(tabs.map((tab, candidateIndex) => (candidateIndex === index ? { ...tab, ...patch } : tab)));
-  };
+  const updateTabs = React.useCallback(
+    (
+      updater: (currentTabs: readonly IBetterListTabConfig[]) => readonly IBetterListTabConfig[]
+    ): readonly IBetterListTabConfig[] => {
+      const currentTabs = tabsRef.current;
+      const nextTabs = updater(currentTabs);
+      if (nextTabs !== currentTabs) {
+        tabsRef.current = nextTabs;
+        onChangeRef.current(nextTabs);
+      }
+      return nextTabs;
+    },
+    []
+  );
 
   const patchTabById = React.useCallback((tabId: string, patch: Partial<IBetterListTabConfig>): void => {
-    const latestTabs = tabsRef.current;
-    const nextTabs = patchTabsById(latestTabs, tabId, patch);
-    if (nextTabs !== latestTabs) {
-      onChangeRef.current(nextTabs);
-    }
-  }, []);
+    updateTabs((currentTabs) => patchTabsById(currentTabs, tabId, patch));
+  }, [updateTabs]);
 
   const addTab = (): void => {
-    const nextTabs = appendNewTab(tabs);
-    onChange(nextTabs);
+    const nextTabs = updateTabs(appendNewTab);
     const addedTab = nextTabs[nextTabs.length - 1];
     if (addedTab) {
       onSelectedTabChange?.(addedTab.id);
     }
   };
 
-  const removeTab = (index: number): void => {
-    if (tabs.length <= 1) {
+  const removeTab = (tabId: string): void => {
+    const currentTabs = tabsRef.current;
+    if (currentTabs.length <= 1) {
       return;
     }
-    const removedTab = tabs[index];
-    const nextTabs = tabs.filter((_tab, candidateIndex) => candidateIndex !== index);
-    onChange(nextTabs);
-    if (removedTab?.id === selectedTabId) {
+    const index = currentTabs.findIndex((tab) => tab.id === tabId);
+    if (index < 0) {
+      return;
+    }
+    const nextTabs = updateTabs((latestTabs) => latestTabs.filter((tab) => tab.id !== tabId));
+    if (tabId === selectedTabId) {
       const nextSelectedTab = nextTabs[Math.min(index, nextTabs.length - 1)];
       if (nextSelectedTab) {
         onSelectedTabChange?.(nextSelectedTab.id);
@@ -174,10 +187,7 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({
     if (overId === undefined || event.active.id === overId) {
       return;
     }
-    const next = reorderTabsById(tabs, String(event.active.id), String(overId));
-    if (next !== tabs) {
-      onChange(next);
-    }
+    updateTabs((currentTabs) => reorderTabsById(currentTabs, String(event.active.id), String(overId)));
   };
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
@@ -235,7 +245,7 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({
                   tab={tab}
                   tabsLength={tabs.length}
                   onSelect={onSelectedTabChange ? () => onSelectedTabChange(tab.id) : undefined}
-                  onRemove={() => removeTab(index)}
+                  onRemove={() => removeTab(tab.id)}
                 >
                   {open ? (
                     <AccordionPanel aria-labelledby={headerId} className="bl-tabs-builder__card-body" id={panelId}>
@@ -263,7 +273,7 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({
                             value={tab.maxItems ?? ''}
                             onChange={(event) => {
                               const value = event.currentTarget.valueAsNumber;
-                              patchTab(index, {
+                              patchTabById(tab.id, {
                                 maxItems: Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined
                               });
                             }}
@@ -275,7 +285,7 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({
                         checked={tab.showItemCount === true}
                         className="bl-tabs-builder__switch"
                         label="Show item count"
-                        onChange={(_event, data) => patchTab(index, { showItemCount: data.checked })}
+                        onChange={(_event, data) => patchTabById(tab.id, { showItemCount: data.checked })}
                       />
 
                       <FilterQueryEditor
@@ -284,7 +294,7 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({
                         id={`tab-filter-${safeId(tab.id)}`}
                         onChange={(nextExpression) => {
                           const trimmed = nextExpression.trim();
-                          patchTab(index, {
+                          patchTabById(tab.id, {
                             filter: trimmed
                               ? {
                                   kind: 'query',
@@ -321,11 +331,7 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({
             open
             showAutomaticAction={false}
             onApply={(override) => {
-              onChange(
-                tabs.map((tab) =>
-                  tab.id === iconPickerTabId ? { ...tab, tabIcon: undefined, tabIconOverride: override } : tab
-                )
-              );
+              patchTabById(iconPickerTabId, { tabIcon: undefined, tabIconOverride: override });
             }}
             onOpenChange={(open) => {
               if (!open) setIconPickerTabId(undefined);
