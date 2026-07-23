@@ -2,9 +2,11 @@ import {
   betterListDefaultSortOptions,
   createBetterListSortableFieldOptions,
   defaultBetterListViewerSortOptions,
+  getBetterListViewerSortValueKey,
   getBetterListDefaultSortFieldPath,
   normalizeBetterListDefaultSort,
   normalizeBetterListDefaultSortSelection,
+  normalizeBetterListViewerSortConfiguration,
   normalizeBetterListViewerSortOptions,
   serializeBetterListViewerSortOptions
 } from './defaultSorting';
@@ -50,19 +52,54 @@ describe('default sorting authoring', () => {
         version: 1,
         enabled: ['descending', 'ascending', 'descending', 'unsupported']
       })
-    ).toEqual(['ascending', 'descending']);
+    ).toEqual(['titleAscending']);
     expect(
       normalizeBetterListViewerSortOptions({
         version: 1,
         enabled: []
       })
     ).toEqual([]);
+    expect(
+      normalizeBetterListViewerSortOptions({
+        version: 2,
+        enabled: []
+      })
+    ).toEqual([]);
   });
 
-  it('serializes visitor sorting options as a versioned configuration', () => {
-    expect(JSON.parse(serializeBetterListViewerSortOptions(['descending']))).toEqual({
-      version: 1,
-      enabled: ['descending']
+  it('normalizes v2 modes and columns in canonical order', () => {
+    expect(
+      normalizeBetterListViewerSortConfiguration({
+        version: 2,
+        enabled: ['column', 'trending', 'listOrder', 'trending', 'unsupported'],
+        columns: [' Priority ', 'Modified', 'priority', '', 42]
+      })
+    ).toEqual({
+      version: 2,
+      enabled: ['listOrder', 'trending', 'column'],
+      columns: ['Priority', 'Modified']
+    });
+  });
+
+  it('namespaces built-in and column values independently', () => {
+    expect(getBetterListViewerSortValueKey('popularity')).toBe('mode:popularity');
+    expect(getBetterListViewerSortValueKey('column', 'popularity')).toBe(
+      'column:popularity'
+    );
+  });
+
+  it('serializes visitor sorting options and optional columns as v2', () => {
+    expect(
+      JSON.parse(
+        serializeBetterListViewerSortOptions(
+          ['column', 'recentlyUpdated', 'listOrder', 'unsupported'],
+          ['Priority', 'Modified', 'priority']
+        )
+      )
+    ).toEqual({
+      version: 2,
+      enabled: ['listOrder', 'recentlyUpdated', 'column'],
+      columns: ['Priority', 'Modified']
     });
   });
 

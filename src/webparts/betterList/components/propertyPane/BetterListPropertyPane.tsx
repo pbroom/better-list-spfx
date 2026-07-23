@@ -2,7 +2,6 @@
 import * as React from 'react';
 import {
   Button,
-  Checkbox,
   Combobox,
   Dropdown,
   FluentProvider,
@@ -36,7 +35,6 @@ import {
   BetterListColumnCount,
   BetterListDefaultSort,
   BetterListViewerSortOption,
-  betterListViewerSortChoices,
   createBetterListPortalPositioning,
   getBetterListDefaultSortFieldPath,
   getBetterListPortalMountNode,
@@ -49,7 +47,6 @@ import {
   IBetterListThemeColor,
   normalizeBetterListDefaultSortSelection,
   resolveBetterListTabConfigurations,
-  normalizeBetterListViewerSortOptions,
   validateBetterListTemplateStructure
 } from '../../../../shared';
 import { ISourceEditorTarget } from '../../../../vendor/source-editor/SourceEditorField';
@@ -62,6 +59,7 @@ import {
 } from './GroupOrderEditorDialog';
 import { ItemPropertyBuilder } from './ItemPropertyBuilder';
 import { PropertyPaneSection } from './PropertyPaneSection';
+import { ViewerSortingOptions } from './ViewerSortingOptions';
 import {
   appendNewTab,
   filterExpression,
@@ -80,6 +78,7 @@ export interface IBetterListAuthoringState {
   showSearch: boolean;
   showSortingOptions: boolean;
   sortingOptions: readonly BetterListViewerSortOption[];
+  sortingColumns: readonly string[];
   defaultSort: BetterListDefaultSort;
   defaultSortColumn: string;
   sourceListId: string;
@@ -319,7 +318,9 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
                   defaultSortSelection.defaultSort,
                   defaultSortSelection.defaultSortColumn,
                   visibleFields,
-                  currentValue
+                  currentValue,
+                  currentValue.sortingOptions,
+                  currentValue.sortingColumns
                 )
               }
             });
@@ -391,7 +392,9 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
     defaultSort: BetterListDefaultSort = props.value.defaultSort,
     defaultSortColumn: string = props.value.defaultSortColumn,
     sourceFields: readonly IBetterListFieldDescriptor[] = fields,
-    value: IBetterListAuthoringState = props.value
+    value: IBetterListAuthoringState = props.value,
+    sortingOptions: readonly BetterListViewerSortOption[] = props.value.sortingOptions,
+    sortingColumns: readonly string[] = props.value.sortingColumns
   ): ReturnType<typeof createBetterListMetadataMappings> => {
     const resolved = resolveBetterListTabConfigurations(tabs, {
       grouping: {
@@ -429,6 +432,16 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
     if (defaultSortFieldPath) {
       paths.push(defaultSortFieldPath);
     }
+    sortingOptions.forEach((mode) => {
+      if (mode === 'column') {
+        paths.push(...sortingColumns);
+        return;
+      }
+      const fieldPath = getBetterListDefaultSortFieldPath(mode, '', sourceFields);
+      if (fieldPath) {
+        paths.push(fieldPath);
+      }
+    });
     return createBetterListMetadataMappings(sourceFields, paths);
   };
 
@@ -448,6 +461,28 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
       fieldMappings: {
         ...props.value.fieldMappings,
         metadata: createDerivedMetadata(props.value.tabs, defaultSort, column)
+      }
+    });
+  };
+
+  const patchSortingOptions = (
+    sortingOptions: readonly BetterListViewerSortOption[],
+    sortingColumns: readonly string[]
+  ): void => {
+    patchValue({
+      sortingOptions,
+      sortingColumns,
+      fieldMappings: {
+        ...props.value.fieldMappings,
+        metadata: createDerivedMetadata(
+          props.value.tabs,
+          props.value.defaultSort,
+          props.value.defaultSortColumn,
+          fields,
+          props.value,
+          sortingOptions,
+          sortingColumns
+        )
       }
     });
   };
@@ -536,6 +571,63 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
       });
     }
   }, [fields, props]);
+
+  React.useEffect(() => {
+    if (
+      !props.value.showSortingOptions ||
+      !props.value.sourceListId ||
+      !props.value.fieldMappings.title ||
+      fields.length === 0
+    ) {
+      return;
+    }
+    const sortableFieldPaths = new Set(
+      createBetterListSortableFieldOptions(fields).map((option) => option.fieldPath)
+    );
+    const sortingColumns = props.value.sortingColumns.filter((column) =>
+      sortableFieldPaths.has(column)
+    );
+    const sortingOptions =
+      sortingColumns.length > 0
+        ? props.value.sortingOptions
+        : props.value.sortingOptions.filter((option) => option !== 'column');
+    const metadata = createDerivedMetadata(
+      props.value.tabs,
+      props.value.defaultSort,
+      props.value.defaultSortColumn,
+      fields,
+      props.value,
+      sortingOptions,
+      sortingColumns
+    );
+    if (
+      JSON.stringify(metadata) === JSON.stringify(props.value.fieldMappings.metadata || []) &&
+      JSON.stringify(sortingColumns) === JSON.stringify(props.value.sortingColumns) &&
+      JSON.stringify(sortingOptions) === JSON.stringify(props.value.sortingOptions)
+    ) {
+      return;
+    }
+    props.onChange({
+      ...props.value,
+      sortingOptions,
+      sortingColumns,
+      fieldMappings: {
+        ...props.value.fieldMappings,
+        metadata
+      }
+    });
+  }, [
+    fields,
+    props,
+    props.value.defaultSort,
+    props.value.defaultSortColumn,
+    props.value.fieldMappings,
+    props.value.sortingColumns,
+    props.value.sortingOptions,
+    props.value.showSortingOptions,
+    props.value.sourceListId,
+    props.value.tabs
+  ]);
 
   const updateItemLayout = (value: {
     itemProperties: readonly string[];
@@ -742,28 +834,15 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
             onChange={(_event, data) => patchValue({ showSortingOptions: data.checked })}
           />
           {props.value.showSortingOptions ? (
-            <fieldset
-              aria-label="Sorting options"
+            <ViewerSortingOptions
               className="bl-pane__sorting-options"
-            >
-              <legend className="bl-pane__label">Sorting options</legend>
-              {betterListViewerSortChoices.map((choice) => (
-                <Checkbox
-                  aria-label={`Show ${choice.label} sorting option`}
-                  checked={props.value.sortingOptions.indexOf(choice.value) >= 0}
-                  key={choice.value}
-                  label={choice.label}
-                  onChange={(_event, data) => {
-                    const nextOptions = data.checked
-                      ? [...props.value.sortingOptions, choice.value]
-                      : props.value.sortingOptions.filter((option) => option !== choice.value);
-                    patchValue({
-                      sortingOptions: normalizeBetterListViewerSortOptions(nextOptions)
-                    });
-                  }}
-                />
-              ))}
-            </fieldset>
+              columnOptions={defaultSortColumnOptions}
+              enabled={props.value.sortingOptions}
+              legendClassName="bl-pane__label"
+              selectedColumns={props.value.sortingColumns}
+              targetDocument={targetDocument}
+              onChange={patchSortingOptions}
+            />
           ) : null}
           <label className="bl-pane__field">
             <span className="bl-pane__label">Default sorting</span>

@@ -42,7 +42,7 @@ export type BetterListDefaultSort =
   | 'recentlyUpdated'
   | 'column';
 
-export type BetterListViewerSortOption = 'ascending' | 'descending';
+export type BetterListViewerSortOption = BetterListDefaultSort;
 
 export type BetterListRelationshipKind = 'lookup' | 'person';
 export type BetterListRelationshipResolution = 'expanded' | 'userInfoBatch';

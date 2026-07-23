@@ -43,7 +43,14 @@ describe('BetterListPropertyPane', () => {
     maxItemsPerPage: 0,
     showSearch: true,
     showSortingOptions: false,
-    sortingOptions: ['ascending', 'descending'],
+    sortingOptions: [
+      'listOrder',
+      'titleAscending',
+      'popularity',
+      'trending',
+      'recentlyUpdated'
+    ],
+    sortingColumns: [],
     defaultSort: 'listOrder',
     defaultSortColumn: '',
     sourceListId: 'services',
@@ -379,7 +386,13 @@ describe('BetterListPropertyPane', () => {
       ReactDom.render(
         <BetterListPropertyPane
           pickerDataSource={{
-            loadFields: async () => [],
+            loadFields: async () => [
+              { internalName: 'Title', title: 'Title', typeAsString: 'Text' },
+              { internalName: 'Modified', title: 'Modified', typeAsString: 'DateTime' },
+              { internalName: 'ViewsLifeTime', title: 'Popularity', typeAsString: 'Number' },
+              { internalName: 'ViewsRecent', title: 'Trending', typeAsString: 'Number' },
+              { internalName: 'Priority', title: 'Priority', typeAsString: 'Number' }
+            ],
             loadLists: async () => [{ id: 'services', title: 'Services' }],
             resolveListUrl: async () => ({ id: 'services', title: 'Services' })
           }}
@@ -388,6 +401,7 @@ describe('BetterListPropertyPane', () => {
         />,
         container
       );
+      await Promise.resolve();
       await Promise.resolve();
     });
 
@@ -398,22 +412,40 @@ describe('BetterListPropertyPane', () => {
       Simulate.click(searchSectionButton as HTMLButtonElement);
     });
 
-    const ascendingOption = container.querySelector<HTMLInputElement>(
-      'input[aria-label="Show A → Z sorting option"]'
+    const optionLabels = [
+      'None (default list order)',
+      'A to Z',
+      'Popularity',
+      'Trending',
+      'Recently updated',
+      'Column'
+    ];
+    const options = optionLabels.map((label) =>
+      container.querySelector<HTMLInputElement>(
+        `input[aria-label="Show ${label} sorting option"]`
+      )
     );
-    const descendingOption = container.querySelector<HTMLInputElement>(
-      'input[aria-label="Show Z → A sorting option"]'
-    );
-    expect(ascendingOption?.checked).toBe(true);
-    expect(descendingOption?.checked).toBe(true);
+    expect(options.every(Boolean)).toBe(true);
+    expect(options.slice(0, 5).every((option) => option?.checked)).toBe(true);
+    expect(options[5]?.checked).toBe(false);
+    expect(
+      container.querySelector<HTMLButtonElement>('button[aria-label="Choose visitor sorting columns"]')
+    ).not.toBeNull();
 
     await act(async () => {
-      (ascendingOption as HTMLInputElement).checked = false;
-      Simulate.change(ascendingOption as HTMLInputElement);
+      (options[2] as HTMLInputElement).checked = false;
+      Simulate.change(options[2] as HTMLInputElement);
     });
     expect(onChange).toHaveBeenLastCalledWith({
       ...value,
-      sortingOptions: ['descending']
+      sortingOptions: ['listOrder', 'titleAscending', 'trending', 'recentlyUpdated'],
+      sortingColumns: [],
+      fieldMappings: expect.objectContaining({
+        metadata: expect.arrayContaining([
+          expect.objectContaining({ key: 'ViewsRecent' }),
+          expect.objectContaining({ key: 'Modified' })
+        ])
+      })
     });
     ReactDom.unmountComponentAtNode(container);
   });

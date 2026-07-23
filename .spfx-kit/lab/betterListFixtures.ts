@@ -75,7 +75,24 @@ export const servicesFieldMappings: IBetterListFieldMappings = {
     valueProperty: 'title',
     multi: true
   },
-  icon: { kind: 'text', internalName: 'Icon', displayName: 'Icon' }
+  icon: { kind: 'text', internalName: 'Icon', displayName: 'Icon' },
+  metadata: [
+    {
+      key: 'Modified',
+      label: 'Modified',
+      mapping: { kind: 'dateTime', internalName: 'Modified', displayName: 'Modified' }
+    },
+    {
+      key: 'ViewsLifeTime',
+      label: 'Popularity',
+      mapping: { kind: 'number', internalName: 'ViewsLifeTime', displayName: 'Popularity' }
+    },
+    {
+      key: 'ViewsRecent',
+      label: 'Trending',
+      mapping: { kind: 'number', internalName: 'ViewsRecent', displayName: 'Trending' }
+    }
+  ]
 };
 
 export const servicesTabs: readonly IBetterListTabConfig[] = [

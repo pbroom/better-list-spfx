@@ -386,7 +386,15 @@ describe('BetterListView', () => {
           items={[item]}
           showSortingOptions
           tabs={tabs}
-          viewerSortOptions={['descending']}
+          viewerSortColumns={[
+            {
+              fieldPath: 'Priority',
+              kind: 'number',
+              label: 'Priority',
+              valueKey: 'column:Priority'
+            }
+          ]}
+          viewerSortOptions={['popularity', 'column']}
         />,
         container
       );
@@ -402,16 +410,33 @@ describe('BetterListView', () => {
       Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')).map(
         (candidate) => candidate.textContent?.trim()
       )
-    ).toEqual(['Z → A']);
+    ).toEqual(['Popularity']);
+    const columnMenu = Array.from(
+      document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')
+    ).find((candidate) => candidate.textContent?.trim() === 'Column');
+    expect(columnMenu).toBeDefined();
+    expect(columnMenu?.getAttribute('aria-haspopup')).toBe('menu');
     ReactDom.unmountComponentAtNode(container);
     container.remove();
   });
 
-  it('preserves list ordering until a visitor chooses a title sort direction', async () => {
+  it('replaces and dismisses a visitor-selected sort tag', async () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
-    const alpha = { ...item, id: 'alpha', itemSortOrder: 2, title: 'Alpha service' };
-    const zulu = { ...item, id: 'zulu', itemSortOrder: 1, title: 'Zulu service' };
+    const alpha = {
+      ...item,
+      id: 'alpha',
+      itemSortOrder: 2,
+      title: 'Alpha service',
+      viewerSortValues: { 'mode:popularity': 1 }
+    };
+    const zulu = {
+      ...item,
+      id: 'zulu',
+      itemSortOrder: 1,
+      title: 'Zulu service',
+      viewerSortValues: { 'mode:popularity': 10 }
+    };
     const items = [zulu, alpha];
     const tabs: readonly IBetterListTab[] = [
       { key: 'all', label: 'All items', grouped: false, items }
@@ -443,7 +468,7 @@ describe('BetterListView', () => {
       await Promise.resolve();
     });
     const ascendingOption = Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')).find(
-      (candidate) => candidate.textContent?.trim() === 'A → Z'
+      (candidate) => candidate.textContent?.trim() === 'A to Z'
     );
     expect(ascendingOption).toBeDefined();
     await act(async () => {
@@ -451,26 +476,26 @@ describe('BetterListView', () => {
     });
     expect(itemTitles()).toEqual(['Alpha service', 'Zulu service']);
     expect(container.querySelectorAll('.better-list__sort-tag')).toHaveLength(1);
-    expect(container.querySelector('.better-list__sort-tag')?.textContent).toContain('A → Z');
+    expect(container.querySelector('.better-list__sort-tag')?.textContent).toContain('A to Z');
 
     await act(async () => {
       Simulate.click(sortTrigger as HTMLButtonElement);
       await Promise.resolve();
     });
-    const descendingOption = Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')).find(
-      (candidate) => candidate.textContent?.trim() === 'Z → A'
+    const popularityOption = Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')).find(
+      (candidate) => candidate.textContent?.trim() === 'Popularity'
     );
-    expect(descendingOption).toBeDefined();
+    expect(popularityOption).toBeDefined();
     await act(async () => {
-      Simulate.click(descendingOption as HTMLElement);
+      Simulate.click(popularityOption as HTMLElement);
     });
 
     expect(itemTitles()).toEqual(['Zulu service', 'Alpha service']);
     expect(container.querySelectorAll('.better-list__sort-tag')).toHaveLength(1);
-    expect(container.querySelector('.better-list__sort-tag')?.textContent).toContain('Z → A');
+    expect(container.querySelector('.better-list__sort-tag')?.textContent).toContain('Popularity');
 
     const activeSortTag = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Remove Z → A sorting"]'
+      'button[aria-label="Remove Popularity sorting"]'
     );
     expect(activeSortTag).not.toBeNull();
     await act(async () => {
@@ -481,6 +506,295 @@ describe('BetterListView', () => {
     expect(container.querySelector('.better-list__sort-tag')).toBeNull();
     expect(itemTitles()).toEqual(['Zulu service', 'Alpha service']);
     expect(document.activeElement).toBe(sortTrigger);
+    ReactDom.unmountComponentAtNode(container);
+    container.remove();
+  });
+
+  it('keeps an explicit list-order override distinct from dismissing to the authored default', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const alpha = { ...item, id: 'alpha', itemSortOrder: 2, title: 'Alpha service' };
+    const zulu = { ...item, id: 'zulu', itemSortOrder: 1, title: 'Zulu service' };
+    const items = [zulu, alpha];
+    const tabs: readonly IBetterListTab[] = [
+      { key: 'all', label: 'All items', grouped: false, items }
+    ];
+
+    await act(async () => {
+      ReactDom.render(
+        <BetterListView
+          activeTabKey="all"
+          defaultSort="titleAscending"
+          items={items}
+          showSortingOptions
+          tabs={tabs}
+        />,
+        container
+      );
+    });
+
+    const itemTitles = (): string[] =>
+      Array.from(container.querySelectorAll('.better-list__item-title')).map((element) =>
+        element.textContent?.trim() || ''
+      );
+    expect(itemTitles()).toEqual(['Alpha service', 'Zulu service']);
+
+    const sortTrigger = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Sort items"]'
+    );
+    await act(async () => {
+      Simulate.click(sortTrigger as HTMLButtonElement);
+      await Promise.resolve();
+    });
+    const listOrderOption = Array.from(
+      document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')
+    ).find((candidate) => candidate.textContent?.trim() === 'None (default list order)');
+    expect(listOrderOption).toBeDefined();
+    await act(async () => {
+      Simulate.click(listOrderOption as HTMLElement);
+    });
+
+    expect(itemTitles()).toEqual(['Zulu service', 'Alpha service']);
+    const activeSortTag = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Remove None (default list order) sorting"]'
+    );
+    expect(activeSortTag).not.toBeNull();
+    await act(async () => {
+      Simulate.click(activeSortTag as HTMLButtonElement);
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+    expect(itemTitles()).toEqual(['Alpha service', 'Zulu service']);
+    expect(container.querySelector('.better-list__sort-tag')).toBeNull();
+
+    ReactDom.unmountComponentAtNode(container);
+    container.remove();
+  });
+
+  it('keeps built-in popularity separate from a column named popularity', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const popular = {
+      ...item,
+      id: 'popular',
+      itemSortOrder: 2,
+      title: 'Popular service',
+      viewerSortValues: {
+        'mode:popularity': 100,
+        'column:popularity': 100
+      }
+    };
+    const lowColumn = {
+      ...item,
+      id: 'low-column',
+      itemSortOrder: 1,
+      title: 'Low column service',
+      viewerSortValues: {
+        'mode:popularity': 1,
+        'column:popularity': 1
+      }
+    };
+    const items = [lowColumn, popular];
+    const tabs: readonly IBetterListTab[] = [
+      { key: 'all', label: 'All items', grouped: false, items }
+    ];
+
+    await act(async () => {
+      ReactDom.render(
+        <BetterListView
+          activeTabKey="all"
+          items={items}
+          showSortingOptions
+          tabs={tabs}
+          viewerSortColumns={[
+            {
+              fieldPath: 'popularity',
+              kind: 'number',
+              label: 'Popularity column',
+              valueKey: 'column:popularity'
+            }
+          ]}
+          viewerSortOptions={['popularity', 'column']}
+        />,
+        container
+      );
+    });
+
+    const firstTitle = (): string =>
+      container.querySelector('.better-list__item-title')?.textContent?.trim() || '';
+    const sortTrigger = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Sort items"]'
+    ) as HTMLButtonElement;
+    await act(async () => {
+      Simulate.click(sortTrigger);
+      await Promise.resolve();
+    });
+    const builtInPopularity = Array.from(
+      document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')
+    ).find((candidate) => candidate.textContent?.trim() === 'Popularity');
+    await act(async () => {
+      Simulate.click(builtInPopularity as HTMLElement);
+    });
+    expect(firstTitle()).toBe('Popular service');
+
+    await act(async () => {
+      Simulate.click(sortTrigger);
+      await Promise.resolve();
+    });
+    const columnMenu = Array.from(
+      document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')
+    ).find((candidate) => candidate.textContent?.trim() === 'Column');
+    await act(async () => {
+      Simulate.keyDown(columnMenu as HTMLElement, { key: 'ArrowRight' });
+      await Promise.resolve();
+    });
+    const columnPopularity = Array.from(
+      document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')
+    ).find((candidate) => candidate.textContent?.trim() === 'Popularity column');
+    await act(async () => {
+      Simulate.click(columnPopularity as HTMLElement);
+    });
+    expect(firstTitle()).toBe('Low column service');
+
+    ReactDom.unmountComponentAtNode(container);
+    container.remove();
+  });
+
+  it('applies descending built-in metadata sorts and ascending column sorts', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const items = [
+      {
+        ...item,
+        id: 'trending',
+        itemSortOrder: 1,
+        title: 'Trending service',
+        viewerSortValues: {
+          'mode:popularity': 1,
+          'mode:trending': 50,
+          'mode:recentlyUpdated': '2026-01-01T00:00:00Z',
+          'column:Priority': 4
+        }
+      },
+      {
+        ...item,
+        id: 'popular',
+        itemSortOrder: 2,
+        title: 'Popular service',
+        viewerSortValues: {
+          'mode:popularity': 10,
+          'mode:trending': 1,
+          'mode:recentlyUpdated': '2026-02-01T00:00:00Z',
+          'column:Priority': 3
+        }
+      },
+      {
+        ...item,
+        id: 'recent',
+        itemSortOrder: 3,
+        title: 'Recent service',
+        viewerSortValues: {
+          'mode:popularity': 5,
+          'mode:trending': 20,
+          'mode:recentlyUpdated': '2026-04-01T00:00:00Z',
+          'column:Priority': 2
+        }
+      },
+      {
+        ...item,
+        id: 'priority',
+        itemSortOrder: 4,
+        title: 'Priority service',
+        viewerSortValues: {
+          'mode:popularity': 2,
+          'mode:trending': 2,
+          'mode:recentlyUpdated': '2026-03-01T00:00:00Z',
+          'column:Priority': 1
+        }
+      }
+    ];
+    const tabs: readonly IBetterListTab[] = [
+      { key: 'all', label: 'All items', grouped: false, items }
+    ];
+
+    await act(async () => {
+      ReactDom.render(
+        <BetterListView
+          activeTabKey="all"
+          items={items}
+          showSortingOptions
+          tabs={tabs}
+          viewerSortColumns={[
+            {
+              fieldPath: 'Priority',
+              kind: 'number',
+              label: 'Priority',
+              valueKey: 'column:Priority'
+            }
+          ]}
+          viewerSortOptions={[
+            'popularity',
+            'trending',
+            'recentlyUpdated',
+            'column'
+          ]}
+        />,
+        container
+      );
+    });
+
+    const firstTitle = (): string =>
+      container.querySelector('.better-list__item-title')?.textContent?.trim() || '';
+    const sortTrigger = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Sort items"]'
+    ) as HTMLButtonElement;
+    const selectBuiltIn = async (label: string): Promise<void> => {
+      await act(async () => {
+        Simulate.click(sortTrigger);
+        await Promise.resolve();
+      });
+      const option = Array.from(
+        document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')
+      ).find((candidate) => candidate.textContent?.trim() === label);
+      expect(option).toBeDefined();
+      await act(async () => {
+        Simulate.click(option as HTMLElement);
+      });
+    };
+
+    await selectBuiltIn('Popularity');
+    expect(firstTitle()).toBe('Popular service');
+    await selectBuiltIn('Trending');
+    expect(firstTitle()).toBe('Trending service');
+    await selectBuiltIn('Recently updated');
+    expect(firstTitle()).toBe('Recent service');
+
+    await act(async () => {
+      Simulate.click(sortTrigger);
+      await Promise.resolve();
+    });
+    const columnMenu = Array.from(
+      document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')
+    ).find((candidate) => candidate.textContent?.trim() === 'Column');
+    expect(columnMenu).toBeDefined();
+    await act(async () => {
+      Simulate.keyDown(columnMenu as HTMLElement, {
+        key: 'ArrowRight'
+      });
+      await Promise.resolve();
+    });
+    const priorityOption = Array.from(
+      document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')
+    ).find((candidate) => candidate.textContent?.trim() === 'Priority');
+    expect(priorityOption).toBeDefined();
+    await act(async () => {
+      Simulate.click(priorityOption as HTMLElement);
+    });
+    expect(firstTitle()).toBe('Priority service');
+    expect(container.querySelectorAll('.better-list__sort-tag')).toHaveLength(1);
+    expect(container.querySelector('.better-list__sort-tag')?.textContent).toContain(
+      'Priority'
+    );
+
     ReactDom.unmountComponentAtNode(container);
     container.remove();
   });

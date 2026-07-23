@@ -4,6 +4,7 @@ import {
   Input,
   Link,
   Menu,
+  MenuItem,
   MenuItemRadio,
   MenuList,
   MenuPopover,
@@ -62,6 +63,7 @@ import {
   IBetterListThemeColor,
   defaultBetterListGroupIconsConfiguration,
   getBetterListGroupIconOverride,
+  getBetterListViewerSortValueKey,
   normalizeBetterListColumnCount,
   normalizeBetterListDefaultSort,
   normalizeBetterListViewerSortOptions,
@@ -77,6 +79,8 @@ const GroupIconPickerDialog = React.lazy(async () => {
   );
   return { default: module.GroupIconPickerDialog };
 });
+
+const emptyBetterListViewerSortColumns: readonly IBetterListViewerSortColumn[] = [];
 
 export type BetterListStatus = 'loading' | 'ready' | 'error';
 
@@ -135,6 +139,8 @@ export interface IBetterListItem {
   presentationOrder?: number;
   defaultSortKind?: BetterListFieldKind;
   defaultSortValue?: BetterListFieldValue;
+  /** Values projected for visitor-selected built-in and column sorting. */
+  viewerSortValues?: Readonly<Record<string, BetterListFieldValue>>;
 }
 
 export interface IBetterListItemElement {
@@ -142,6 +148,13 @@ export interface IBetterListItemElement {
   kind: 'description' | 'metadata';
   value: string;
   href?: string;
+}
+
+export interface IBetterListViewerSortColumn {
+  fieldPath: string;
+  label: string;
+  kind: BetterListFieldKind;
+  valueKey: string;
 }
 
 export interface IBetterListViewProps {
@@ -168,6 +181,7 @@ export interface IBetterListViewProps {
   showSearch?: boolean;
   showSortingOptions?: boolean;
   viewerSortOptions?: readonly BetterListViewerSortOption[];
+  viewerSortColumns?: readonly IBetterListViewerSortColumn[];
   defaultSort?: BetterListDefaultSort;
   defaultSortFieldPath?: string;
   listTitle?: string;
@@ -179,6 +193,13 @@ export interface IBetterListViewProps {
 
 type BetterListTemplateTokens = Readonly<Record<string, string | number | undefined>>;
 type BetterListTemplateSlotRenderer = (attributes: Record<string, unknown>, key: string) => React.ReactNode;
+
+interface IBetterListViewerSortSelection {
+  mode: BetterListViewerSortOption;
+  fieldPath?: string;
+}
+
+type BetterListSortDirection = 'ascending' | 'descending';
 
 interface IBetterListGroup {
   id: string;
@@ -451,7 +472,7 @@ const compareItems = (left: IBetterListItem, right: IBetterListItem): number => 
 const compareItemsByTitle = (
   left: IBetterListItem,
   right: IBetterListItem,
-  direction: BetterListViewerSortOption
+  direction: BetterListSortDirection
 ): number => {
   const titleDifference = compareText(left.title, right.title);
   const directionMultiplier = direction === 'descending' ? -1 : 1;
@@ -475,7 +496,7 @@ function compareDefaultSortValues(
   left: BetterListFieldValue | undefined,
   right: BetterListFieldValue | undefined,
   kind: BetterListFieldKind | undefined,
-  direction: BetterListViewerSortOption
+  direction: BetterListSortDirection
 ): number {
   const leftValue = firstSortValue(left);
   const rightValue = firstSortValue(right);
@@ -517,12 +538,47 @@ function compareItemsByDefaultSort(
   if (mode === 'listOrder') {
     return compareItems(left, right);
   }
-  const direction: BetterListViewerSortOption =
+  const direction: BetterListSortDirection =
     mode === 'column' ? 'ascending' : 'descending';
   return compareDefaultSortValues(
     left.defaultSortValue,
     right.defaultSortValue,
     left.defaultSortKind || right.defaultSortKind,
+    direction
+  ) || compareItems(left, right);
+}
+
+function compareItemsByViewerSort(
+  left: IBetterListItem,
+  right: IBetterListItem,
+  selection: IBetterListViewerSortSelection,
+  columns: readonly IBetterListViewerSortColumn[]
+): number {
+  if (selection.mode === 'listOrder') {
+    return compareItems(left, right);
+  }
+  if (selection.mode === 'titleAscending') {
+    return compareItemsByTitle(left, right, 'ascending');
+  }
+
+  const column = selection.mode === 'column'
+    ? columns.find((candidate) => candidate.fieldPath === selection.fieldPath)
+    : undefined;
+  const valueKey = selection.mode === 'column'
+    ? column?.valueKey
+    : getBetterListViewerSortValueKey(selection.mode);
+  const kind = selection.mode === 'column'
+    ? column?.kind
+    : selection.mode === 'recentlyUpdated'
+      ? 'dateTime'
+      : 'number';
+  const direction: BetterListSortDirection =
+    selection.mode === 'column' ? 'ascending' : 'descending';
+
+  return compareDefaultSortValues(
+    valueKey ? left.viewerSortValues?.[valueKey] : undefined,
+    valueKey ? right.viewerSortValues?.[valueKey] : undefined,
+    kind,
     direction
   ) || compareItems(left, right);
 }
@@ -804,6 +860,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   showSearch,
   showSortingOptions = false,
   viewerSortOptions,
+  viewerSortColumns = emptyBetterListViewerSortColumns,
   defaultSort = 'listOrder',
   defaultSortFieldPath = '',
   listTitle = 'Better List',
@@ -816,7 +873,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   const compiledTemplate = React.useMemo(() => resolveBetterListTemplate(htmlTemplate), [htmlTemplate]);
   const [selectedTabKey, setSelectedTabKey] = React.useState(activeTabKey);
   const [internalSearchValue, setInternalSearchValue] = React.useState(searchValue ?? '');
-  const [sortOverride, setSortOverride] = React.useState<BetterListViewerSortOption | undefined>(undefined);
+  const [sortOverride, setSortOverride] = React.useState<IBetterListViewerSortSelection | undefined>(undefined);
   const [collapsedGroups, setCollapsedGroups] = React.useState<Record<string, boolean>>({});
   const [editingGroup, setEditingGroup] = React.useState<IBetterListGroup | undefined>(undefined);
   const [currentPage, setCurrentPage] = React.useState(0);
@@ -839,20 +896,35 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   }, [searchValue]);
 
   const normalizedDefaultSort = normalizeBetterListDefaultSort(defaultSort);
-  const normalizedViewerSortOptions = normalizeBetterListViewerSortOptions(viewerSortOptions);
-  const ascendingSortEnabled = normalizedViewerSortOptions.indexOf('ascending') >= 0;
-  const descendingSortEnabled = normalizedViewerSortOptions.indexOf('descending') >= 0;
+  const normalizedViewerSortOptions = React.useMemo(
+    () => normalizeBetterListViewerSortOptions(viewerSortOptions),
+    [viewerSortOptions]
+  );
+  const enabledViewerSortChoices = React.useMemo(
+    () => betterListViewerSortChoices.filter(
+      (choice) => choice.value !== 'column' &&
+        normalizedViewerSortOptions.indexOf(choice.value) >= 0
+    ),
+    [normalizedViewerSortOptions]
+  );
+  const columnSortEnabled =
+    normalizedViewerSortOptions.indexOf('column') >= 0 &&
+    viewerSortColumns.length > 0;
   React.useEffect(() => {
     setSortOverride(undefined);
   }, [defaultSortFieldPath, normalizedDefaultSort]);
   React.useEffect(() => {
-    if (
-      (sortOverride === 'ascending' && !ascendingSortEnabled) ||
-      (sortOverride === 'descending' && !descendingSortEnabled)
-    ) {
+    const overrideStillAvailable = sortOverride?.mode === 'column'
+      ? columnSortEnabled &&
+        viewerSortColumns.some((column) => column.fieldPath === sortOverride.fieldPath)
+      : Boolean(
+          sortOverride &&
+          enabledViewerSortChoices.some((choice) => choice.value === sortOverride.mode)
+        );
+    if (sortOverride && !overrideStillAvailable) {
       setSortOverride(undefined);
     }
-  }, [ascendingSortEnabled, descendingSortEnabled, sortOverride]);
+  }, [columnSortEnabled, enabledViewerSortChoices, sortOverride, viewerSortColumns]);
 
   const selectedTab = tabs.find((tab) => tab.key === selectedTabKey) ?? tabs[0];
   const selectedItemPropertyFields = selectedTab?.itemPropertyFields ?? itemPropertyFields;
@@ -864,7 +936,8 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   const showDescriptions = selectedLayout?.showDescriptions !== false;
   const searchVisible = (showSearch ?? true) && selectedLayout?.showSearch !== false;
   const sortingVisible =
-    showSortingOptions === true && (ascendingSortEnabled || descendingSortEnabled);
+    showSortingOptions === true &&
+    (enabledViewerSortChoices.length > 0 || columnSortEnabled);
   const grouped = selectedTab?.grouped === true;
   const collapsible = grouped && selectedLayout?.collapsible !== false;
   const initiallyExpanded = selectedLayout?.initiallyExpanded !== false;
@@ -880,19 +953,20 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   const normalizedMaxItemsPerPage =
     Number.isFinite(maxItemsPerPage) && maxItemsPerPage > 0 ? Math.floor(maxItemsPerPage) : 0;
   const activeSortOverride = sortingVisible ? sortOverride : undefined;
-  const activeSortLabel =
-    activeSortOverride === 'ascending'
-      ? 'A → Z'
-      : activeSortOverride === 'descending'
-        ? 'Z → A'
-        : undefined;
+  const activeSortLabel = activeSortOverride?.mode === 'column'
+    ? viewerSortColumns.find(
+        (column) => column.fieldPath === activeSortOverride.fieldPath
+      )?.label
+    : betterListViewerSortChoices.find(
+        (choice) => choice.value === activeSortOverride?.mode
+      )?.label;
   const sortActive = Boolean(activeSortOverride) || normalizedDefaultSort !== 'listOrder';
   const compareVisibleItems = React.useCallback(
     (left: IBetterListItem, right: IBetterListItem): number =>
       activeSortOverride
-        ? compareItemsByTitle(left, right, activeSortOverride)
+        ? compareItemsByViewerSort(left, right, activeSortOverride, viewerSortColumns)
         : compareItemsByDefaultSort(left, right, normalizedDefaultSort),
-    [activeSortOverride, normalizedDefaultSort]
+    [activeSortOverride, normalizedDefaultSort, viewerSortColumns]
   );
 
   const visibleItems = React.useMemo(() => {
@@ -1462,12 +1536,17 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
             >
               <Menu
                 checkedValues={{
-                  sortDirection: activeSortOverride ? [activeSortOverride] : []
+                  sortMode:
+                    activeSortOverride && activeSortOverride.mode !== 'column'
+                      ? [activeSortOverride.mode]
+                      : []
                 }}
                 onCheckedValueChange={(_event, data) => {
-                  const nextSort = data.checkedItems[0];
-                  if (nextSort === 'ascending' || nextSort === 'descending') {
-                    setSortOverride(nextSort);
+                  const nextSort = enabledViewerSortChoices.find(
+                    (choice) => choice.value === data.checkedItems[0]
+                  );
+                  if (nextSort) {
+                    setSortOverride({ mode: nextSort.value });
                   }
                 }}
               >
@@ -1488,17 +1567,54 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
                 </MenuTrigger>
                 <MenuPopover className={betterListFluentSurfaceClassName}>
                   <MenuList aria-label="Sort items">
-                    {betterListViewerSortChoices
-                      .filter((choice) => normalizedViewerSortOptions.indexOf(choice.value) >= 0)
-                      .map((choice) => (
-                        <MenuItemRadio
-                          key={choice.value}
-                          name="sortDirection"
-                          value={choice.value}
-                        >
-                          {choice.label}
-                        </MenuItemRadio>
-                      ))}
+                    {enabledViewerSortChoices.map((choice) => (
+                      <MenuItemRadio
+                        key={choice.value}
+                        name="sortMode"
+                        value={choice.value}
+                      >
+                        {choice.label}
+                      </MenuItemRadio>
+                    ))}
+                    {columnSortEnabled ? (
+                      <Menu
+                        checkedValues={{
+                          sortColumn:
+                            activeSortOverride?.mode === 'column' &&
+                            activeSortOverride.fieldPath
+                              ? [activeSortOverride.fieldPath]
+                              : []
+                        }}
+                        onCheckedValueChange={(_event, data) => {
+                          const fieldPath = data.checkedItems[0];
+                          if (
+                            fieldPath &&
+                            viewerSortColumns.some(
+                              (column) => column.fieldPath === fieldPath
+                            )
+                          ) {
+                            setSortOverride({ mode: 'column', fieldPath });
+                          }
+                        }}
+                      >
+                        <MenuTrigger disableButtonEnhancement>
+                          <MenuItem>Column</MenuItem>
+                        </MenuTrigger>
+                        <MenuPopover className={betterListFluentSurfaceClassName}>
+                          <MenuList aria-label="Sort by column">
+                            {viewerSortColumns.map((column) => (
+                              <MenuItemRadio
+                                key={column.fieldPath}
+                                name="sortColumn"
+                                value={column.fieldPath}
+                              >
+                                {column.label}
+                              </MenuItemRadio>
+                            ))}
+                          </MenuList>
+                        </MenuPopover>
+                      </Menu>
+                    ) : null}
                   </MenuList>
                 </MenuPopover>
               </Menu>
@@ -1516,7 +1632,11 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
                   <Tag
                     aria-label={`Remove ${activeSortLabel} sorting`}
                     className="better-list__sort-tag"
-                    value={activeSortOverride}
+                    value={
+                      activeSortOverride.mode === 'column'
+                        ? `column:${activeSortOverride.fieldPath || ''}`
+                        : activeSortOverride.mode
+                    }
                   >
                     {activeSortLabel}
                   </Tag>

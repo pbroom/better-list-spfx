@@ -33,17 +33,22 @@ export interface IBetterListViewerSortChoice {
 }
 
 export interface IBetterListViewerSortConfiguration {
-  version: 1;
+  version: 2;
   enabled: readonly BetterListViewerSortOption[];
+  columns: readonly string[];
 }
 
 export const betterListViewerSortChoices: readonly IBetterListViewerSortChoice[] = [
-  { label: 'A → Z', value: 'ascending' },
-  { label: 'Z → A', value: 'descending' }
+  ...betterListDefaultSortOptions
 ];
 
-export const defaultBetterListViewerSortOptions: readonly BetterListViewerSortOption[] =
-  betterListViewerSortChoices.map((choice) => choice.value);
+export const defaultBetterListViewerSortOptions: readonly BetterListViewerSortOption[] = [
+  'listOrder',
+  'titleAscending',
+  'popularity',
+  'trending',
+  'recentlyUpdated'
+];
 
 export const betterListPopularityFieldNames: readonly string[] = [
   'ViewsLifeTime',
@@ -67,32 +72,116 @@ export function normalizeBetterListDefaultSort(value: unknown): BetterListDefaul
 export function normalizeBetterListViewerSortOptions(
   value: unknown
 ): readonly BetterListViewerSortOption[] {
-  let candidate = value;
+  return normalizeBetterListViewerSortConfiguration(value).enabled;
+}
+
+export function getBetterListViewerSortValueKey(
+  mode: BetterListViewerSortOption,
+  fieldPath = ''
+): string {
+  return mode === 'column' ? `column:${fieldPath}` : `mode:${mode}`;
+}
+
+export function normalizeBetterListViewerSortConfiguration(
+  value: unknown
+): IBetterListViewerSortConfiguration {
+  let candidate: unknown = value;
   if (typeof value === 'string') {
     try {
       candidate = JSON.parse(value) as unknown;
     } catch {
-      return defaultBetterListViewerSortOptions.slice();
+      return createDefaultBetterListViewerSortConfiguration();
     }
   }
-  if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
-    candidate = (candidate as { enabled?: unknown }).enabled;
+
+  if (Array.isArray(candidate)) {
+    return {
+      version: 2,
+      enabled: normalizeViewerSortModes(candidate),
+      columns: []
+    };
   }
-  if (!Array.isArray(candidate)) {
-    return defaultBetterListViewerSortOptions.slice();
+
+  if (!isRecord(candidate)) {
+    return createDefaultBetterListViewerSortConfiguration();
   }
-  const enabled = candidate as readonly unknown[];
+
+  if (candidate.version === 1) {
+    if (!Array.isArray(candidate.enabled)) {
+      return createDefaultBetterListViewerSortConfiguration();
+    }
+    const migrated = candidate.enabled.map((entry) =>
+      entry === 'ascending' ? 'titleAscending' : entry === 'descending' ? undefined : entry
+    );
+    return {
+      version: 2,
+      enabled: normalizeViewerSortModes(migrated),
+      columns: []
+    };
+  }
+
+  if (candidate.version !== 2 || !Array.isArray(candidate.enabled)) {
+    return createDefaultBetterListViewerSortConfiguration();
+  }
+
+  return {
+    version: 2,
+    enabled: normalizeViewerSortModes(candidate.enabled),
+    columns: normalizeViewerSortColumns(candidate.columns)
+  };
+}
+
+export function serializeBetterListViewerSortOptions(
+  enabled: unknown,
+  columns?: unknown
+): string {
+  const configuration = columns === undefined
+    ? normalizeBetterListViewerSortConfiguration(enabled)
+    : {
+        version: 2 as const,
+        enabled: normalizeViewerSortModes(enabled),
+        columns: normalizeViewerSortColumns(columns)
+      };
+  return JSON.stringify(configuration);
+}
+
+function createDefaultBetterListViewerSortConfiguration(): IBetterListViewerSortConfiguration {
+  return {
+    version: 2,
+    enabled: defaultBetterListViewerSortOptions.slice(),
+    columns: []
+  };
+}
+
+function normalizeViewerSortModes(value: unknown): readonly BetterListViewerSortOption[] {
+  const enabled = Array.isArray(value) ? value : [];
   return betterListViewerSortChoices
     .filter((choice) => enabled.indexOf(choice.value) >= 0)
     .map((choice) => choice.value);
 }
 
-export function serializeBetterListViewerSortOptions(value: unknown): string {
-  const configuration: IBetterListViewerSortConfiguration = {
-    version: 1,
-    enabled: normalizeBetterListViewerSortOptions(value)
-  };
-  return JSON.stringify(configuration);
+function normalizeViewerSortColumns(value: unknown): readonly string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const seen = new Set<string>();
+  return value.reduce<string[]>((columns, entry) => {
+    if (typeof entry !== 'string') {
+      return columns;
+    }
+    const column = entry.trim();
+    const key = column.toLocaleLowerCase();
+    if (!column || seen.has(key)) {
+      return columns;
+    }
+    seen.add(key);
+    columns.push(column);
+    return columns;
+  }, []);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 export function createBetterListSortableFieldOptions(
