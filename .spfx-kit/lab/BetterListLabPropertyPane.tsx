@@ -1,5 +1,14 @@
 import * as React from 'react';
-import { Button, Combobox, Dropdown, Input, Option, Switch, makeStyles, tokens } from '@fluentui/react-components';
+import {
+  Button,
+  Combobox,
+  Dropdown,
+  Input,
+  Option,
+  Switch,
+  makeStyles,
+  tokens
+} from '@fluentui/react-components';
 import { AddRegular, EditRegular } from '@fluentui/react-icons';
 import type {
   LabCssEditorTarget,
@@ -30,15 +39,19 @@ import {
   IBetterListFieldMappings,
   BetterListColumnCount,
   BetterListDefaultSort,
+  BetterListViewerSortOption,
   getBetterListDefaultSortFieldPath,
   IBetterListTabConfig,
   normalizeBetterListDefaultSortSelection,
-  resolveBetterListTabConfigurations
+  normalizeBetterListViewerSortConfiguration,
+  resolveBetterListTabConfigurations,
+  serializeBetterListViewerSortOptions
 } from '../../src/shared';
 import { GroupIconColorField } from '../../src/webparts/betterList/components/GroupIconColorField';
 import { DefaultSortingMenu } from '../../src/webparts/betterList/components/propertyPane/DefaultSortingMenu';
 import { ItemPropertyBuilder } from '../../src/webparts/betterList/components/propertyPane/ItemPropertyBuilder';
 import { PropertyPaneSection } from '../../src/webparts/betterList/components/propertyPane/PropertyPaneSection';
+import { ViewerSortingOptions } from '../../src/webparts/betterList/components/propertyPane/ViewerSortingOptions';
 import { GroupOrderEditorDialog } from '../../src/webparts/betterList/components/propertyPane/GroupOrderEditorDialog';
 import {
   appendNewTab,
@@ -60,6 +73,7 @@ export type BetterListLabProps = LabPropertyBag & {
   maxItemsPerPage: number;
   showSearch: boolean;
   showSortingOptions: boolean;
+  sortingOptionsJson: string;
   defaultSort: BetterListDefaultSort;
   defaultSortColumn: string;
   sourceListId: string;
@@ -135,6 +149,19 @@ const useStyles = makeStyles({
   },
   switch: {
     marginTop: '8px'
+  },
+  sortingOptions: {
+    border: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    rowGap: '4px',
+    margin: '8px 0 12px 24px',
+    padding: 0
+  },
+  sortingOptionsLabel: {
+    fontSize: '12px',
+    fontWeight: 600,
+    marginBottom: '4px'
   },
   editGroups: {
     alignSelf: 'flex-start',
@@ -212,6 +239,9 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
   const headingCommitTimerRef = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const latestValuesRef = React.useRef(values);
   const onChangeRef = React.useRef(onChange);
+  const viewerSortingConfiguration = normalizeBetterListViewerSortConfiguration(
+    values.sortingOptionsJson
+  );
 
   latestValuesRef.current = values;
   onChangeRef.current = onChange;
@@ -315,7 +345,9 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
   const createDerivedMetadata = (
     nextTabs: IBetterListTabConfig[],
     defaultSort: BetterListDefaultSort = values.defaultSort,
-    defaultSortColumn: string = values.defaultSortColumn
+    defaultSortColumn: string = values.defaultSortColumn,
+    sortingOptions: readonly BetterListViewerSortOption[] = viewerSortingConfiguration.enabled,
+    sortingColumns: readonly string[] = viewerSortingConfiguration.columns
   ): ReturnType<typeof createBetterListMetadataMappings> => {
     const resolved = resolveBetterListTabConfigurations(nextTabs, {
       grouping: {
@@ -341,6 +373,16 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
     if (defaultSortFieldPath) {
       paths.push(defaultSortFieldPath);
     }
+    sortingOptions.forEach((mode) => {
+      if (mode === 'column') {
+        paths.push(...sortingColumns);
+        return;
+      }
+      const fieldPath = getBetterListDefaultSortFieldPath(mode, '', servicesAuthoringFields);
+      if (fieldPath) {
+        paths.push(fieldPath);
+      }
+    });
     return createBetterListMetadataMappings(servicesAuthoringFields, paths);
   };
   const patchTabsWithDerivedMetadata = (nextTabs: IBetterListTabConfig[]): void => {
@@ -379,6 +421,27 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
     // The lab field catalog is static; only persisted selection changes require reconciliation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [values.defaultSort, values.defaultSortColumn]);
+  const patchSortingOptions = (
+    sortingOptions: readonly BetterListViewerSortOption[],
+    sortingColumns: readonly string[]
+  ): void => {
+    onChange({
+      sortingOptionsJson: serializeBetterListViewerSortOptions(
+        sortingOptions,
+        sortingColumns
+      ),
+      fieldMappingsJson: JSON.stringify({
+        ...mappings,
+        metadata: createDerivedMetadata(
+          tabs.slice(),
+          values.defaultSort,
+          values.defaultSortColumn,
+          sortingOptions,
+          sortingColumns
+        )
+      })
+    });
+  };
   const patchActiveGrouping = (nextGrouping: typeof activeGrouping): void => {
     patchTabsWithDerivedMetadata(updateActiveTab({
       groupingOverride: createBetterListGroupingOverride(nextGrouping)
@@ -507,6 +570,17 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
           label="Show sorting options"
           onChange={(_event, data) => onChange({ showSortingOptions: data.checked })}
         />
+        {values.showSortingOptions ? (
+          <ViewerSortingOptions
+            className={classes.sortingOptions}
+            columnOptions={defaultSortColumnOptions}
+            enabled={viewerSortingConfiguration.enabled}
+            legendClassName={classes.sortingOptionsLabel}
+            selectedColumns={viewerSortingConfiguration.columns}
+            targetDocument={typeof document === 'undefined' ? undefined : document}
+            onChange={patchSortingOptions}
+          />
+        ) : null}
         <label className={classes.groupingField}>
           <span>Default sorting</span>
           <DefaultSortingMenu

@@ -43,6 +43,14 @@ describe('BetterListPropertyPane', () => {
     maxItemsPerPage: 0,
     showSearch: true,
     showSortingOptions: false,
+    sortingOptions: [
+      'listOrder',
+      'titleAscending',
+      'popularity',
+      'trending',
+      'recentlyUpdated'
+    ],
+    sortingColumns: [],
     defaultSort: 'listOrder',
     defaultSortColumn: '',
     sourceListId: 'services',
@@ -362,6 +370,82 @@ describe('BetterListPropertyPane', () => {
         ...value.fieldMappings,
         metadata: []
       }
+    });
+    ReactDom.unmountComponentAtNode(container);
+  });
+
+  it('authors the visitor sorting options when sorting controls are shown', async () => {
+    const container = document.createElement('div');
+    const onChange = jest.fn();
+    const value = {
+      ...createValue(),
+      showSortingOptions: true
+    };
+
+    await act(async () => {
+      ReactDom.render(
+        <BetterListPropertyPane
+          pickerDataSource={{
+            loadFields: async () => [
+              { internalName: 'Title', title: 'Title', typeAsString: 'Text' },
+              { internalName: 'Modified', title: 'Modified', typeAsString: 'DateTime' },
+              { internalName: 'ViewsLifeTime', title: 'Popularity', typeAsString: 'Number' },
+              { internalName: 'ViewsRecent', title: 'Trending', typeAsString: 'Number' },
+              { internalName: 'Priority', title: 'Priority', typeAsString: 'Number' }
+            ],
+            loadLists: async () => [{ id: 'services', title: 'Services' }],
+            resolveListUrl: async () => ({ id: 'services', title: 'Services' })
+          }}
+          value={value}
+          onChange={onChange}
+        />,
+        container
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const searchSectionButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Search & sorting'
+    );
+    await act(async () => {
+      Simulate.click(searchSectionButton as HTMLButtonElement);
+    });
+
+    const optionLabels = [
+      'None (default list order)',
+      'A to Z',
+      'Popularity',
+      'Trending',
+      'Recently updated',
+      'Column'
+    ];
+    const options = optionLabels.map((label) =>
+      container.querySelector<HTMLInputElement>(
+        `input[aria-label="Show ${label} sorting option"]`
+      )
+    );
+    expect(options.every(Boolean)).toBe(true);
+    expect(options.slice(0, 5).every((option) => option?.checked)).toBe(true);
+    expect(options[5]?.checked).toBe(false);
+    expect(
+      container.querySelector<HTMLButtonElement>('button[aria-label="Choose visitor sorting columns"]')
+    ).not.toBeNull();
+
+    await act(async () => {
+      (options[2] as HTMLInputElement).checked = false;
+      Simulate.change(options[2] as HTMLInputElement);
+    });
+    expect(onChange).toHaveBeenLastCalledWith({
+      ...value,
+      sortingOptions: ['listOrder', 'titleAscending', 'trending', 'recentlyUpdated'],
+      sortingColumns: [],
+      fieldMappings: expect.objectContaining({
+        metadata: expect.arrayContaining([
+          expect.objectContaining({ key: 'ViewsRecent' }),
+          expect.objectContaining({ key: 'Modified' })
+        ])
+      })
     });
     ReactDom.unmountComponentAtNode(container);
   });

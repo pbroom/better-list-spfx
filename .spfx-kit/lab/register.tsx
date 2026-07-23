@@ -10,6 +10,7 @@ import {
   BetterListFieldValue,
   BetterListDefaultSort,
   BetterListFieldKind,
+  BetterListViewerSortOption,
   betterListPopularityFieldNames,
   betterListTrendingFieldNames,
   createBetterListGroupingOverride,
@@ -20,6 +21,7 @@ import {
   formatItemPropertyValue,
   getRichTextItemPropertyPaths,
   getBetterListRenderer,
+  getBetterListViewerSortValueKey,
   getItemPropertyUrl,
   parseBetterListGroupIconsConfiguration,
   groupItemsBySourceField,
@@ -30,6 +32,7 @@ import {
   IBetterListTabConfig,
   itemPropertyFieldPathsEqual,
   normalizeBetterListDefaultSort,
+  normalizeBetterListViewerSortConfiguration,
   parseItemLayoutConfiguration,
   parseItemPropertyFields,
   parseTabConfiguration,
@@ -44,7 +47,8 @@ import {
 import BetterListView, {
   BetterListGroupIcon,
   IBetterListItem,
-  IBetterListTab
+  IBetterListTab,
+  IBetterListViewerSortColumn
 } from '../../src/webparts/betterList/components/BetterListView';
 import { FixtureBetterListDataSource } from '../../src/webparts/betterList/services/FixtureBetterListDataSource';
 import type { ISharePointImageAssetProvider } from '../../src/webparts/betterList/services';
@@ -70,6 +74,8 @@ const defaultProps: BetterListLabProps = {
   maxItemsPerPage: 0,
   showSearch: true,
   showSortingOptions: false,
+  sortingOptionsJson:
+    '{"version":2,"enabled":["listOrder","titleAscending","popularity","trending","recentlyUpdated"],"columns":[]}',
   defaultSort: 'listOrder',
   defaultSortColumn: '',
   sourceListId: servicesListId,
@@ -97,9 +103,45 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
   const mappings = React.useMemo(() => readMappings(props.fieldMappingsJson), [props.fieldMappingsJson]);
   const effectiveMappings = mappings;
   const defaultSort = normalizeBetterListDefaultSort(props.defaultSort);
+  const viewerSortingConfiguration = React.useMemo(
+    () => normalizeBetterListViewerSortConfiguration(props.sortingOptionsJson),
+    [props.sortingOptionsJson]
+  );
   const defaultSortMetadata = React.useMemo(
     () => resolveDefaultSortMetadata(defaultSort, props.defaultSortColumn, effectiveMappings),
     [defaultSort, effectiveMappings, props.defaultSortColumn]
+  );
+  const viewerSortMetadata = React.useMemo(
+    () => resolveViewerSortMetadata(
+      viewerSortingConfiguration.enabled,
+      viewerSortingConfiguration.columns,
+      effectiveMappings
+    ),
+    [effectiveMappings, viewerSortingConfiguration]
+  );
+  const viewerSortColumns = React.useMemo<readonly IBetterListViewerSortColumn[]>(
+    () => viewerSortMetadata
+      .filter((entry) => entry.mode === 'column')
+      .map((entry) => ({
+        fieldPath: entry.fieldPath || '',
+        kind: entry.kind,
+        label:
+          effectiveMappings.metadata?.find((candidate) =>
+            itemPropertyFieldPathsEqual(candidate.key, entry.sourceKey)
+          )?.label || entry.fieldPath || '',
+        valueKey: entry.valueKey
+      })),
+    [effectiveMappings.metadata, viewerSortMetadata]
+  );
+  const resolvedViewerSortOptions = React.useMemo(
+    () => viewerSortingConfiguration.enabled.filter((mode) =>
+      mode === 'listOrder' ||
+      mode === 'titleAscending' ||
+      (mode === 'column'
+        ? viewerSortColumns.length > 0
+        : viewerSortMetadata.some((entry) => entry.mode === mode))
+    ),
+    [viewerSortColumns.length, viewerSortMetadata, viewerSortingConfiguration.enabled]
   );
   const itemLayout = React.useMemo(
     () => parseItemLayoutConfiguration(
@@ -184,9 +226,17 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
       tab,
       props.sourceListTitle,
       effectiveMappings,
-      defaultSortMetadata
+      defaultSortMetadata,
+      viewerSortMetadata
     )),
-    [defaultSortMetadata, effectiveMappings, effectiveTabs, items, props.sourceListTitle]
+    [
+      defaultSortMetadata,
+      effectiveMappings,
+      effectiveTabs,
+      items,
+      props.sourceListTitle,
+      viewerSortMetadata
+    ]
   );
   const activeConfiguration = effectiveTabs.find((entry) => entry.tab.id === activeTabKey) ?? effectiveTabs[0];
 
@@ -233,6 +283,8 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
         maxItemsPerPage={props.maxItemsPerPage}
         showSearch={props.showSearch}
         showSortingOptions={props.showSortingOptions}
+        viewerSortOptions={resolvedViewerSortOptions}
+        viewerSortColumns={viewerSortColumns}
         defaultSort={defaultSort}
         defaultSortFieldPath={defaultSortMetadata?.key || props.defaultSortColumn}
         listTitle={props.sourceListTitle}
@@ -353,7 +405,8 @@ function createPresentationTab(
   configuration: IBetterListEffectiveTabConfiguration,
   sourceListTitle: string,
   mappings: IBetterListFieldMappings,
-  defaultSortMetadata?: { key: string; kind: BetterListFieldKind }
+  defaultSortMetadata: { key: string; kind: BetterListFieldKind } | undefined,
+  viewerSortMetadata: readonly IResolvedViewerSortMetadata[]
 ): IBetterListTab {
   const richTextFieldPaths = getRichTextItemPropertyPaths(mappings);
   const descriptionFieldPath = mappings.description?.fieldPath || mappings.description?.internalName;
@@ -422,6 +475,18 @@ function createPresentationTab(
             itemPropertyFieldPathsEqual(entry.key, defaultSortMetadata.key)
           )?.value
         : undefined;
+      const viewerSortValues = viewerSortMetadata.reduce<Record<string, BetterListFieldValue>>(
+        (result, sortMetadata) => {
+          const value = item.metadata.find((entry) =>
+            itemPropertyFieldPathsEqual(entry.key, sortMetadata.sourceKey)
+          )?.value;
+          if (value !== undefined) {
+            result[sortMetadata.valueKey] = value;
+          }
+          return result;
+        },
+        {}
+      );
       items.push({
         id: String(item.id),
         title: item.title,
@@ -437,7 +502,8 @@ function createPresentationTab(
         itemSortOrder: item.sortOrder,
         presentationOrder: items.length,
         defaultSortKind: defaultSortMetadata?.kind,
-        defaultSortValue
+        defaultSortValue,
+        viewerSortValues
       });
     });
   });
@@ -486,6 +552,52 @@ function resolveDefaultSortMetadata(
       Boolean(mapping.queryName && normalizedNames.indexOf(mapping.queryName.toLocaleLowerCase()) >= 0);
   });
   return entry ? { key: entry.key, kind: entry.mapping.kind } : undefined;
+}
+
+interface IResolvedViewerSortMetadata {
+  fieldPath?: string;
+  kind: BetterListFieldKind;
+  mode: BetterListViewerSortOption;
+  sourceKey: string;
+  valueKey: string;
+}
+
+function resolveViewerSortMetadata(
+  enabled: readonly BetterListViewerSortOption[],
+  columns: readonly string[],
+  mappings: Partial<IBetterListFieldMappings>
+): readonly IResolvedViewerSortMetadata[] {
+  const result: IResolvedViewerSortMetadata[] = [];
+  enabled.forEach((mode) => {
+    if (mode === 'column') {
+      columns.forEach((column) => {
+        const metadata = resolveDefaultSortMetadata('column', column, mappings);
+        if (metadata) {
+          result.push({
+            fieldPath: column,
+            kind: metadata.kind,
+            mode,
+            sourceKey: metadata.key,
+            valueKey: getBetterListViewerSortValueKey(mode, column)
+          });
+        }
+      });
+      return;
+    }
+    if (mode === 'listOrder' || mode === 'titleAscending') {
+      return;
+    }
+    const metadata = resolveDefaultSortMetadata(mode, '', mappings);
+    if (metadata) {
+      result.push({
+        kind: metadata.kind,
+        mode,
+        sourceKey: metadata.key,
+        valueKey: getBetterListViewerSortValueKey(mode)
+      });
+    }
+  });
+  return result;
 }
 
 function getGroupIcon(tab: IBetterListTabConfig, firstItem?: ICoreBetterListItem): BetterListGroupIcon | undefined {

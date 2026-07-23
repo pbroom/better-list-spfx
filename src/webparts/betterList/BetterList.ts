@@ -24,6 +24,7 @@ import {
   BetterListDefaultSort,
   BetterListFieldValue,
   BetterListFieldKind,
+  BetterListViewerSortOption,
   BetterListGroupIconOverride,
   BetterListItemElementLinks,
   BetterListRequestEpoch,
@@ -41,6 +42,7 @@ import {
   formatItemPropertyValue,
   getRichTextItemPropertyPaths,
   getBetterListRenderer,
+  getBetterListViewerSortValueKey,
   getItemPropertyUrl,
   groupItemsBySourceField,
   itemPropertyFieldPathsEqual,
@@ -58,15 +60,22 @@ import {
   processItems,
   normalizeBetterListColumnCount,
   normalizeBetterListDefaultSort,
+  normalizeBetterListViewerSortConfiguration,
   resolveBetterListTabConfigurations,
   scopeBetterListStyles,
   serializeItemLayoutConfiguration,
   serializeBetterListGroupIconsConfiguration,
   serializeItemPropertyFields,
+  serializeBetterListViewerSortOptions,
   serializeTabConfiguration,
   updateBetterListGroupIconOverride
 } from '../../shared';
-import BetterListView, { BetterListGroupIcon, IBetterListItem, IBetterListTab } from './components/BetterListView';
+import BetterListView, {
+  BetterListGroupIcon,
+  IBetterListItem,
+  IBetterListTab,
+  IBetterListViewerSortColumn
+} from './components/BetterListView';
 import {
   BetterListPropertyPane,
   IBetterListAuthoringState,
@@ -119,12 +128,59 @@ function resolveDefaultSortMetadata(
   return entry ? { key: entry.key, kind: entry.mapping.kind } : undefined;
 }
 
+interface IResolvedViewerSortMetadata {
+  fieldPath?: string;
+  kind: BetterListFieldKind;
+  mode: BetterListViewerSortOption;
+  sourceKey: string;
+  valueKey: string;
+}
+
+function resolveViewerSortMetadata(
+  enabled: readonly BetterListViewerSortOption[],
+  columns: readonly string[],
+  mappings: Partial<IBetterListFieldMappings>
+): readonly IResolvedViewerSortMetadata[] {
+  const result: IResolvedViewerSortMetadata[] = [];
+  enabled.forEach((mode) => {
+    if (mode === 'column') {
+      columns.forEach((column) => {
+        const metadata = resolveDefaultSortMetadata('column', column, mappings);
+        if (metadata) {
+          result.push({
+            fieldPath: column,
+            kind: metadata.kind,
+            mode,
+            sourceKey: metadata.key,
+            valueKey: getBetterListViewerSortValueKey(mode, column)
+          });
+        }
+      });
+      return;
+    }
+    if (mode === 'listOrder' || mode === 'titleAscending') {
+      return;
+    }
+    const metadata = resolveDefaultSortMetadata(mode, '', mappings);
+    if (metadata) {
+      result.push({
+        kind: metadata.kind,
+        mode,
+        sourceKey: metadata.key,
+        valueKey: getBetterListViewerSortValueKey(mode)
+      });
+    }
+  });
+  return result;
+}
+
 export interface IBetterListWebPartProps {
   heading: string;
   itemColumns: BetterListColumnCount;
   maxItemsPerPage: number;
   showSearch: boolean;
   showSortingOptions: boolean;
+  sortingOptionsJson: string;
   defaultSort: BetterListDefaultSort;
   defaultSortColumn: string;
   sourceListId: string;
@@ -176,13 +232,45 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     );
     const groupIcons = parseBetterListGroupIconsConfiguration(this.properties.groupIconsJson);
     const defaultSort = normalizeBetterListDefaultSort(this.properties.defaultSort);
+    const sortingConfiguration = normalizeBetterListViewerSortConfiguration(
+      this.properties.sortingOptionsJson
+    );
+    const viewerSortMetadata = resolveViewerSortMetadata(
+      sortingConfiguration.enabled,
+      sortingConfiguration.columns,
+      fieldMappings
+    );
+    const viewerSortColumns: readonly IBetterListViewerSortColumn[] = viewerSortMetadata
+      .filter((entry) => entry.mode === 'column')
+      .map((entry) => ({
+        fieldPath: entry.fieldPath || '',
+        kind: entry.kind,
+        label:
+          fieldMappings.metadata?.find((candidate) =>
+            itemPropertyFieldPathsEqual(candidate.key, entry.sourceKey)
+          )?.label || entry.fieldPath || '',
+        valueKey: entry.valueKey
+      }));
+    const resolvedViewerSortOptions = sortingConfiguration.enabled.filter((mode) =>
+      mode === 'listOrder' ||
+      mode === 'titleAscending' ||
+      (mode === 'column'
+        ? viewerSortColumns.length > 0
+        : viewerSortMetadata.some((entry) => entry.mode === mode))
+    );
     const defaultSortMetadata = resolveDefaultSortMetadata(
       defaultSort,
       this.properties.defaultSortColumn,
       fieldMappings
     );
     const presentationTabs = tabs.map((tab) =>
-      this._createPresentationTab(tab, descriptionFieldPath, richTextFieldPaths, defaultSortMetadata)
+      this._createPresentationTab(
+        tab,
+        descriptionFieldPath,
+        richTextFieldPaths,
+        defaultSortMetadata,
+        viewerSortMetadata
+      )
     );
     const firstTab = presentationTabs[0];
     if (!this._activeTabKey || !presentationTabs.some((tab) => tab.key === this._activeTabKey)) {
@@ -211,6 +299,8 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       maxItemsPerPage: this.properties.maxItemsPerPage,
       showSearch: this.properties.showSearch,
       showSortingOptions: this.properties.showSortingOptions,
+      viewerSortOptions: resolvedViewerSortOptions,
+      viewerSortColumns,
       defaultSort,
       defaultSortFieldPath: defaultSortMetadata?.key || this.properties.defaultSortColumn,
       listTitle: this.properties.sourceListTitle,
@@ -267,6 +357,9 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     this.properties.maxItemsPerPage = normalizeMaxItemsPerPage(this.properties.maxItemsPerPage);
     this.properties.showSearch = this.properties.showSearch !== false;
     this.properties.showSortingOptions = this.properties.showSortingOptions === true;
+    this.properties.sortingOptionsJson = serializeBetterListViewerSortOptions(
+      this.properties.sortingOptionsJson
+    );
     this.properties.defaultSort = normalizeBetterListDefaultSort(this.properties.defaultSort);
     this.properties.defaultSortColumn = this.properties.defaultSortColumn || '';
     this.properties.sourceListId = this.properties.sourceListId || '';
@@ -438,12 +531,17 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       this.properties.itemLayoutJson,
       parseItemPropertyFields(this.properties.itemPropertiesJson)
     );
+    const sortingConfiguration = normalizeBetterListViewerSortConfiguration(
+      this.properties.sortingOptionsJson
+    );
     return {
       heading: this.properties.heading,
       itemColumns: this.properties.itemColumns,
       maxItemsPerPage: this.properties.maxItemsPerPage,
       showSearch: this.properties.showSearch,
       showSortingOptions: this.properties.showSortingOptions,
+      sortingOptions: sortingConfiguration.enabled,
+      sortingColumns: sortingConfiguration.columns,
       defaultSort: this.properties.defaultSort,
       defaultSortColumn: this.properties.defaultSortColumn,
       sourceListId: this.properties.sourceListId,
@@ -490,6 +588,10 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       maxItemsPerPage: normalizeMaxItemsPerPage(value.maxItemsPerPage),
       showSearch: value.showSearch !== false,
       showSortingOptions: value.showSortingOptions === true,
+      sortingOptionsJson: serializeBetterListViewerSortOptions(
+        value.sortingOptions,
+        value.sortingColumns
+      ),
       defaultSort: normalizeBetterListDefaultSort(value.defaultSort),
       defaultSortColumn: value.defaultSort === 'column' ? value.defaultSortColumn : '',
       sourceListId: value.sourceListId,
@@ -617,7 +719,8 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     configuration: IBetterListEffectiveTabConfiguration,
     descriptionFieldPath: string | undefined,
     richTextFieldPaths: ReadonlySet<string>,
-    defaultSortMetadata?: { key: string; kind: BetterListFieldKind }
+    defaultSortMetadata: { key: string; kind: BetterListFieldKind } | undefined,
+    viewerSortMetadata: readonly IResolvedViewerSortMetadata[]
   ): IBetterListTab {
     const group = configuration.grouping.column
       ? {
@@ -662,6 +765,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
             descriptionFieldPath,
             richTextFieldPaths,
             defaultSortMetadata,
+            viewerSortMetadata,
             items.length
           )
         );
@@ -695,6 +799,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     descriptionFieldPath: string | undefined,
     richTextFieldPaths: ReadonlySet<string>,
     defaultSortMetadata: { key: string; kind: BetterListFieldKind } | undefined,
+    viewerSortMetadata: readonly IResolvedViewerSortMetadata[],
     presentationOrder: number
   ): IBetterListItem {
     const elements = itemProperties
@@ -736,6 +841,18 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
           itemPropertyFieldPathsEqual(entry.key, defaultSortMetadata.key)
         )?.value
       : undefined;
+    const viewerSortValues = viewerSortMetadata.reduce<Record<string, BetterListFieldValue>>(
+      (result, metadata) => {
+        const value = item.metadata.find((entry) =>
+          itemPropertyFieldPathsEqual(entry.key, metadata.sourceKey)
+        )?.value;
+        if (value !== undefined) {
+          result[metadata.valueKey] = value;
+        }
+        return result;
+      },
+      {}
+    );
     return {
       id: String(item.id),
       title: item.title,
@@ -751,7 +868,8 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       itemSortOrder: item.sortOrder,
       presentationOrder,
       defaultSortKind: defaultSortMetadata?.kind,
-      defaultSortValue
+      defaultSortValue,
+      viewerSortValues
     };
   }
 

@@ -1,4 +1,7 @@
-import type { BetterListDefaultSort } from './betterListTypes';
+import type {
+  BetterListDefaultSort,
+  BetterListViewerSortOption
+} from './betterListTypes';
 import {
   createBetterListFieldPathCatalog,
   IBetterListFieldDescriptor,
@@ -24,6 +27,29 @@ export const betterListDefaultSortOptions: readonly IBetterListDefaultSortOption
   { label: 'Column', value: 'column' }
 ];
 
+export interface IBetterListViewerSortChoice {
+  label: string;
+  value: BetterListViewerSortOption;
+}
+
+export interface IBetterListViewerSortConfiguration {
+  version: 2;
+  enabled: readonly BetterListViewerSortOption[];
+  columns: readonly string[];
+}
+
+export const betterListViewerSortChoices: readonly IBetterListViewerSortChoice[] = [
+  ...betterListDefaultSortOptions
+];
+
+export const defaultBetterListViewerSortOptions: readonly BetterListViewerSortOption[] = [
+  'listOrder',
+  'titleAscending',
+  'popularity',
+  'trending',
+  'recentlyUpdated'
+];
+
 export const betterListPopularityFieldNames: readonly string[] = [
   'ViewsLifeTime',
   'ViewCount',
@@ -41,6 +67,121 @@ export function normalizeBetterListDefaultSort(value: unknown): BetterListDefaul
   return betterListDefaultSortOptions.some((option) => option.value === value)
     ? (value as BetterListDefaultSort)
     : 'listOrder';
+}
+
+export function normalizeBetterListViewerSortOptions(
+  value: unknown
+): readonly BetterListViewerSortOption[] {
+  return normalizeBetterListViewerSortConfiguration(value).enabled;
+}
+
+export function getBetterListViewerSortValueKey(
+  mode: BetterListViewerSortOption,
+  fieldPath = ''
+): string {
+  return mode === 'column' ? `column:${fieldPath}` : `mode:${mode}`;
+}
+
+export function normalizeBetterListViewerSortConfiguration(
+  value: unknown
+): IBetterListViewerSortConfiguration {
+  let candidate: unknown = value;
+  if (typeof value === 'string') {
+    try {
+      candidate = JSON.parse(value) as unknown;
+    } catch {
+      return createDefaultBetterListViewerSortConfiguration();
+    }
+  }
+
+  if (Array.isArray(candidate)) {
+    return {
+      version: 2,
+      enabled: normalizeViewerSortModes(candidate),
+      columns: []
+    };
+  }
+
+  if (!isRecord(candidate)) {
+    return createDefaultBetterListViewerSortConfiguration();
+  }
+
+  if (candidate.version === 1) {
+    if (!Array.isArray(candidate.enabled)) {
+      return createDefaultBetterListViewerSortConfiguration();
+    }
+    const migrated = candidate.enabled.map((entry) =>
+      entry === 'ascending' ? 'titleAscending' : entry === 'descending' ? undefined : entry
+    );
+    return {
+      version: 2,
+      enabled: normalizeViewerSortModes(migrated),
+      columns: []
+    };
+  }
+
+  if (candidate.version !== 2 || !Array.isArray(candidate.enabled)) {
+    return createDefaultBetterListViewerSortConfiguration();
+  }
+
+  return {
+    version: 2,
+    enabled: normalizeViewerSortModes(candidate.enabled),
+    columns: normalizeViewerSortColumns(candidate.columns)
+  };
+}
+
+export function serializeBetterListViewerSortOptions(
+  enabled: unknown,
+  columns?: unknown
+): string {
+  const configuration = columns === undefined
+    ? normalizeBetterListViewerSortConfiguration(enabled)
+    : {
+        version: 2 as const,
+        enabled: normalizeViewerSortModes(enabled),
+        columns: normalizeViewerSortColumns(columns)
+      };
+  return JSON.stringify(configuration);
+}
+
+function createDefaultBetterListViewerSortConfiguration(): IBetterListViewerSortConfiguration {
+  return {
+    version: 2,
+    enabled: defaultBetterListViewerSortOptions.slice(),
+    columns: []
+  };
+}
+
+function normalizeViewerSortModes(value: unknown): readonly BetterListViewerSortOption[] {
+  const enabled = Array.isArray(value) ? value : [];
+  return betterListViewerSortChoices
+    .filter((choice) => enabled.indexOf(choice.value) >= 0)
+    .map((choice) => choice.value);
+}
+
+function normalizeViewerSortColumns(value: unknown): readonly string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const seen = new Set<string>();
+  return value.reduce<string[]>((columns, entry) => {
+    if (typeof entry !== 'string') {
+      return columns;
+    }
+    const column = entry.trim();
+    const key = column.toLocaleLowerCase();
+    if (!column || seen.has(key)) {
+      return columns;
+    }
+    seen.add(key);
+    columns.push(column);
+    return columns;
+  }, []);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 export function createBetterListSortableFieldOptions(
