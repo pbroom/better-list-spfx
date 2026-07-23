@@ -36,6 +36,7 @@ import {
   MenuPopover,
   MenuTrigger,
   Portal,
+  PortalMountNodeProvider,
   makeStyles,
   mergeClasses,
   tokens,
@@ -904,7 +905,7 @@ export function ColumnPickerMenu({
     );
   }
 
-  return (
+  const menu = (
     <Menu hasIcons mountNode={surface.mountNode} positioning={surface.rootPositioning}>
       <MenuTrigger disableButtonEnhancement>
         <Button
@@ -986,6 +987,12 @@ export function ColumnPickerMenu({
       </MenuPopover>
     </Menu>
   );
+
+  return surface.targetDocument ? (
+    <PortalMountNodeProvider value={surface.targetDocument.body}>
+      {menu}
+    </PortalMountNodeProvider>
+  ) : menu;
 }
 
 function createLookupFieldPath(
