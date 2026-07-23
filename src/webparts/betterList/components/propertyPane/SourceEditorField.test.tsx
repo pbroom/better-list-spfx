@@ -9,14 +9,17 @@ import {
 } from '../../../../vendor/source-editor/SourceEditorField';
 import { SourceWorkspaceField } from '../../../../vendor/source-editor/SourceWorkspaceField';
 import { SourceEditorDiagnostic } from '../../../../vendor/source-editor/sourceEditorCore';
+import { installTestResizeObserver } from '../../../../test/installTestResizeObserver';
 
 describe('SourceEditorField', () => {
   let container: HTMLDivElement;
+  let restoreResizeObserver: (() => void) | undefined;
   const unavailableMonaco: SourceEditorMonacoAdapter = {
     load: () => Promise.reject(new Error('Monaco unavailable'))
   };
 
   beforeEach(() => {
+    restoreResizeObserver = installTestResizeObserver();
     container = document.createElement('div');
     document.body.appendChild(container);
   });
@@ -26,6 +29,8 @@ describe('SourceEditorField', () => {
       ReactDom.unmountComponentAtNode(container);
     });
     container.remove();
+    restoreResizeObserver?.();
+    restoreResizeObserver = undefined;
   });
 
   it('keeps invalid and oversized drafts local while committing the next valid source', async () => {
@@ -239,6 +244,7 @@ describe('SourceEditorField', () => {
   it('remeasures floating shortcuts when the workspace resizes without ResizeObserver', async () => {
     const resizeObserverDescriptor = Object.getOwnPropertyDescriptor(window, 'ResizeObserver');
     Object.defineProperty(window, 'ResizeObserver', { configurable: true, writable: true, value: undefined });
+    let resizeObserverRestored = false;
 
     try {
       await act(async () => {
@@ -287,6 +293,8 @@ describe('SourceEditorField', () => {
       const collapsedTrigger = toolbar?.querySelector<HTMLButtonElement>('[aria-label="Open SCSS editor shortcuts"]');
       expect(collapsedTrigger).not.toBeNull();
       expect(collapsedTrigger?.classList.contains('bt-floating-editor__shortcut-menu-trigger')).toBe(true);
+      restoreWindowProperty('ResizeObserver', resizeObserverDescriptor);
+      resizeObserverRestored = true;
       act(() => Simulate.click(collapsedTrigger as HTMLButtonElement));
       expect(document.body.querySelector('[role="menu"][aria-label="SCSS editor shortcuts"]')).not.toBeNull();
 
@@ -298,7 +306,9 @@ describe('SourceEditorField', () => {
       const expandedTrigger = toolbar?.querySelector<HTMLButtonElement>('[aria-label="Open SCSS editor shortcuts"]');
       expect(expandedTrigger).toBeNull();
     } finally {
-      restoreWindowProperty('ResizeObserver', resizeObserverDescriptor);
+      if (!resizeObserverRestored) {
+        restoreWindowProperty('ResizeObserver', resizeObserverDescriptor);
+      }
     }
   });
 });

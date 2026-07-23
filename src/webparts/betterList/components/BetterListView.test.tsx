@@ -4,6 +4,7 @@ import * as ReactDom from 'react-dom';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { act, Simulate } from 'react-dom/test-utils';
 
+import { installTestResizeObserver } from '../../../test/installTestResizeObserver';
 import BetterListView, { IBetterListItem, IBetterListTab } from './BetterListView';
 
 const item: IBetterListItem = {
@@ -27,6 +28,17 @@ const createItems = (count: number): readonly IBetterListItem[] =>
   }));
 
 describe('BetterListView', () => {
+  let restoreResizeObserver: (() => void) | undefined;
+
+  beforeEach(() => {
+    restoreResizeObserver = installTestResizeObserver();
+  });
+
+  afterEach(() => {
+    restoreResizeObserver?.();
+    restoreResizeObserver = undefined;
+  });
+
   it('hides the single baseline tab and does not render a group heading when grouping is disabled', () => {
     const tabs: readonly IBetterListTab[] = [
       {
