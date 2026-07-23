@@ -208,7 +208,6 @@ const useStyles = makeStyles({
   },
   search: {
     width: 'min(100%, 440px)',
-    minHeight: '48px',
     '@media (max-width: 760px)': {
       width: '100%'
     }
@@ -233,7 +232,6 @@ const useStyles = makeStyles({
   },
   sort: {
     flexShrink: 0,
-    minHeight: '48px',
     minWidth: '140px',
     width: '140px',
     '@media (max-width: 760px)': {
@@ -1297,7 +1295,6 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
             contentBefore={
               <SearchRegular className={mergeClasses(classes.searchIcon, 'better-list__search-icon')} aria-hidden="true" />
             }
-            size="large"
             value={internalSearchValue}
             onChange={handleSearchChange}
             placeholder={searchPlaceholder}
@@ -1334,7 +1331,6 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
               className={mergeClasses(classes.sort, 'better-list__sort')}
               listbox={{ className: betterListFluentSurfaceClassName }}
               selectedOptions={[sortDirection]}
-              size="large"
               value={sortDirection === 'ascending' ? 'A → Z' : 'Z → A'}
               onOptionSelect={(_event, data) => {
                 if (data.optionValue === 'ascending' || data.optionValue === 'descending') {
