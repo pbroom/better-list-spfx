@@ -8,13 +8,13 @@
   },
   "main": "lib/index.js",
   "scripts": {
-    "build": "heft test --clean --production && heft package-solution --production",
+    "build": "heft test --clean --production && node scripts/verify-monaco-css.mjs && heft package-solution --production",
     "clean": "heft clean",
     "generate:group-icons": "node scripts/generate-group-icon-catalogs.mjs",
     "test": "heft test",
     "serve": "heft start --clean",
     "start": "heft start --clean",
-    "ship": "heft test --clean --production && node scripts/copy-monaco-assets.mjs --app . && heft package-solution --production",
+    "ship": "heft test --clean --production && node scripts/verify-monaco-css.mjs && node scripts/copy-monaco-assets.mjs --app . && heft package-solution --production",
     "eject-webpack": "heft eject-webpack"
   },
   "dependencies": {
