@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/no-use-before-define -- Shared fixture markup is declared after the behavior cases for readability. */
 import * as React from 'react';
+import * as ReactDom from 'react-dom';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { act, Simulate } from 'react-dom/test-utils';
 
 import BetterListView, { IBetterListItem, IBetterListTab } from './BetterListView';
 
@@ -16,6 +18,13 @@ const item: IBetterListItem = {
   groupId: 'general',
   groupTitle: 'General'
 };
+
+const createItems = (count: number): readonly IBetterListItem[] =>
+  Array.from({ length: count }, (_value, index) => ({
+    ...item,
+    id: String(index + 1),
+    title: `Service ${(`00${index + 1}`).slice(-3)}`
+  }));
 
 describe('BetterListView', () => {
   it('hides the single baseline tab and does not render a group heading when grouping is disabled', () => {
@@ -159,6 +168,75 @@ describe('BetterListView', () => {
     expect(html).toContain('Limited (2)');
     expect(html).toContain('A service');
     expect(html).not.toContain('B service');
+  });
+
+  it('progressively renders the default result set in batches of 30', async () => {
+    const container = document.createElement('div');
+    const items = createItems(35);
+    const tabs: readonly IBetterListTab[] = [
+      { key: 'all', label: 'All items', grouped: false, layout: { showSearch: false }, items }
+    ];
+
+    await act(async () => {
+      ReactDom.render(<BetterListView activeTabKey="all" items={items} tabs={tabs} />, container);
+    });
+
+    expect(container.textContent).toContain('Service 030');
+    expect(container.textContent).not.toContain('Service 031');
+    expect(container.textContent).toContain('Showing 30 of 35');
+
+    const loadMore = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Load 5 more')
+    );
+    expect(loadMore).toBeDefined();
+    await act(async () => {
+      Simulate.click(loadMore as HTMLButtonElement);
+    });
+
+    expect(container.textContent).toContain('Service 035');
+    expect(container.textContent).not.toContain('Showing 30 of 35');
+    ReactDom.unmountComponentAtNode(container);
+  });
+
+  it('paginates the full filtered result set at the authored page size', async () => {
+    const container = document.createElement('div');
+    const items = createItems(5);
+    const tabs: readonly IBetterListTab[] = [
+      { key: 'all', label: 'All items', grouped: false, items }
+    ];
+
+    await act(async () => {
+      ReactDom.render(
+        <BetterListView activeTabKey="all" items={items} maxItemsPerPage={2} tabs={tabs} />,
+        container
+      );
+    });
+
+    expect(container.textContent).toContain('Service 001');
+    expect(container.textContent).toContain('Service 002');
+    expect(container.textContent).not.toContain('Service 003');
+    expect(container.textContent).toContain('Page 1 of 3');
+
+    const nextPage = container.querySelector<HTMLButtonElement>('button[aria-label="Next page"]');
+    expect(nextPage).not.toBeNull();
+    await act(async () => {
+      Simulate.click(nextPage as HTMLButtonElement);
+    });
+
+    expect(container.textContent).not.toContain('Service 001');
+    expect(container.textContent).toContain('Service 003');
+    expect(container.textContent).toContain('Service 004');
+    expect(container.textContent).not.toContain('Service 005');
+    expect(container.textContent).toContain('Page 2 of 3');
+
+    const search = container.querySelector<HTMLInputElement>('input[type="search"]');
+    await act(async () => {
+      (search as HTMLInputElement).value = 'Service 005';
+      Simulate.change(search as HTMLInputElement);
+    });
+    expect(container.textContent).toContain('Service 005');
+    expect(container.querySelector('nav[aria-label="List pagination"]')).toBeNull();
+    ReactDom.unmountComponentAtNode(container);
   });
 
   it('renders configured item elements in their authored order', () => {
