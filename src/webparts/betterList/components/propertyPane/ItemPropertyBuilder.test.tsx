@@ -13,35 +13,37 @@ describe('ColumnPickerMenu', () => {
     const targetDocument = frame.contentDocument as Document;
     const restoreResizeObserver = installTestResizeObserver(targetDocument.defaultView as Window);
 
-    await act(async () => {
-      ReactDom.render(
-        <ColumnPickerMenu
-          ariaLabel="Add item layout element"
-          fields={[]}
-          targetDocument={targetDocument}
-          onAddRow={() => undefined}
-          onSelect={() => undefined}
-        />,
-        container
-      );
-      await Promise.resolve();
-    });
+    try {
+      await act(async () => {
+        ReactDom.render(
+          <ColumnPickerMenu
+            ariaLabel="Add item layout element"
+            fields={[]}
+            targetDocument={targetDocument}
+            onAddRow={() => undefined}
+            onSelect={() => undefined}
+          />,
+          container
+        );
+        await Promise.resolve();
+      });
 
-    const trigger = container.querySelector<HTMLButtonElement>('button[aria-label="Add item layout element"]');
-    expect(trigger).not.toBeNull();
-    await act(async () => {
-      Simulate.click(trigger as HTMLButtonElement);
-      await Promise.resolve();
-    });
+      const trigger = container.querySelector<HTMLButtonElement>('button[aria-label="Add item layout element"]');
+      expect(trigger).not.toBeNull();
+      await act(async () => {
+        Simulate.click(trigger as HTMLButtonElement);
+        await Promise.resolve();
+      });
 
-    expect(targetDocument.body.querySelector('.better-list-portal')).not.toBeNull();
-    expect(document.body.querySelector('.better-list-portal')).toBeNull();
-
-    act(() => {
-      ReactDom.unmountComponentAtNode(container);
-    });
-    restoreResizeObserver();
-    container.remove();
-    frame.remove();
+      expect(targetDocument.body.querySelector('.better-list-portal')).not.toBeNull();
+      expect(document.body.querySelector('.better-list-portal')).toBeNull();
+    } finally {
+      act(() => {
+        ReactDom.unmountComponentAtNode(container);
+      });
+      restoreResizeObserver();
+      container.remove();
+      frame.remove();
+    }
   });
 });
