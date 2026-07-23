@@ -1,5 +1,7 @@
 import * as React from 'react';
+import * as ReactDom from 'react-dom';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { act, Simulate } from 'react-dom/test-utils';
 
 import { IBetterListTabConfig } from '../../../../shared';
 import {
@@ -118,6 +120,49 @@ describe('TabBuilder', () => {
     expect(resolveTabHeaderClick(false, false, true)).toEqual({ select: true, toggle: false });
     expect(resolveTabHeaderClick(true, false, true)).toEqual({ select: false, toggle: true });
     expect(resolveTabHeaderClick(false, false, false)).toEqual({ select: false, toggle: true });
+  });
+
+  it('reopens a collapsed tab when controlled selection returns to it', async () => {
+    const container = document.createElement('div');
+    const tabs: readonly IBetterListTabConfig[] = [
+      { id: 'featured', label: 'Featured', filter: { kind: 'all' } },
+      { id: 'all-services', label: 'All Services', filter: { kind: 'all' } }
+    ];
+    const renderBuilder = async (selectedTabId: string): Promise<void> => {
+      await act(async () => {
+        ReactDom.render(
+          <TabBuilder fields={[]} selectedTabId={selectedTabId} tabs={tabs} onChange={() => undefined} />,
+          container
+        );
+      });
+    };
+
+    try {
+      await renderBuilder('all-services');
+      const allServicesHeader = container.querySelector<HTMLButtonElement>(
+        'button[aria-label^="Tab 2: All Services."]'
+      ) as HTMLButtonElement;
+
+      await act(async () => {
+        Simulate.click(allServicesHeader);
+      });
+      expect(allServicesHeader.getAttribute('aria-expanded')).toBe('false');
+      expect(container.querySelector('#tab-all-services-panel')).toBeNull();
+
+      await renderBuilder('featured');
+      expect(allServicesHeader.getAttribute('aria-expanded')).toBe('false');
+
+      await renderBuilder('all-services');
+      expect(allServicesHeader.getAttribute('aria-expanded')).toBe('true');
+      expect(container.querySelector('#tab-all-services-panel')).not.toBeNull();
+      expect(container.querySelector('[data-tab-sortable="all-services"]')?.getAttribute('data-tab-selected')).toBe(
+        'true'
+      );
+    } finally {
+      await act(async () => {
+        ReactDom.unmountComponentAtNode(container);
+      });
+    }
   });
 
   it('reorders tabs by stable id without mutating the source', () => {

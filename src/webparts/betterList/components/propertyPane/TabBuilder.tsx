@@ -102,6 +102,20 @@ export const TabBuilder: React.FunctionComponent<ITabBuilderProps> = ({
     })
   );
 
+  React.useEffect(() => {
+    if (!selectedTabId) {
+      return;
+    }
+    setClosedTabIds((current) => {
+      if (!current.has(selectedTabId)) {
+        return current;
+      }
+      const next = new Set(current);
+      next.delete(selectedTabId);
+      return next;
+    });
+  }, [selectedTabId]);
+
   const patchTab = (index: number, patch: Partial<IBetterListTabConfig>): void => {
     onChange(tabs.map((tab, candidateIndex) => (candidateIndex === index ? { ...tab, ...patch } : tab)));
   };
