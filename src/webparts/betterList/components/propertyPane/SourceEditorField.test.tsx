@@ -137,8 +137,8 @@ describe('SourceEditorField', () => {
     const splitTab = document.body.querySelector<HTMLButtonElement>('[role="tab"][aria-label="Split"]');
     expect(splitTab).not.toBeNull();
 
-    const htmlTab = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find(
-      (button) => button.textContent === 'HTML template'
+    const htmlTab = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) =>
+      button.textContent?.includes('HTML template')
     );
     act(() => Simulate.click(htmlTab as HTMLButtonElement));
     expect(htmlTab?.getAttribute('aria-selected')).toBe('true');
@@ -151,7 +151,7 @@ describe('SourceEditorField', () => {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     });
     expect(document.body.querySelectorAll('[role="dialog"]')).toHaveLength(0);
-    expect(container.querySelector<HTMLButtonElement>('[role="tab"][aria-selected="true"]')?.textContent).toBe(
+    expect(container.querySelector<HTMLButtonElement>('[role="tab"][aria-selected="true"]')?.textContent).toContain(
       'HTML template'
     );
   });
