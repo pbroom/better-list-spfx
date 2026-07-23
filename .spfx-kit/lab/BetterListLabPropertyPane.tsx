@@ -519,7 +519,7 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
             aria-label="Default sorting"
             positioning={{ align: 'start', autoSize: 'height', position: 'below', strategy: 'fixed' }}
             selectedOptions={[values.defaultSort]}
-            value={selectedDefaultSort?.label || 'List ordering'}
+            value={selectedDefaultSort?.label || 'None (default list order)'}
             onOptionSelect={(_event, data) => {
               const defaultSort = betterListDefaultSortOptions.find(
                 (option) => option.value === data.optionValue

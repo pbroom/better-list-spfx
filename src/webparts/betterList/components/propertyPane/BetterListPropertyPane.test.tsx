@@ -259,7 +259,7 @@ describe('BetterListPropertyPane', () => {
     expect(searchSwitch).not.toBeNull();
     expect(sortingSwitch).not.toBeNull();
     expect(defaultSorting).not.toBeNull();
-    expect(defaultSorting?.textContent).toContain('List ordering');
+    expect(defaultSorting?.textContent).toContain('None (default list order)');
     expect(searchSwitch?.checked).toBe(true);
     expect(sortingSwitch?.checked).toBe(false);
     await act(async () => {
@@ -268,7 +268,7 @@ describe('BetterListPropertyPane', () => {
     });
     const defaultSortOptions = Array.from(document.body.querySelectorAll<HTMLElement>('[role="option"]'));
     expect(defaultSortOptions.map((candidate) => candidate.textContent?.trim())).toEqual([
-      'List ordering',
+      'None (default list order)',
       'A to Z',
       'Popularity',
       'Trending',

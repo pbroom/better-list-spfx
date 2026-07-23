@@ -750,7 +750,7 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
               mountNode={betterListPortalMountNodeProps}
               positioning={createBetterListPortalPositioning(targetDocument)}
               selectedOptions={[props.value.defaultSort]}
-              value={selectedDefaultSort?.label || 'List ordering'}
+              value={selectedDefaultSort?.label || 'None (default list order)'}
               onOptionSelect={(_event, data) => {
                 const defaultSort = betterListDefaultSortOptions.find(
                   (option) => option.value === data.optionValue
