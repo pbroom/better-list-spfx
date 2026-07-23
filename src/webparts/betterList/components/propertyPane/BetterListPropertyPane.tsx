@@ -8,6 +8,7 @@ import {
   Input,
   Option,
   PortalMountNodeProvider,
+  Select,
   Switch,
   tokens,
   webLightTheme
@@ -31,6 +32,7 @@ import {
   BetterListItemElementLinks,
   betterListFluentSurfaceClassName,
   betterListPortalMountNodeProps,
+  BetterListColumnCount,
   createBetterListPortalPositioning,
   getBetterListPortalMountNode,
   IBetterListFieldDescriptor,
@@ -64,6 +66,7 @@ const titleCommitDelayMs = 500;
 
 export interface IBetterListAuthoringState {
   heading: string;
+  itemColumns: BetterListColumnCount;
   maxItemsPerPage: number;
   sourceListId: string;
   sourceListTitle: string;
@@ -603,24 +606,41 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
               }}
             />
           </label>
-          <label className="bl-pane__field">
-            <span className="bl-pane__label">Maximum items per page</span>
-            <Input
-              aria-label="Maximum items per page"
-              min={1}
-              placeholder="No maximum"
-              step={1}
-              type="number"
-              value={props.value.maxItemsPerPage > 0 ? String(props.value.maxItemsPerPage) : ''}
-              onChange={(_event, data) => {
-                const numericValue = Number(data.value);
-                patchValue({
-                  maxItemsPerPage:
-                    Number.isFinite(numericValue) && numericValue > 0 ? Math.floor(numericValue) : 0
-                });
-              }}
-            />
-          </label>
+          <div className="bl-pane__top-settings">
+            <label className="bl-pane__field">
+              <span className="bl-pane__label">Columns</span>
+              <Select
+                aria-label="Columns"
+                value={String(props.value.itemColumns)}
+                onChange={(event) => {
+                  patchValue({ itemColumns: Number(event.currentTarget.value) as BetterListColumnCount });
+                }}
+              >
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+              </Select>
+            </label>
+            <label className="bl-pane__field">
+              <span className="bl-pane__label">Maximum items per page</span>
+              <Input
+                aria-label="Maximum items per page"
+                min={1}
+                placeholder="No maximum"
+                step={1}
+                type="number"
+                value={props.value.maxItemsPerPage > 0 ? String(props.value.maxItemsPerPage) : ''}
+                onChange={(_event, data) => {
+                  const numericValue = Number(data.value);
+                  patchValue({
+                    maxItemsPerPage:
+                      Number.isFinite(numericValue) && numericValue > 0 ? Math.floor(numericValue) : 0
+                  });
+                }}
+              />
+            </label>
+          </div>
         </section>
 
         <PropertyPaneSection
@@ -980,6 +1000,7 @@ const propertyPaneCss = `
 .bl-pane__source-section { border: 0; margin: 0; padding: 8px 0 12px; }
 .bl-pane__section-count { color: ${tokens.colorNeutralForeground3}; font-weight: 400; margin-left: 4px; }
 .bl-pane__field { display: flex; flex-direction: column; gap: 5px; margin: 0 0 12px; min-width: 0; }
+.bl-pane__top-settings { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .bl-pane__label { font-size: 12px; font-weight: 600; }
 .bl-pane__source-dropdown { min-width: 0; width: 100%; }
 .bl-pane__source-listbox { font-family: "Segoe UI", sans-serif; }

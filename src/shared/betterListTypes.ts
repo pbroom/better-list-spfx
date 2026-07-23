@@ -219,6 +219,15 @@ export type BetterListIconMode = 'none' | 'field' | 'fixed';
 
 export type BetterListTabIcon = 'list' | 'communications' | 'policy' | 'support';
 
+export type BetterListColumnCount = 1 | 2 | 3 | 4;
+
+export function normalizeBetterListColumnCount(value: unknown): BetterListColumnCount {
+  const numericValue = Number(value);
+  return numericValue === 1 || numericValue === 2 || numericValue === 3 || numericValue === 4
+    ? numericValue
+    : 2;
+}
+
 export interface IBetterListIconOverride {
   mode: BetterListIconMode;
   field?: BetterListFieldSlot;
@@ -226,7 +235,7 @@ export interface IBetterListIconOverride {
 }
 
 export interface IBetterListLayoutOverride {
-  columns?: 1 | 2 | 3;
+  columns?: BetterListColumnCount;
   density?: 'compact' | 'comfortable';
   collapsible?: boolean;
   initiallyExpanded?: boolean;

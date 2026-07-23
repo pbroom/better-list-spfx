@@ -239,6 +239,37 @@ describe('BetterListView', () => {
     ReactDom.unmountComponentAtNode(container);
   });
 
+  it('uses the global item column count while preserving the legacy tab fallback', async () => {
+    const container = document.createElement('div');
+    const tabs: readonly IBetterListTab[] = [
+      {
+        key: 'all',
+        label: 'All items',
+        grouped: false,
+        layout: { columns: 1 },
+        items: [item]
+      }
+    ];
+
+    await act(async () => {
+      ReactDom.render(
+        <BetterListView activeTabKey="all" itemColumns={4} items={[item]} tabs={tabs} />,
+        container
+      );
+    });
+    expect(
+      container.querySelector<HTMLElement>('.better-list__grid')?.style.getPropertyValue('--better-list-columns')
+    ).toBe('4');
+
+    await act(async () => {
+      ReactDom.render(<BetterListView activeTabKey="all" items={[item]} tabs={tabs} />, container);
+    });
+    expect(
+      container.querySelector<HTMLElement>('.better-list__grid')?.style.getPropertyValue('--better-list-columns')
+    ).toBe('1');
+    ReactDom.unmountComponentAtNode(container);
+  });
+
   it('renders configured item elements in their authored order', () => {
     const tabs: readonly IBetterListTab[] = [
       {

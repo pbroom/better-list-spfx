@@ -20,6 +20,7 @@ import {
   alignTabQueryFieldKinds,
   applyBetterListGroupOrder,
   BetterListFilter,
+  BetterListColumnCount,
   BetterListFieldValue,
   BetterListGroupIconOverride,
   BetterListItemElementLinks,
@@ -49,6 +50,7 @@ import {
   parseItemPropertyFields,
   parseTabConfiguration,
   processItems,
+  normalizeBetterListColumnCount,
   resolveBetterListTabConfigurations,
   scopeBetterListStyles,
   serializeItemLayoutConfiguration,
@@ -84,6 +86,7 @@ const normalizeMaxItemsPerPage = (value: unknown): number => {
 
 export interface IBetterListWebPartProps {
   heading: string;
+  itemColumns: BetterListColumnCount;
   maxItemsPerPage: number;
   sourceListId: string;
   sourceListTitle: string;
@@ -157,6 +160,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       groupImageAssetProvider: this._imageAssetProvider,
       isEditMode: this.displayMode === DisplayMode.Edit,
       heading: this.properties.heading,
+      itemColumns: this.properties.itemColumns,
       maxItemsPerPage: this.properties.maxItemsPerPage,
       listTitle: this.properties.sourceListTitle,
       onTabChange: (tabKey: string): void => {
@@ -208,6 +212,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
 
   protected async onInit(): Promise<void> {
     this.properties.heading = this.properties.heading || '';
+    this.properties.itemColumns = normalizeBetterListColumnCount(this.properties.itemColumns);
     this.properties.maxItemsPerPage = normalizeMaxItemsPerPage(this.properties.maxItemsPerPage);
     this.properties.sourceListId = this.properties.sourceListId || '';
     this.properties.sourceListTitle = this.properties.sourceListTitle || '';
@@ -369,6 +374,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     );
     return {
       heading: this.properties.heading,
+      itemColumns: this.properties.itemColumns,
       maxItemsPerPage: this.properties.maxItemsPerPage,
       sourceListId: this.properties.sourceListId,
       sourceListTitle: this.properties.sourceListTitle,
@@ -410,6 +416,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     );
     const next = {
       heading: value.heading,
+      itemColumns: normalizeBetterListColumnCount(value.itemColumns),
       maxItemsPerPage: normalizeMaxItemsPerPage(value.maxItemsPerPage),
       sourceListId: value.sourceListId,
       sourceListTitle: value.sourceListTitle,

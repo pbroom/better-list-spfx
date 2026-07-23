@@ -160,7 +160,7 @@ describe('Better List tab configuration', () => {
         group: { field: 'organization' as const },
         sort: [{ field: 'title' as const, direction: 'ascending' as const, mode: 'text' as const }],
         icon: { mode: 'fixed' as const, value: 'MegaphoneLoud' },
-        layout: { columns: 1 as const, density: 'compact' as const }
+        layout: { columns: 4 as const, density: 'compact' as const }
       }
     ]);
 
@@ -170,7 +170,8 @@ describe('Better List tab configuration', () => {
       tabIcon: 'communications',
       tabIconOverride: { kind: 'icon', library: 'solar-duotone', name: 'star-bold-duotone', color: '#245a8d' },
       showItemCount: true,
-      maxItems: 6
+      maxItems: 6,
+      layout: { columns: 4, density: 'compact' }
     });
   });
 

@@ -283,8 +283,10 @@ function readLayout(value: unknown): IBetterListLayoutOverride | undefined {
   if (!isRecord(value)) {
     throw new Error('A tab layout override must be an object.');
   }
-  const columns: 1 | 2 | 3 | undefined =
-    value.columns === 1 || value.columns === 2 || value.columns === 3 ? value.columns : undefined;
+  const columns: 1 | 2 | 3 | 4 | undefined =
+    value.columns === 1 || value.columns === 2 || value.columns === 3 || value.columns === 4
+      ? value.columns
+      : undefined;
   return {
     columns,
     density: value.density === 'compact' || value.density === 'comfortable' ? value.density : undefined,

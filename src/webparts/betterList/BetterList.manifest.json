@@ -23,6 +23,7 @@
       "officeFabricIconFontName": "Page",
       "properties": {
         "heading": "",
+        "itemColumns": 2,
         "maxItemsPerPage": 0,
         "groupIconsJson": "{\"version\":1,\"showIcons\":true,\"overrides\":[]}",
         "itemLayoutJson": "[]",

@@ -35,6 +35,7 @@ describe('BetterListPropertyPane', () => {
 
   const createValue = (): IBetterListAuthoringState => ({
     heading: '',
+    itemColumns: 2,
     maxItemsPerPage: 0,
     sourceListId: 'services',
     sourceListTitle: 'Services',
@@ -72,10 +73,16 @@ describe('BetterListPropertyPane', () => {
     expect(html).toContain('bl-pane__source-dropdown');
     expect(html).toContain('aria-label="Title"');
     expect(html).toContain('placeholder="Title (optional)"');
+    expect(html).toContain('aria-label="Columns"');
+    expect(html).toContain('<option value="1">1</option>');
+    expect(html).toContain('<option selected="" value="2">2</option>');
+    expect(html).toContain('<option value="3">3</option>');
+    expect(html).toContain('<option value="4">4</option>');
     expect(html).toContain('aria-label="Maximum items per page"');
     expect(html).toContain('placeholder="No maximum"');
     expect(html.indexOf('aria-label="Source list"')).toBeLessThan(html.indexOf('aria-label="Title"'));
-    expect(html.indexOf('aria-label="Title"')).toBeLessThan(html.indexOf('aria-label="Maximum items per page"'));
+    expect(html.indexOf('aria-label="Title"')).toBeLessThan(html.indexOf('aria-label="Columns"'));
+    expect(html.indexOf('aria-label="Columns"')).toBeLessThan(html.indexOf('aria-label="Maximum items per page"'));
     expect(html.indexOf('aria-label="Maximum items per page"')).toBeLessThan(html.indexOf('aria-label="Add tab"'));
     expect(html).toContain('--bl-font-mono: &quot;Geist Mono Variable&quot;');
     expect(html.match(/bl-property-pane-section/g)).toHaveLength(4);
@@ -166,6 +173,38 @@ describe('BetterListPropertyPane', () => {
       Simulate.change(input as HTMLInputElement);
     });
     expect(onChange).toHaveBeenLastCalledWith({ ...value, maxItemsPerPage: 0 });
+    ReactDom.unmountComponentAtNode(container);
+  });
+
+  it('authors the global item column count', async () => {
+    const container = document.createElement('div');
+    const onChange = jest.fn();
+    const value = createValue();
+
+    await act(async () => {
+      ReactDom.render(
+        <BetterListPropertyPane
+          pickerDataSource={{
+            loadFields: async () => [],
+            loadLists: async () => [{ id: 'services', title: 'Services' }],
+            resolveListUrl: async () => ({ id: 'services', title: 'Services' })
+          }}
+          value={value}
+          onChange={onChange}
+        />,
+        container
+      );
+      await Promise.resolve();
+    });
+
+    const select = container.querySelector<HTMLSelectElement>('select[aria-label="Columns"]');
+    expect(select).not.toBeNull();
+    await act(async () => {
+      (select as HTMLSelectElement).value = '4';
+      Simulate.change(select as HTMLSelectElement);
+    });
+
+    expect(onChange).toHaveBeenLastCalledWith({ ...value, itemColumns: 4 });
     ReactDom.unmountComponentAtNode(container);
   });
 

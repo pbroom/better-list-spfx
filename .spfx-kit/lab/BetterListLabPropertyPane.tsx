@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Button, Combobox, Dropdown, Input, Option, Switch, makeStyles, tokens } from '@fluentui/react-components';
+import { Button, Combobox, Dropdown, Input, Option, Select, Switch, makeStyles, tokens } from '@fluentui/react-components';
 import { AddRegular, EditRegular } from '@fluentui/react-icons';
 import type {
   LabCssEditorTarget,
@@ -26,6 +26,7 @@ import {
   validateBetterListTemplateStructure,
   serializeTabConfiguration,
   IBetterListFieldMappings,
+  BetterListColumnCount,
   IBetterListTabConfig,
   resolveBetterListTabConfigurations
 } from '../../src/shared';
@@ -49,6 +50,7 @@ const titleCommitDelayMs = 500;
 
 export type BetterListLabProps = LabPropertyBag & {
   heading: string;
+  itemColumns: BetterListColumnCount;
   maxItemsPerPage: number;
   sourceListId: string;
   sourceListTitle: string;
@@ -84,6 +86,11 @@ const useStyles = makeStyles({
     marginBottom: '12px',
     fontSize: '12px',
     fontWeight: 600
+  },
+  topSettings: {
+    display: 'grid',
+    columnGap: '8px',
+    gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)'
   },
   sectionLabel: {
     fontSize: '14px',
@@ -381,24 +388,41 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
           }}
         />
       </label>
-      <label className={classes.groupingField}>
-        <span>Maximum items per page</span>
-        <Input
-          aria-label="Maximum items per page"
-          min={1}
-          placeholder="No maximum"
-          step={1}
-          type="number"
-          value={values.maxItemsPerPage > 0 ? String(values.maxItemsPerPage) : ''}
-          onChange={(_event, data) => {
-            const numericValue = Number(data.value);
-            onChange({
-              maxItemsPerPage:
-                Number.isFinite(numericValue) && numericValue > 0 ? Math.floor(numericValue) : 0
-            });
-          }}
-        />
-      </label>
+      <div className={classes.topSettings}>
+        <label className={classes.groupingField}>
+          <span>Columns</span>
+          <Select
+            aria-label="Columns"
+            value={String(values.itemColumns)}
+            onChange={(event) => {
+              onChange({ itemColumns: Number(event.currentTarget.value) as BetterListColumnCount });
+            }}
+          >
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+          </Select>
+        </label>
+        <label className={classes.groupingField}>
+          <span>Maximum items per page</span>
+          <Input
+            aria-label="Maximum items per page"
+            min={1}
+            placeholder="No maximum"
+            step={1}
+            type="number"
+            value={values.maxItemsPerPage > 0 ? String(values.maxItemsPerPage) : ''}
+            onChange={(_event, data) => {
+              const numericValue = Number(data.value);
+              onChange({
+                maxItemsPerPage:
+                  Number.isFinite(numericValue) && numericValue > 0 ? Math.floor(numericValue) : 0
+              });
+            }}
+          />
+        </label>
+      </div>
 
       <DisclosureSection
         action={

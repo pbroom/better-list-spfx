@@ -35,6 +35,7 @@ import {
 } from '@fluentui/react-icons';
 import {
   betterListFluentTooltipContentClassName,
+  BetterListColumnCount,
   BetterListItemLayoutRows,
   BetterListGroupIconOverride,
   BetterListTabIcon,
@@ -45,6 +46,7 @@ import {
   IBetterListGroupIconsConfiguration,
   defaultBetterListGroupIconsConfiguration,
   getBetterListGroupIconOverride,
+  normalizeBetterListColumnCount,
   resolveBetterListTemplate,
   substituteBetterListTokens
 } from '../../../shared';
@@ -63,7 +65,7 @@ export type BetterListStatus = 'loading' | 'ready' | 'error';
 export type BetterListGroupIcon = 'general' | 'communications' | 'policy' | 'support';
 
 export interface IBetterListTabLayout {
-  columns?: 1 | 2 | 3;
+  columns?: BetterListColumnCount;
   density?: 'compact' | 'comfortable';
   collapsible?: boolean;
   initiallyExpanded?: boolean;
@@ -139,6 +141,7 @@ export interface IBetterListViewProps {
   groupImageAssetProvider?: ISharePointImageAssetProvider;
   isEditMode?: boolean;
   heading?: string;
+  itemColumns?: BetterListColumnCount;
   maxItemsPerPage?: number;
   listTitle?: string;
   onTabChange?: (tabKey: string) => void;
@@ -653,6 +656,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   groupImageAssetProvider,
   isEditMode = false,
   heading = '',
+  itemColumns,
   maxItemsPerPage = 0,
   listTitle = 'Better List',
   onTabChange,
@@ -696,8 +700,12 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   const grouped = selectedTab?.grouped === true;
   const collapsible = grouped && selectedLayout?.collapsible !== false;
   const initiallyExpanded = selectedLayout?.initiallyExpanded !== false;
+  const normalizedItemColumns =
+    itemColumns === undefined
+      ? selectedLayout?.columns ?? 2
+      : normalizeBetterListColumnCount(itemColumns);
   const gridStyle = {
-    '--better-list-columns': String(selectedLayout?.columns ?? 2)
+    '--better-list-columns': String(normalizedItemColumns)
   } as React.CSSProperties;
   const normalizedSearchText = normalizeSearchText(internalSearchValue);
   const normalizedHeading = heading.trim();

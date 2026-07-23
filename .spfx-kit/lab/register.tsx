@@ -60,6 +60,7 @@ import './betterListLab.css';
 
 const defaultProps: BetterListLabProps = {
   heading: '',
+  itemColumns: 2,
   maxItemsPerPage: 0,
   sourceListId: servicesListId,
   sourceListTitle: servicesListTitle,
@@ -211,6 +212,7 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
         groupImageAssetProvider={imageAssetProvider}
         isEditMode={lab.displayMode === 'edit'}
         heading={props.heading}
+        itemColumns={props.itemColumns}
         maxItemsPerPage={props.maxItemsPerPage}
         listTitle={props.sourceListTitle}
         emptyMessage="There are no active Services items to display."
