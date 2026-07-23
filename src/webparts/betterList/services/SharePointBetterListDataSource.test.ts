@@ -192,6 +192,66 @@ describe('SharePointBetterListDataSource', () => {
     expect(result.items[0].metadata[0].value).toBe('General services');
   });
 
+  it('loads expanded lookup data when optional target schema discovery fails', async () => {
+    const categoryListId = '26b8db39-7a13-4fe5-9a88-bdbfe54676a4';
+    const urls: string[] = [];
+    const client: SPHttpClient = {
+      get: (url: string) => {
+        urls.push(url);
+        if (url.indexOf(`lists(guid'${categoryListId}')/fields?`) >= 0) {
+          return Promise.reject(new Error('Target schema unavailable'));
+        }
+        if (url.indexOf('/fields?') >= 0) {
+          return Promise.resolve(response({ value: [
+            {
+              Id: 'title',
+              InternalName: 'Title',
+              EntityPropertyName: 'Title',
+              Title: 'Title',
+              TypeAsString: 'Text',
+              SchemaXml: '<Field Type="Text" Name="Title" />'
+            },
+            {
+              Id: 'category',
+              InternalName: 'Category',
+              EntityPropertyName: 'Category',
+              Title: 'Category',
+              TypeAsString: 'Lookup',
+              LookupList: categoryListId,
+              LookupField: 'Title',
+              SchemaXml: '<Field Type="Lookup" Name="Category" />'
+            }
+          ] }));
+        }
+        return Promise.resolve(response({ value: [{
+          Id: 1,
+          Title: 'Service',
+          Category: { Id: 7, Title: 'General', Description: 'General services' }
+        }] }));
+      }
+    } as unknown as SPHttpClient;
+    const source = new SharePointBetterListDataSource(client, 'https://contoso.sharepoint.com/sites/example');
+
+    const result = await source.loadItems({
+      list: { title: 'Services' },
+      mappings: {
+        title: { internalName: 'Title', kind: 'text' },
+        metadata: [{
+          key: 'Category.Description',
+          label: 'Category description',
+          mapping: {
+            internalName: 'Category',
+            kind: 'lookup',
+            lookupValueField: 'Description'
+          }
+        }]
+      }
+    });
+
+    expect(urls.some((url) => url.indexOf(`lists(guid'${categoryListId}')/fields?`) >= 0)).toBe(true);
+    expect(result.items[0].metadata[0].value).toBe('General services');
+  });
+
   it('escapes list titles and follows absolute or relative OData pagination links', async () => {
     const urls: string[] = [];
     const client: SPHttpClient = {

@@ -768,7 +768,12 @@ export class SharePointBetterListDataSource implements IBetterListDataSource {
     });
 
     for (const [lookupListId, listMappings] of Array.from(byLookupList.entries())) {
-      const targetFields = await this.discoverFields({ id: lookupListId, webUrl });
+      let targetFields: readonly IBetterListFieldInfo[];
+      try {
+        targetFields = await this.discoverFields({ id: lookupListId, webUrl });
+      } catch {
+        continue;
+      }
       const byInternalName = new Map(targetFields.map((field) => [
         field.internalName.toLocaleLowerCase(),
         field
