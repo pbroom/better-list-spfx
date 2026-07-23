@@ -16,9 +16,9 @@ const bundledSource = (
     chunkNames.map((name) => readFile(path.join(distDir, name), "utf8")),
   )
 ).join("\n");
-const globalImeSelector = /\.monaco-editor\s+\.ime-text-area\{/;
+const globalImeSelector = /\.monaco-editor\s+\.ime-text-area\s*\{/;
 const moduleImeSelector =
-  /\.monaco-editor_[a-f0-9]+\s+\.ime-text-area_[a-f0-9]+\{/i;
+  /\.monaco-editor_[a-f0-9]+\s+\.ime-text-area_[a-f0-9]+\s*\{/i;
 
 if (!globalImeSelector.test(bundledSource)) {
   throw new Error(

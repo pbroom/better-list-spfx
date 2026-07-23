@@ -31,7 +31,8 @@ module.exports = function configureSpfxMonacoCss(webpackConfiguration) {
     const globalRuleIndex = rules.indexOf(globalRule);
     rules.splice(globalRuleIndex + 1, 0, {
       ...globalRule,
-      test: MONACO_CSS_RULE
+      test: MONACO_CSS_RULE,
+      exclude: undefined
     });
   }
 
