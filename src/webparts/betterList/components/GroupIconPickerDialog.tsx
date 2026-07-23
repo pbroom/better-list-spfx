@@ -27,6 +27,7 @@ import { ImageRegular, SearchRegular } from '@fluentui/react-icons';
 import {
   BetterListGroupIconLibrary,
   BetterListGroupIconOverride,
+  IBetterListThemeColor,
   betterListFluentSurfaceClassName,
   ensureBetterListRuntimeStyles,
   getBetterListPortalMountNode,
@@ -51,6 +52,7 @@ export interface IGroupIconPickerDialogProps {
   groupTitle: string;
   open: boolean;
   imageAssetProvider?: ISharePointImageAssetProvider;
+  themeColors?: readonly IBetterListThemeColor[];
   onApply: (override: BetterListGroupIconOverride | undefined) => void;
   onOpenChange: (open: boolean) => void;
   showAutomaticAction?: boolean;
@@ -200,6 +202,7 @@ export const GroupIconPickerDialog: React.FunctionComponent<IGroupIconPickerDial
   groupTitle,
   open,
   imageAssetProvider,
+  themeColors,
   onApply,
   onOpenChange,
   showAutomaticAction = true
@@ -343,6 +346,7 @@ export const GroupIconPickerDialog: React.FunctionComponent<IGroupIconPickerDial
             ) : view !== 'image' ? (
               <GroupIconColorField
                 fallbackColor={defaultColor}
+                themeColors={themeColors}
                 value={draftColor}
                 onChange={updateDraftColor}
               />

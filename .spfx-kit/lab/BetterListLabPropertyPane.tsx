@@ -13,6 +13,7 @@ import {
   createBetterListSortableFieldOptions,
   createBetterListGroupingOverride,
   createBetterListItemLayoutOverride,
+  defaultSharePointThemeColors,
   getRichTextItemPropertyPaths,
   parseBetterListGroupIconsConfiguration,
   parseItemLayoutConfiguration,
@@ -584,6 +585,7 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
       >
         <TabBuilder
           fields={tabFilterFields}
+          themeColors={defaultSharePointThemeColors}
           selectedTabId={activeTabId}
           showAddAction={false}
           tabs={tabs}
@@ -678,6 +680,7 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
             {activeGrouping.icons.showIcons ? (
               <GroupIconColorField
                 label="Default icon color"
+                themeColors={defaultSharePointThemeColors}
                 value={activeGrouping.icons.defaultColor}
                 onChange={(defaultColor) =>
                   patchActiveGrouping({

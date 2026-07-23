@@ -13,6 +13,7 @@ import {
   betterListPopularityFieldNames,
   betterListTrendingFieldNames,
   createBetterListGroupingOverride,
+  defaultSharePointThemeColors,
   defaultBetterListHtmlTemplate,
   defaultBetterListScss,
   formatItemPropertyDisplayValue,
@@ -225,6 +226,7 @@ const Preview: React.FunctionComponent<LabRenderProps<BetterListLabProps>> = ({ 
         groupIconScope={props.groupsColumn}
         groupIcons={groupIcons}
         groupImageAssetProvider={imageAssetProvider}
+        themeColors={defaultSharePointThemeColors}
         isEditMode={lab.displayMode === 'edit'}
         heading={props.heading}
         itemColumns={props.itemColumns}

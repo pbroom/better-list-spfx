@@ -51,6 +51,7 @@ import {
   IBetterListTemplateElementNode,
   IBetterListTemplateNode,
   IBetterListGroupIconsConfiguration,
+  IBetterListThemeColor,
   defaultBetterListGroupIconsConfiguration,
   getBetterListGroupIconOverride,
   normalizeBetterListColumnCount,
@@ -150,6 +151,7 @@ export interface IBetterListViewProps {
   groupIconScope?: string;
   groupIcons?: IBetterListGroupIconsConfiguration;
   groupImageAssetProvider?: ISharePointImageAssetProvider;
+  themeColors?: readonly IBetterListThemeColor[];
   isEditMode?: boolean;
   heading?: string;
   itemColumns?: BetterListColumnCount;
@@ -780,6 +782,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   groupIconScope = '',
   groupIcons = defaultBetterListGroupIconsConfiguration,
   groupImageAssetProvider,
+  themeColors,
   isEditMode = false,
   heading = '',
   itemColumns,
@@ -1495,6 +1498,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
             defaultColor={selectedGroupIcons.defaultColor}
             groupTitle={editingGroup.title}
             imageAssetProvider={groupImageAssetProvider}
+            themeColors={themeColors}
             open
             onApply={(override) => onGroupIconOverrideChange(editingGroup.id, override)}
             onOpenChange={(open) => {
