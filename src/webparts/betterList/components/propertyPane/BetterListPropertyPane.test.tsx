@@ -37,6 +37,7 @@ describe('BetterListPropertyPane', () => {
     heading: '',
     itemColumns: 2,
     maxItemsPerPage: 0,
+    showSearch: true,
     sourceListId: 'services',
     sourceListTitle: 'Services',
     sourceWebUrl: 'https://contoso.sharepoint.com/sites/example',
@@ -80,14 +81,16 @@ describe('BetterListPropertyPane', () => {
     expect(html).toContain('<option value="4">4</option>');
     expect(html).toContain('aria-label="Maximum items per page"');
     expect(html).toContain('placeholder="No maximum"');
+    expect(html).toContain('Search &amp; sorting');
     expect(html.indexOf('aria-label="Source list"')).toBeLessThan(html.indexOf('aria-label="Title"'));
     expect(html.indexOf('aria-label="Title"')).toBeLessThan(html.indexOf('aria-label="Columns"'));
     expect(html.indexOf('aria-label="Columns"')).toBeLessThan(html.indexOf('aria-label="Maximum items per page"'));
     expect(html.indexOf('aria-label="Maximum items per page"')).toBeLessThan(html.indexOf('aria-label="Add tab"'));
     expect(html).toContain('--bl-font-mono: &quot;Geist Mono Variable&quot;');
-    expect(html.match(/bl-property-pane-section/g)).toHaveLength(4);
+    expect(html.indexOf('Search &amp; sorting')).toBeLessThan(html.indexOf('aria-label="Add tab"'));
+    expect(html.match(/bl-property-pane-section/g)).toHaveLength(5);
     expect(html).toContain('data-property-pane-section-heading="true"');
-    expect(html.match(/data-property-pane-section-divider="before"/g)).toHaveLength(4);
+    expect(html.match(/data-property-pane-section-divider="before"/g)).toHaveLength(5);
     expect(html).not.toContain('data-property-pane-section-divider="none"');
     expect(html).toContain('aria-label="Add tab"');
     expect(html).not.toContain('aria-label="Select groups column"');
@@ -205,6 +208,47 @@ describe('BetterListPropertyPane', () => {
     });
 
     expect(onChange).toHaveBeenLastCalledWith({ ...value, itemColumns: 4 });
+    ReactDom.unmountComponentAtNode(container);
+  });
+
+  it('authors global search field visibility', async () => {
+    const container = document.createElement('div');
+    const onChange = jest.fn();
+    const value = createValue();
+
+    await act(async () => {
+      ReactDom.render(
+        <BetterListPropertyPane
+          pickerDataSource={{
+            loadFields: async () => [],
+            loadLists: async () => [{ id: 'services', title: 'Services' }],
+            resolveListUrl: async () => ({ id: 'services', title: 'Services' })
+          }}
+          value={value}
+          onChange={onChange}
+        />,
+        container
+      );
+      await Promise.resolve();
+    });
+
+    const searchSectionButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Search & sorting'
+    );
+    expect(searchSectionButton).toBeDefined();
+    await act(async () => {
+      Simulate.click(searchSectionButton as HTMLButtonElement);
+    });
+
+    const searchSwitch = container.querySelector<HTMLInputElement>('input[role="switch"]');
+    expect(searchSwitch).not.toBeNull();
+    expect(searchSwitch?.checked).toBe(true);
+    await act(async () => {
+      (searchSwitch as HTMLInputElement).checked = false;
+      Simulate.change(searchSwitch as HTMLInputElement);
+    });
+
+    expect(onChange).toHaveBeenLastCalledWith({ ...value, showSearch: false });
     ReactDom.unmountComponentAtNode(container);
   });
 

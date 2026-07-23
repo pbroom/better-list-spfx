@@ -68,6 +68,7 @@ export interface IBetterListAuthoringState {
   heading: string;
   itemColumns: BetterListColumnCount;
   maxItemsPerPage: number;
+  showSearch: boolean;
   sourceListId: string;
   sourceListTitle: string;
   sourceWebUrl: string;
@@ -642,6 +643,16 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
             </label>
           </div>
         </section>
+
+        <PropertyPaneSection label="Search & sorting">
+          <Switch
+            aria-label="Search field"
+            checked={props.value.showSearch}
+            className="bl-pane__switch"
+            label="Search field"
+            onChange={(_event, data) => patchValue({ showSearch: data.checked })}
+          />
+        </PropertyPaneSection>
 
         <PropertyPaneSection
           action={

@@ -143,6 +143,7 @@ export interface IBetterListViewProps {
   heading?: string;
   itemColumns?: BetterListColumnCount;
   maxItemsPerPage?: number;
+  showSearch?: boolean;
   listTitle?: string;
   onTabChange?: (tabKey: string) => void;
   onSearchChange?: (value: string) => void;
@@ -658,6 +659,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   heading = '',
   itemColumns,
   maxItemsPerPage = 0,
+  showSearch,
   listTitle = 'Better List',
   onTabChange,
   onSearchChange,
@@ -696,7 +698,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   const selectedLayout = selectedTab?.layout;
   const density = selectedLayout?.density ?? 'comfortable';
   const showDescriptions = selectedLayout?.showDescriptions !== false;
-  const showSearch = selectedLayout?.showSearch !== false;
+  const searchVisible = (showSearch ?? true) && selectedLayout?.showSearch !== false;
   const grouped = selectedTab?.grouped === true;
   const collapsible = grouped && selectedLayout?.collapsible !== false;
   const initiallyExpanded = selectedLayout?.initiallyExpanded !== false;
@@ -707,7 +709,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   const gridStyle = {
     '--better-list-columns': String(normalizedItemColumns)
   } as React.CSSProperties;
-  const normalizedSearchText = normalizeSearchText(internalSearchValue);
+  const normalizedSearchText = searchVisible ? normalizeSearchText(internalSearchValue) : '';
   const normalizedHeading = heading.trim();
   const normalizedMaxItemsPerPage =
     Number.isFinite(maxItemsPerPage) && maxItemsPerPage > 0 ? Math.floor(maxItemsPerPage) : 0;
@@ -1215,7 +1217,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
         {
       tabs: renderTabs,
       search: (attributes, key) =>
-        showSearch ? (
+        searchVisible ? (
           <Input
             {...attributes}
             className={mergeClasses(String(attributes.className || ''), classes.search, 'better-list__search')}

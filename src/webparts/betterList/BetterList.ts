@@ -88,6 +88,7 @@ export interface IBetterListWebPartProps {
   heading: string;
   itemColumns: BetterListColumnCount;
   maxItemsPerPage: number;
+  showSearch: boolean;
   sourceListId: string;
   sourceListTitle: string;
   sourceWebUrl: string;
@@ -162,6 +163,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       heading: this.properties.heading,
       itemColumns: this.properties.itemColumns,
       maxItemsPerPage: this.properties.maxItemsPerPage,
+      showSearch: this.properties.showSearch,
       listTitle: this.properties.sourceListTitle,
       onTabChange: (tabKey: string): void => {
         this._activeTabKey = tabKey;
@@ -214,6 +216,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     this.properties.heading = this.properties.heading || '';
     this.properties.itemColumns = normalizeBetterListColumnCount(this.properties.itemColumns);
     this.properties.maxItemsPerPage = normalizeMaxItemsPerPage(this.properties.maxItemsPerPage);
+    this.properties.showSearch = this.properties.showSearch !== false;
     this.properties.sourceListId = this.properties.sourceListId || '';
     this.properties.sourceListTitle = this.properties.sourceListTitle || '';
     this.properties.sourceWebUrl = this.properties.sourceWebUrl || '';
@@ -376,6 +379,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       heading: this.properties.heading,
       itemColumns: this.properties.itemColumns,
       maxItemsPerPage: this.properties.maxItemsPerPage,
+      showSearch: this.properties.showSearch,
       sourceListId: this.properties.sourceListId,
       sourceListTitle: this.properties.sourceListTitle,
       sourceWebUrl: this.properties.sourceWebUrl,
@@ -418,6 +422,7 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
       heading: value.heading,
       itemColumns: normalizeBetterListColumnCount(value.itemColumns),
       maxItemsPerPage: normalizeMaxItemsPerPage(value.maxItemsPerPage),
+      showSearch: value.showSearch !== false,
       sourceListId: value.sourceListId,
       sourceListTitle: value.sourceListTitle,
       sourceWebUrl: value.sourceWebUrl,
