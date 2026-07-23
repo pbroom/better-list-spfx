@@ -174,12 +174,15 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
   const latestValueRef = React.useRef(props.value);
   const onChangeRef = React.useRef(props.onChange);
   const sourceRequest = React.useRef(0);
+  const groupOptionsRequest = React.useRef(0);
+  const groupOptionsContextRef = React.useRef('');
 
   latestValueRef.current = props.value;
   onChangeRef.current = props.onChange;
 
   React.useEffect(() => () => {
     sourceRequest.current += 1;
+    groupOptionsRequest.current += 1;
   }, []);
 
   React.useEffect(() => () => {
@@ -297,6 +300,18 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
     filter: { kind: 'all' as const },
     groupOrder: [] as readonly IBetterListGroupOrderEntry[]
   };
+  const groupOptionsContext = JSON.stringify([
+    activeTabId,
+    activeGrouping.column,
+    activeGrouping.filter
+  ]);
+  groupOptionsContextRef.current = groupOptionsContext;
+  React.useEffect(() => {
+    groupOptionsRequest.current += 1;
+    setGroupOptionsLoading(false);
+    setGroupOptionsError('');
+    setGroupEditorOpen(false);
+  }, [groupOptionsContext]);
   const activeItemLayout = activeConfiguration?.itemLayout ?? {
     itemProperties: props.value.itemProperties,
     rows: props.value.itemLayoutRows,
@@ -451,20 +466,32 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
     if (!activeGrouping.column || groupOptionsLoading) {
       return;
     }
+    const requestId = groupOptionsRequest.current + 1;
+    const requestContext = groupOptionsContext;
+    groupOptionsRequest.current = requestId;
     setGroupOptionsLoading(true);
     setGroupOptionsError('');
+    const isCurrentRequest = (): boolean =>
+      groupOptionsRequest.current === requestId &&
+      groupOptionsContextRef.current === requestContext;
     try {
       const nextGroups = props.loadGroupOptions
         ? await props.loadGroupOptions(activeTabId, activeGrouping.column, activeGrouping.filter)
         : [];
-      setGroupOptions(nextGroups);
-      setGroupEditorOpen(true);
+      if (isCurrentRequest()) {
+        setGroupOptions(nextGroups);
+        setGroupEditorOpen(true);
+      }
     } catch (loadError) {
-      setGroupOptionsError(
-        loadError instanceof Error ? loadError.message : 'Groups could not be loaded.'
-      );
+      if (isCurrentRequest()) {
+        setGroupOptionsError(
+          loadError instanceof Error ? loadError.message : 'Groups could not be loaded.'
+        );
+      }
     } finally {
-      setGroupOptionsLoading(false);
+      if (isCurrentRequest()) {
+        setGroupOptionsLoading(false);
+      }
     }
   };
   const groupingFields = fields.filter(isGroupingColumn);

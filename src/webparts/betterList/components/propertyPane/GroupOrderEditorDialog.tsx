@@ -263,7 +263,7 @@ export const GroupOrderEditorDialog: React.FunctionComponent<IGroupOrderEditorDi
               appearance="primary"
               disabled={!rows.length}
               onClick={() => {
-                onApply(rows.map((row) => row.hidden ? { key: row.key, hidden: true } : { key: row.key }));
+                onApply(serializeGroupOrder(rows, value));
                 onOpenChange(false);
               }}
             >
@@ -318,4 +318,29 @@ export function moveGroupRow(
   const next = rows.slice();
   [next[currentIndex], next[swapIndex]] = [next[swapIndex], next[currentIndex]];
   return next;
+}
+
+export function serializeGroupOrder(
+  rows: readonly IGroupOrderEditorRow[],
+  value: readonly IBetterListGroupOrderEntry[]
+): readonly IBetterListGroupOrderEntry[] {
+  const discoveredKeys = new Set(rows.map((row) => row.key));
+  const discoveredEntries = rows.map((row) =>
+    row.hidden ? { key: row.key, hidden: true } : { key: row.key }
+  );
+  let discoveredIndex = 0;
+  const entries = value.reduce<IBetterListGroupOrderEntry[]>((result, entry) => {
+    if (discoveredKeys.has(entry.key)) {
+      const nextEntry = discoveredEntries[discoveredIndex];
+      discoveredIndex += 1;
+      if (nextEntry) {
+        result.push(nextEntry);
+      }
+    } else {
+      result.push(entry.hidden ? { key: entry.key, hidden: true } : { key: entry.key });
+    }
+    return result;
+  }, []);
+  entries.push(...discoveredEntries.slice(discoveredIndex));
+  return entries;
 }
