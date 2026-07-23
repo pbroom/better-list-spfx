@@ -462,9 +462,9 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
           </Dropdown>
         </label>
         <label className={classes.groupingField}>
-          <span>Maximum items per page</span>
+          <span>Max items per page</span>
           <Input
-            aria-label="Maximum items per page"
+            aria-label="Max items per page"
             min={1}
             placeholder="No maximum"
             step={1}

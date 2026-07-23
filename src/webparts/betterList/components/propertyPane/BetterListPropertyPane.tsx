@@ -676,9 +676,9 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
               </Dropdown>
             </label>
             <label className="bl-pane__field">
-              <span className="bl-pane__label">Maximum items per page</span>
+              <span className="bl-pane__label">Max items per page</span>
               <Input
-                aria-label="Maximum items per page"
+                aria-label="Max items per page"
                 min={1}
                 placeholder="No maximum"
                 step={1}

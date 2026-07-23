@@ -81,13 +81,13 @@ describe('BetterListPropertyPane', () => {
     expect(html).toContain('fui-Dropdown');
     expect(html).toContain('bl-pane__compact-dropdown');
     expect(html).not.toContain('fui-Select');
-    expect(html).toContain('aria-label="Maximum items per page"');
+    expect(html).toContain('aria-label="Max items per page"');
     expect(html).toContain('placeholder="No maximum"');
     expect(html).toContain('Search &amp; sorting');
     expect(html.indexOf('aria-label="Source list"')).toBeLessThan(html.indexOf('aria-label="Title"'));
     expect(html.indexOf('aria-label="Title"')).toBeLessThan(html.indexOf('aria-label="Columns"'));
-    expect(html.indexOf('aria-label="Columns"')).toBeLessThan(html.indexOf('aria-label="Maximum items per page"'));
-    expect(html.indexOf('aria-label="Maximum items per page"')).toBeLessThan(html.indexOf('aria-label="Add tab"'));
+    expect(html.indexOf('aria-label="Columns"')).toBeLessThan(html.indexOf('aria-label="Max items per page"'));
+    expect(html.indexOf('aria-label="Max items per page"')).toBeLessThan(html.indexOf('aria-label="Add tab"'));
     expect(html).toContain('--bl-font-mono: &quot;Geist Mono Variable&quot;');
     expect(html.indexOf('Search &amp; sorting')).toBeLessThan(html.indexOf('aria-label="Add tab"'));
     expect(html.match(/bl-property-pane-section/g)).toHaveLength(5);
@@ -165,7 +165,7 @@ describe('BetterListPropertyPane', () => {
       await Promise.resolve();
     });
 
-    const input = container.querySelector<HTMLInputElement>('input[aria-label="Maximum items per page"]');
+    const input = container.querySelector<HTMLInputElement>('input[aria-label="Max items per page"]');
     expect(input).not.toBeNull();
     await act(async () => {
       (input as HTMLInputElement).value = '6';
