@@ -4,12 +4,15 @@ import * as ReactDom from 'react-dom';
 import { act } from 'react-dom/test-utils';
 import { FluentProvider, webLightTheme } from '@fluentui/react-components';
 
+import { installTestResizeObserver } from '../../../test/installTestResizeObserver';
 import { GroupIconColorField } from './GroupIconColorField';
 
 describe('GroupIconColorField', () => {
   let container: HTMLDivElement;
+  let restoreResizeObserver: (() => void) | undefined;
 
   beforeEach(() => {
+    restoreResizeObserver = installTestResizeObserver();
     container = document.createElement('div');
     document.body.appendChild(container);
   });
@@ -19,6 +22,8 @@ describe('GroupIconColorField', () => {
       ReactDom.unmountComponentAtNode(container);
     });
     container.remove();
+    restoreResizeObserver?.();
+    restoreResizeObserver = undefined;
   });
 
   it('shows SharePoint theme colors below the hue slider and commits a selected swatch', () => {

@@ -8,33 +8,23 @@ import {
   defaultBetterListHtmlTemplate,
   parseBetterListGroupIconsConfiguration
 } from '../../../../shared';
+import { installTestResizeObserver } from '../../../../test/installTestResizeObserver';
 import {
   BetterListPropertyPane,
   IBetterListAuthoringState,
   IBetterListPickerDataSource
 } from './BetterListPropertyPane';
 
-class TestResizeObserver implements ResizeObserver {
-  public disconnect(): void {
-    // No layout is measured in JSDOM.
-  }
-
-  public observe(): void {
-    // No layout is measured in JSDOM.
-  }
-
-  public unobserve(): void {
-    // No layout is measured in JSDOM.
-  }
-}
-
 describe('BetterListPropertyPane', () => {
-  beforeAll(() => {
-    Object.defineProperty(window, 'ResizeObserver', {
-      configurable: true,
-      value: TestResizeObserver,
-      writable: true
-    });
+  let restoreResizeObserver: (() => void) | undefined;
+
+  beforeEach(() => {
+    restoreResizeObserver = installTestResizeObserver();
+  });
+
+  afterEach(() => {
+    restoreResizeObserver?.();
+    restoreResizeObserver = undefined;
   });
 
   const createValue = (): IBetterListAuthoringState => ({
