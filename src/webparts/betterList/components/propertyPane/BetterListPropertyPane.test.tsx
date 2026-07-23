@@ -104,8 +104,10 @@ describe('BetterListPropertyPane', () => {
     expect(html).not.toContain('<h2>Better List</h2>');
     expect(html.match(/>Pop out</g)).toHaveLength(1);
     expect(html).toContain('Styles &amp; template views');
-    expect(html).toContain('>CSS/SCSS</button>');
-    expect(html).toContain('>HTML template</button>');
+    expect(html).toContain('fui-TabList');
+    expect(html).toContain('fui-Tab');
+    expect(html).toContain('>CSS/SCSS</span>');
+    expect(html).toContain('>HTML template</span>');
     expect(html).not.toContain('aria-label="Split"');
   });
 
