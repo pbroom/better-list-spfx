@@ -133,7 +133,7 @@ export interface IBetterListPropertyPaneProps {
 const cssTargets: readonly ISourceEditorTarget[] = [
   { label: 'Web part', selector: '.better-list', snippet: '.better-list {\n  /* layout and theme overrides */\n}' },
   { label: 'Header', selector: '.better-list__header', snippet: '.better-list__header {\n  /* title and search area */\n}' },
-  { label: 'Heading', selector: '.better-list__heading', snippet: '.better-list__heading {\n  /* optional list heading */\n}' },
+  { label: 'Title', selector: '.better-list__title', snippet: '.better-list__title {\n  /* optional list title */\n}' },
   { label: 'Tabs', selector: '.better-list__tabs', snippet: '.better-list__tabs {\n  /* tab row */\n}' },
   { label: 'Group', selector: '.better-list__group', snippet: '.better-list__group {\n  /* grouped section */\n}' },
   {
@@ -705,6 +705,26 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
         <style>{propertyPaneCss}</style>
         <section className="bl-pane__source-section">
           <label className="bl-pane__field">
+            <span className="bl-pane__label">Title</span>
+            <Input
+              aria-label="Title"
+              placeholder="Title (optional)"
+              value={headingInput}
+              onBlur={commitHeading}
+              onChange={(_event, data) => {
+                headingInputRef.current = data.value;
+                setHeadingInput(data.value);
+                scheduleHeadingCommit();
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  event.currentTarget.blur();
+                }
+              }}
+            />
+          </label>
+          <label className="bl-pane__field">
             <span className="bl-pane__label">Source list</span>
             <Combobox
             aria-label="Source list"
@@ -753,26 +773,6 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
               {sourceError || fieldError || listError}
             </div>
           )}
-          <label className="bl-pane__field">
-            <span className="bl-pane__label">Title</span>
-            <Input
-              aria-label="Title"
-              placeholder="Title (optional)"
-              value={headingInput}
-              onBlur={commitHeading}
-              onChange={(_event, data) => {
-                headingInputRef.current = data.value;
-                setHeadingInput(data.value);
-                scheduleHeadingCommit();
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  event.currentTarget.blur();
-                }
-              }}
-            />
-          </label>
           <div className="bl-pane__top-settings">
             <label className="bl-pane__field">
               <span className="bl-pane__label">Columns</span>

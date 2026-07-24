@@ -75,6 +75,7 @@ describe('BetterListView', () => {
 
     expect(html).toContain('<h2');
     expect(html).toContain('better-list__heading');
+    expect(html).toContain('better-list__title');
     expect(html).toContain('Service directory</h2>');
     expect(html).not.toContain('Better List views');
     expect(html).not.toContain('>All items<');
@@ -141,6 +142,8 @@ describe('BetterListView', () => {
 
     expect(blankHtml).not.toContain('better-list__heading');
     expect(missingHtml).not.toContain('better-list__heading');
+    expect(blankHtml).not.toContain('better-list__title');
+    expect(missingHtml).not.toContain('better-list__title');
     expect(blankHtml).toContain('Better List views');
     expect(missingHtml).toContain('Better List views');
   });

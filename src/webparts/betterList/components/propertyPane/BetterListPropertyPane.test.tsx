@@ -86,8 +86,8 @@ describe('BetterListPropertyPane', () => {
     expect(html).toContain('aria-label="Max items per page"');
     expect(html).toContain('placeholder="No maximum"');
     expect(html).toContain('Search &amp; sorting');
-    expect(html.indexOf('aria-label="Source list"')).toBeLessThan(html.indexOf('aria-label="Title"'));
-    expect(html.indexOf('aria-label="Title"')).toBeLessThan(html.indexOf('aria-label="Columns"'));
+    expect(html.indexOf('aria-label="Title"')).toBeLessThan(html.indexOf('aria-label="Source list"'));
+    expect(html.indexOf('aria-label="Source list"')).toBeLessThan(html.indexOf('aria-label="Columns"'));
     expect(html.indexOf('aria-label="Columns"')).toBeLessThan(html.indexOf('aria-label="Max items per page"'));
     expect(html.indexOf('aria-label="Max items per page"')).toBeLessThan(html.indexOf('aria-label="Add tab"'));
     expect(html).toContain('--bl-font-mono: &quot;Geist Mono Variable&quot;');
