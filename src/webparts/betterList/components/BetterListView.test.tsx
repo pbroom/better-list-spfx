@@ -435,6 +435,79 @@ describe('BetterListView', () => {
     container.remove();
   });
 
+  it('uses lookup submenus for visitor columns and keeps the active tag fully qualified', async () => {
+    const container = document.createElement('div');
+    const sortableItem: IBetterListItem = {
+      ...item,
+      viewerSortValues: { 'column:Category/Active': true }
+    };
+    const tabs: readonly IBetterListTab[] = [
+      { key: 'all', label: 'All items', grouped: false, items: [sortableItem] }
+    ];
+    document.body.appendChild(container);
+
+    try {
+      await act(async () => {
+        ReactDom.render(
+          <BetterListView
+            activeTabKey="all"
+            items={[sortableItem]}
+            showSortingOptions
+            tabs={tabs}
+            viewerSortColumns={[
+              {
+                fieldPath: 'Category/Active',
+                kind: 'boolean',
+                label: 'Category → Active',
+                valueKey: 'column:Category/Active'
+              }
+            ]}
+            viewerSortOptions={['column']}
+          />,
+          container
+        );
+      });
+      await act(async () => {
+        Simulate.click(
+          container.querySelector<HTMLButtonElement>(
+            'button[aria-label="Sort items"]'
+          ) as HTMLButtonElement
+        );
+        await Promise.resolve();
+      });
+      const columnMenu = Array.from(
+        document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')
+      ).find((candidate) => candidate.textContent?.trim() === 'Column');
+      await act(async () => {
+        Simulate.keyDown(columnMenu as HTMLElement, { key: 'ArrowRight' });
+        await Promise.resolve();
+      });
+      const categoryMenu = Array.from(
+        document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')
+      ).find((candidate) => candidate.textContent?.trim() === 'Category');
+      expect(categoryMenu?.getAttribute('aria-haspopup')).toBe('menu');
+      await act(async () => {
+        Simulate.keyDown(categoryMenu as HTMLElement, { key: 'ArrowRight' });
+        await Promise.resolve();
+      });
+      const active = Array.from(
+        document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')
+      ).find((candidate) => candidate.textContent?.trim() === 'Active');
+      expect(active).toBeDefined();
+      expect(document.body.textContent).not.toContain('Category → Active');
+
+      await act(async () => {
+        Simulate.click(active as HTMLElement);
+      });
+      expect(container.querySelector('.better-list__sort-tag')?.textContent).toContain(
+        'Category → Active'
+      );
+    } finally {
+      ReactDom.unmountComponentAtNode(container);
+      container.remove();
+    }
+  });
+
   it('replaces and dismisses a visitor-selected sort tag', async () => {
     const container = document.createElement('div');
     document.body.appendChild(container);

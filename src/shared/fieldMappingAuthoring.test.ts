@@ -1,8 +1,10 @@
 import {
+  createBetterListColumnReferenceMenuGroups,
   createBetterListFieldCatalog,
   createBetterListFieldMapping,
   createBetterListFieldPathCatalog,
   createBetterListMetadataMappings,
+  getBetterListColumnReferenceMenuLabel,
   IBetterListFieldDescriptor,
   updateBetterListFieldMapping
 } from './fieldMappingAuthoring';
@@ -138,6 +140,119 @@ describe('createBetterListFieldMapping', () => {
     expect(createBetterListFieldPathCatalog(catalog).map((entry) => entry.label)).toEqual([
       'Title (Title)',
       'Title (Title0)'
+    ]);
+  });
+
+  it('groups nested column references for menus without shortening canonical labels', () => {
+    const category: IBetterListFieldDescriptor = {
+      ...field('Category', 'Lookup'),
+      lookupFields: [
+        { ...field('Title', 'Text'), title: 'Title' },
+        { ...field('Active', 'Boolean'), title: 'Active' }
+      ]
+    };
+    const options = createBetterListFieldPathCatalog([
+      field('Modified', 'DateTime'),
+      category
+    ]);
+    const groups = createBetterListColumnReferenceMenuGroups(options);
+
+    expect(groups).toHaveLength(2);
+    expect(groups[0].label).toBeUndefined();
+    expect(groups[0]).toMatchObject({
+      options: [{ fieldPath: 'Modified', label: 'Modified', menuLabel: 'Modified' }]
+    });
+    expect(groups[1]).toMatchObject({
+      label: 'Category',
+      options: [
+        { fieldPath: 'Category/Title', label: 'Category → Title', menuLabel: 'Title' },
+        { fieldPath: 'Category/Active', label: 'Category → Active', menuLabel: 'Active' }
+      ]
+    });
+    expect(groups[1].options.map(getBetterListColumnReferenceMenuLabel)).toEqual([
+      'Title',
+      'Active'
+    ]);
+  });
+
+  it('derives compact menu labels for persisted column references that only carry full labels', () => {
+    const options = [
+      { fieldPath: 'Category/Active', label: 'Category → Active' },
+      { fieldPath: 'Category/SortOrder', label: 'Category → Sort order' }
+    ];
+    const [group] = createBetterListColumnReferenceMenuGroups(options);
+
+    expect(group.label).toBe('Category');
+    expect(group.options.map(getBetterListColumnReferenceMenuLabel)).toEqual([
+      'Active',
+      'Sort order'
+    ]);
+    expect(group.options.map((option) => option.label)).toEqual([
+      'Category → Active',
+      'Category → Sort order'
+    ]);
+  });
+
+  it('uses explicit menu labels when SharePoint titles contain the context separator', () => {
+    const options = [{
+      fieldPath: 'Category/Active',
+      label: 'Category → Parent → Active → state',
+      parentLabel: 'Category → Parent',
+      menuLabel: 'Active → state'
+    }];
+    const [group] = createBetterListColumnReferenceMenuGroups(options);
+
+    expect(group.label).toBe('Category → Parent');
+    expect(getBetterListColumnReferenceMenuLabel(group.options[0])).toBe('Active → state');
+    expect(group.options[0].label).toBe('Category → Parent → Active → state');
+  });
+
+  it('derives parent and leaf labels from the last separator for legacy multi-arrow labels', () => {
+    const options = [{
+      fieldPath: 'Category/Active',
+      label: 'A → B → C'
+    }];
+    const [group] = createBetterListColumnReferenceMenuGroups(options);
+
+    expect(group.label).toBe('A → B');
+    expect(getBetterListColumnReferenceMenuLabel(group.options[0])).toBe('C');
+  });
+
+  it('persists disambiguated parent and leaf labels for runtime column menus', () => {
+    const fields: readonly IBetterListFieldDescriptor[] = [
+      {
+        ...field('CategoryPrimary', 'Lookup'),
+        title: 'Category',
+        lookupFields: [
+          { ...field('ActivePrimary', 'Boolean'), title: 'Active' },
+          { ...field('ActiveLegacy', 'Boolean'), title: 'Active' }
+        ]
+      },
+      {
+        ...field('CategorySecondary', 'Lookup'),
+        title: 'Category',
+        lookupFields: [
+          { ...field('Active', 'Boolean'), title: 'Active' }
+        ]
+      }
+    ];
+
+    expect(createBetterListMetadataMappings(fields, [
+      'CategoryPrimary/ActivePrimary',
+      'CategorySecondary/Active'
+    ])).toEqual([
+      expect.objectContaining({
+        key: 'CategoryPrimary/ActivePrimary',
+        label: 'Category (CategoryPrimary) → Active (ActivePrimary)',
+        menuLabel: 'Active (ActivePrimary)',
+        parentLabel: 'Category (CategoryPrimary)'
+      }),
+      expect.objectContaining({
+        key: 'CategorySecondary/Active',
+        label: 'Category (CategorySecondary) → Active',
+        menuLabel: 'Active',
+        parentLabel: 'Category (CategorySecondary)'
+      })
     ]);
   });
 

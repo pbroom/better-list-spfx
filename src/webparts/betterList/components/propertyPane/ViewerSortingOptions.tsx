@@ -3,11 +3,13 @@ import {
   Checkbox,
   Menu,
   MenuButton,
+  MenuItem,
   MenuItemCheckbox,
   MenuList,
   MenuPopover,
   MenuTrigger,
   makeStyles,
+  mergeClasses,
   tokens
 } from '@fluentui/react-components';
 
@@ -16,7 +18,9 @@ import {
   betterListPortalMountNodeProps,
   betterListViewerSortChoices,
   BetterListViewerSortOption,
+  createBetterListColumnReferenceMenuGroups,
   createBetterListPortalPositioning,
+  getBetterListColumnReferenceMenuLabel,
   IBetterListFieldPathOption
 } from '../../../../shared';
 
@@ -44,6 +48,11 @@ const useStyles = makeStyles({
     flexGrow: 1,
     justifyContent: 'space-between',
     minWidth: 0
+  },
+  menuPopover: {
+    maxHeight: 'min(360px, calc(100vh - 16px))',
+    overflowY: 'auto',
+    overscrollBehavior: 'contain'
   }
 });
 
@@ -76,6 +85,16 @@ export const ViewerSortingOptions: React.FunctionComponent<IViewerSortingOptions
       : selectedColumnLabels.length === 1
         ? selectedColumnLabels[0]
         : `${selectedColumnLabels.length} columns`;
+  const columnMenuGroups = createBetterListColumnReferenceMenuGroups(columnOptions);
+  const updateColumns = (nextColumns: readonly string[]): void => {
+    const nextEnabled =
+      nextColumns.length > 0
+        ? enabled.indexOf('column') >= 0
+          ? enabled
+          : [...enabled, 'column' as const]
+        : enabled.filter((option) => option !== 'column');
+    onChange(nextEnabled, nextColumns);
+  };
 
   return (
     <fieldset aria-label="Sorting options" className={className}>
@@ -104,14 +123,7 @@ export const ViewerSortingOptions: React.FunctionComponent<IViewerSortingOptions
           mountNode={betterListPortalMountNodeProps}
           positioning={createBetterListPortalPositioning(targetDocument)}
           onCheckedValueChange={(_event, data) => {
-            const nextColumns = data.checkedItems;
-            const nextEnabled =
-              nextColumns.length > 0
-                ? enabled.indexOf('column') >= 0
-                  ? enabled
-                  : [...enabled, 'column' as const]
-                : enabled.filter((option) => option !== 'column');
-            onChange(nextEnabled, nextColumns);
+            updateColumns(data.checkedItems);
           }}
         >
           <MenuTrigger disableButtonEnhancement>
@@ -125,18 +137,56 @@ export const ViewerSortingOptions: React.FunctionComponent<IViewerSortingOptions
               {columnSummary}
             </MenuButton>
           </MenuTrigger>
-          <MenuPopover className={betterListFluentSurfaceClassName}>
+          <MenuPopover
+            className={mergeClasses(classes.menuPopover, betterListFluentSurfaceClassName)}
+          >
             <MenuList>
-              {columnOptions.length > 0 ? (
-                columnOptions.map((option) => (
-                  <MenuItemCheckbox
-                    key={option.fieldPath}
-                    name="viewerSortColumns"
-                    value={option.fieldPath}
-                  >
-                    {option.label}
-                  </MenuItemCheckbox>
-                ))
+              {columnMenuGroups.length > 0 ? (
+                columnMenuGroups.map((group) =>
+                  group.label ? (
+                    <Menu
+                      checkedValues={{ viewerSortColumns: selectedColumns.slice() }}
+                      key={group.key}
+                      mountNode={betterListPortalMountNodeProps}
+                      positioning={createBetterListPortalPositioning(targetDocument, 'submenu')}
+                      onCheckedValueChange={(_event, data) =>
+                        updateColumns(data.checkedItems)
+                      }
+                    >
+                      <MenuTrigger disableButtonEnhancement>
+                        <MenuItem>{group.label}</MenuItem>
+                      </MenuTrigger>
+                      <MenuPopover
+                        className={mergeClasses(
+                          classes.menuPopover,
+                          betterListFluentSurfaceClassName
+                        )}
+                      >
+                        <MenuList>
+                          {group.options.map((option) => (
+                            <MenuItemCheckbox
+                              key={option.fieldPath}
+                              name="viewerSortColumns"
+                              value={option.fieldPath}
+                            >
+                              {getBetterListColumnReferenceMenuLabel(option)}
+                            </MenuItemCheckbox>
+                          ))}
+                        </MenuList>
+                      </MenuPopover>
+                    </Menu>
+                  ) : (
+                    group.options.map((option) => (
+                      <MenuItemCheckbox
+                        key={option.fieldPath}
+                        name="viewerSortColumns"
+                        value={option.fieldPath}
+                      >
+                        {getBetterListColumnReferenceMenuLabel(option)}
+                      </MenuItemCheckbox>
+                    ))
+                  )
+                )
               ) : null}
             </MenuList>
           </MenuPopover>

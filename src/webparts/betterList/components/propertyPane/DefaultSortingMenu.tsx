@@ -18,7 +18,9 @@ import {
   betterListFluentSurfaceClassName,
   betterListPortalMountNodeProps,
   BetterListDefaultSort,
+  createBetterListColumnReferenceMenuGroups,
   createBetterListPortalPositioning,
+  getBetterListColumnReferenceMenuLabel,
   IBetterListFieldPathOption
 } from '../../../../shared';
 
@@ -62,6 +64,12 @@ export const DefaultSortingMenu: React.FunctionComponent<IDefaultSortingMenuProp
       ? `Column: ${selectedColumnOption.label}`
       : 'Column'
     : selectedOption.label;
+  const columnMenuGroups = createBetterListColumnReferenceMenuGroups(columnOptions);
+  const selectColumn = (column: string | undefined): void => {
+    if (column) {
+      onChange('column', column);
+    }
+  };
 
   return (
     <Menu
@@ -108,10 +116,7 @@ export const DefaultSortingMenu: React.FunctionComponent<IDefaultSortingMenuProp
             mountNode={betterListPortalMountNodeProps}
             positioning={createBetterListPortalPositioning(targetDocument, 'submenu')}
             onCheckedValueChange={(_event, data) => {
-              const column = data.checkedItems[0];
-              if (column) {
-                onChange('column', column);
-              }
+              selectColumn(data.checkedItems[0]);
             }}
           >
             <MenuTrigger disableButtonEnhancement>
@@ -126,16 +131,49 @@ export const DefaultSortingMenu: React.FunctionComponent<IDefaultSortingMenuProp
               className={mergeClasses(classes.popover, betterListFluentSurfaceClassName)}
             >
               <MenuList>
-                {columnOptions.length > 0 ? (
-                  columnOptions.map((option) => (
-                    <MenuItemRadio
-                      key={option.fieldPath}
-                      name="defaultSortColumn"
-                      value={option.fieldPath}
-                    >
-                      {option.label}
-                    </MenuItemRadio>
-                  ))
+                {columnMenuGroups.length > 0 ? (
+                  columnMenuGroups.map((group) =>
+                    group.label ? (
+                      <Menu
+                        checkedValues={{ defaultSortColumn: selectedColumn ? [selectedColumn] : [] }}
+                        key={group.key}
+                        mountNode={betterListPortalMountNodeProps}
+                        positioning={createBetterListPortalPositioning(targetDocument, 'submenu')}
+                        onCheckedValueChange={(_event, data) =>
+                          selectColumn(data.checkedItems[0])
+                        }
+                      >
+                        <MenuTrigger disableButtonEnhancement>
+                          <MenuItem>{group.label}</MenuItem>
+                        </MenuTrigger>
+                        <MenuPopover
+                          className={mergeClasses(classes.popover, betterListFluentSurfaceClassName)}
+                        >
+                          <MenuList>
+                            {group.options.map((option) => (
+                              <MenuItemRadio
+                                key={option.fieldPath}
+                                name="defaultSortColumn"
+                                value={option.fieldPath}
+                              >
+                                {getBetterListColumnReferenceMenuLabel(option)}
+                              </MenuItemRadio>
+                            ))}
+                          </MenuList>
+                        </MenuPopover>
+                      </Menu>
+                    ) : (
+                      group.options.map((option) => (
+                        <MenuItemRadio
+                          key={option.fieldPath}
+                          name="defaultSortColumn"
+                          value={option.fieldPath}
+                        >
+                          {getBetterListColumnReferenceMenuLabel(option)}
+                        </MenuItemRadio>
+                      ))
+                    )
+                  )
                 ) : (
                   <MenuItem disabled>No sortable columns</MenuItem>
                 )}
