@@ -44,6 +44,7 @@ async function createFixture({ placeholderCdn = false, sppkgVersion = `${VERSION
   await Promise.all([
     mkdir(path.join(rootDir, 'config'), { recursive: true }),
     mkdir(path.join(rootDir, 'release', 'assets', 'chunks'), { recursive: true }),
+    mkdir(path.join(rootDir, 'release', 'assets', 'fonts', 'eb-garamond'), { recursive: true }),
     mkdir(path.join(rootDir, 'release', 'manifests'), { recursive: true }),
     mkdir(path.join(rootDir, 'sharepoint', 'solution'), { recursive: true }),
   ]);
@@ -73,6 +74,50 @@ async function createFixture({ placeholderCdn = false, sppkgVersion = `${VERSION
     }),
     writeFile(path.join(rootDir, '.nvmrc'), '22.22.3\n'),
     writeFile(path.join(rootDir, 'release', 'assets', 'chunks', 'app.js'), 'app();\n'),
+    writeFile(
+      path.join(rootDir, 'release', 'assets', 'fonts', 'eb-garamond', 'eb-garamond.css'),
+      `@font-face {
+  font-family: "EB Garamond";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400 800;
+  src: url("./eb-garamond-latin-wght-normal.woff2") format("woff2-variations");
+}
+@font-face {
+  font-family: "EB Garamond";
+  font-style: italic;
+  font-display: swap;
+  font-weight: 400 800;
+  src: url("./eb-garamond-latin-wght-italic.woff2") format("woff2-variations");
+}
+`,
+    ),
+    writeFile(
+      path.join(
+        rootDir,
+        'release',
+        'assets',
+        'fonts',
+        'eb-garamond',
+        'eb-garamond-latin-wght-normal.woff2',
+      ),
+      Buffer.from('wOF2normal-fixture'),
+    ),
+    writeFile(
+      path.join(
+        rootDir,
+        'release',
+        'assets',
+        'fonts',
+        'eb-garamond',
+        'eb-garamond-latin-wght-italic.woff2',
+      ),
+      Buffer.from('wOF2italic-fixture'),
+    ),
+    writeFile(
+      path.join(rootDir, 'release', 'assets', 'fonts', 'eb-garamond', 'OFL.txt'),
+      'Copyright 2017 The EB Garamond Project Authors\nSIL OPEN FONT LICENSE Version 1.1\n',
+    ),
     writeFile(path.join(rootDir, 'release', 'manifests', 'manifest.js'), '{}\n'),
   ]);
 
@@ -133,6 +178,18 @@ test('constructs and verifies a deterministic release payload manifest', async (
       .split(/\r?\n/);
     assert.deepEqual(zipEntries, [...zipEntries].sort());
     assert(zipEntries.includes(`better-list-spfx-${VERSION}/RELEASE-MANIFEST.json`));
+    for (const asset of [
+      'eb-garamond.css',
+      'eb-garamond-latin-wght-normal.woff2',
+      'eb-garamond-latin-wght-italic.woff2',
+      'OFL.txt',
+    ]) {
+      assert(
+        zipEntries.includes(
+          `better-list-spfx-${VERSION}/assets/fonts/eb-garamond/${asset}`,
+        ),
+      );
+    }
 
     const manifest = JSON.parse(
       run('unzip', [
@@ -211,6 +268,41 @@ test('preparation rejects an SPPKG whose embedded version does not match the tag
         sourceDateEpoch: SOURCE_DATE_EPOCH,
       }),
       /AppManifest version is 9\.9\.9\.0; expected 1\.2\.3\.0/,
+    );
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('preparation rejects remote EB Garamond font URLs', async () => {
+  const rootDir = await createFixture();
+  const outputDir = path.join(rootDir, 'release-output');
+  try {
+    const stylesheetPath = path.join(
+      rootDir,
+      'release',
+      'assets',
+      'fonts',
+      'eb-garamond',
+      'eb-garamond.css',
+    );
+    const stylesheet = await readFile(stylesheetPath, 'utf8');
+    await writeFile(
+      stylesheetPath,
+      stylesheet.replace(
+        './eb-garamond-latin-wght-normal.woff2',
+        'https://fonts.gstatic.com/eb-garamond.woff2',
+      ),
+    );
+    await assert.rejects(
+      prepareReleaseArtifacts({
+        rootDir,
+        outputDir,
+        tag: TAG,
+        commit: COMMIT,
+        sourceDateEpoch: SOURCE_DATE_EPOCH,
+      }),
+      /local, relative font URLs/,
     );
   } finally {
     await rm(rootDir, { recursive: true, force: true });
