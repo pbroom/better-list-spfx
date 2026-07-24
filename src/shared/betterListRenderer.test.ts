@@ -1,4 +1,15 @@
+import * as React from 'react';
+import * as ReactDom from 'react-dom';
 import {
+  Button,
+  FluentProvider,
+  resetIdsForTests,
+  webLightTheme
+} from '@fluentui/react-components';
+
+import {
+  BetterListFluentRoot,
+  betterListFluentIdPrefix,
   betterListFluentSurfaceClassName,
   betterListFluentTooltipContentClassName,
   betterListPortalMountNodeProps,
@@ -49,6 +60,81 @@ describe('Better List Griffel renderer', () => {
     expect(secondDocument.head.querySelectorAll('style[data-better-list-runtime-styles]')).toHaveLength(1);
     expect(firstRenderer.styleElementAttributes).toEqual({ 'data-better-list-griffel': '' });
     expect(secondRenderer.styleElementAttributes).toEqual({ 'data-better-list-griffel': '' });
+  });
+
+  it('preserves an existing host Fluent provider stylesheet while inserting isolated theme rules', () => {
+    resetIdsForTests();
+    const targetDocument = document;
+    const hostStyle = targetDocument.createElement('style');
+    hostStyle.id = 'fui-FluentProvider1';
+    hostStyle.textContent = '.sharepoint-publish { color: white; }';
+    targetDocument.head.appendChild(hostStyle);
+    const originalHostRuleCount = hostStyle.sheet?.cssRules.length;
+    const originalHostRule = hostStyle.sheet?.cssRules[0]?.cssText;
+    const observer = new MutationObserver(() => undefined);
+    observer.observe(targetDocument.head, { childList: true });
+    const mountNode = targetDocument.createElement('div');
+    targetDocument.body.appendChild(mountNode);
+
+    const renderer = getBetterListRenderer(targetDocument);
+    const renderWithTheme = (theme: typeof webLightTheme): void => {
+      ReactDom.render(
+        React.createElement(
+          BetterListFluentRoot,
+          { renderer, targetDocument },
+          React.createElement(
+            FluentProvider,
+            { targetDocument, theme },
+            React.createElement(Button, undefined, 'Better List')
+          )
+        ),
+        mountNode
+      );
+    };
+    const isolatedThemeSelector =
+      `style[data-better-list-griffel][id^="${betterListFluentIdPrefix}fui-FluentProvider"]`;
+
+    renderWithTheme(webLightTheme);
+    const isolatedThemeStyles = targetDocument.head.querySelectorAll<HTMLStyleElement>(
+      isolatedThemeSelector
+    );
+
+    expect(isolatedThemeStyles).toHaveLength(1);
+    expect(isolatedThemeStyles[0]).not.toBe(hostStyle);
+    expect(isolatedThemeStyles[0].id).toContain(`${betterListFluentIdPrefix}fui-FluentProvider`);
+    expect(isolatedThemeStyles[0].sheet?.cssRules.length).toBeGreaterThan(0);
+    expect(
+      targetDocument.head.querySelectorAll(
+        'style[data-make-styles-bucket]:not([data-better-list-griffel])'
+      )
+    ).toHaveLength(0);
+
+    renderWithTheme({
+      ...webLightTheme,
+      colorNeutralForeground1: '#123456'
+    });
+
+    expect(targetDocument.getElementById('fui-FluentProvider1')).toBe(hostStyle);
+    expect(hostStyle.sheet?.cssRules.length).toBe(originalHostRuleCount);
+    expect(hostStyle.sheet?.cssRules[0]?.cssText).toBe(originalHostRule);
+    expect(targetDocument.head.querySelectorAll(isolatedThemeSelector)).toHaveLength(1);
+
+    ReactDom.unmountComponentAtNode(mountNode);
+    const headMutations = observer.takeRecords();
+    const removedNodes = headMutations.reduce<Node[]>(
+      (nodes, record) => nodes.concat(Array.from(record.removedNodes)),
+      []
+    );
+
+    expect(targetDocument.getElementById('fui-FluentProvider1')).toBe(hostStyle);
+    expect(hostStyle.textContent).toBe('.sharepoint-publish { color: white; }');
+    expect(hostStyle.sheet?.cssRules.length).toBe(originalHostRuleCount);
+    expect(hostStyle.sheet?.cssRules[0]?.cssText).toBe(originalHostRule);
+    expect(removedNodes).not.toContain(hostStyle);
+    expect(targetDocument.head.querySelectorAll('style[id="fui-FluentProvider1"]')).toHaveLength(1);
+    observer.disconnect();
+    hostStyle.remove();
+    mountNode.remove();
   });
 
   it('restores critical portal styles when an instance is removed and later re-added', () => {
