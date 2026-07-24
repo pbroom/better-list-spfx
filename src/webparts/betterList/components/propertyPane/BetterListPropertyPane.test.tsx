@@ -260,12 +260,34 @@ describe('BetterListPropertyPane', () => {
     expect(sortingSwitch).not.toBeNull();
     expect(defaultSorting).not.toBeNull();
     expect(defaultSorting?.textContent).toContain('None (default list order)');
+    expect(defaultSorting?.classList.contains('fui-MenuButton')).toBe(true);
+    expect(defaultSorting?.getAttribute('aria-haspopup')).toBe('menu');
+    expect(defaultSorting?.getAttribute('aria-expanded')).toBe('false');
     expect(searchSwitch?.checked).toBe(true);
     expect(sortingSwitch?.checked).toBe(false);
+    const closedDefaultSortingStyles = window.getComputedStyle(
+      defaultSorting as HTMLButtonElement
+    );
+    const closedDefaultSortingBorderWidths = [
+      closedDefaultSortingStyles.borderTopWidth,
+      closedDefaultSortingStyles.borderRightWidth,
+      closedDefaultSortingStyles.borderBottomWidth,
+      closedDefaultSortingStyles.borderLeftWidth
+    ];
     await act(async () => {
-      Simulate.click(defaultSorting as HTMLButtonElement);
+      Simulate.keyDown(defaultSorting as HTMLButtonElement, { key: 'ArrowDown' });
       await Promise.resolve();
     });
+    const openDefaultSortingStyles = window.getComputedStyle(
+      defaultSorting as HTMLButtonElement
+    );
+    expect(defaultSorting?.getAttribute('aria-expanded')).toBe('true');
+    expect([
+      openDefaultSortingStyles.borderTopWidth,
+      openDefaultSortingStyles.borderRightWidth,
+      openDefaultSortingStyles.borderBottomWidth,
+      openDefaultSortingStyles.borderLeftWidth
+    ]).toEqual(closedDefaultSortingBorderWidths);
     const defaultSortOptions = Array.from(
       document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"], [role="menuitem"]')
     );
@@ -277,11 +299,13 @@ describe('BetterListPropertyPane', () => {
       'Recently updated',
       'Column'
     ]);
+    expect(defaultSortOptions[0]?.getAttribute('aria-checked')).toBe('true');
     await act(async () => {
       Simulate.click(
         defaultSortOptions.find((candidate) => candidate.textContent?.trim() === 'Recently updated') as HTMLElement
       );
     });
+    expect(defaultSorting?.getAttribute('aria-expanded')).toBe('false');
     expect(onChange).toHaveBeenLastCalledWith({
       ...value,
       defaultSort: 'recentlyUpdated',
@@ -640,6 +664,111 @@ describe('BetterListPropertyPane', () => {
           'button[aria-label="Choose visitor sorting columns"]'
         )?.textContent
       ).toContain('Category → Active');
+    } finally {
+      ReactDom.unmountComponentAtNode(container);
+      container.remove();
+    }
+  });
+
+  it('aligns grouping leaves with submenu triggers while preserving radio selection', async () => {
+    const container = document.createElement('div');
+    const onChange = jest.fn();
+    const value: IBetterListAuthoringState = {
+      ...createValue(),
+      groupsColumn: 'Title'
+    };
+    document.body.append(container);
+
+    try {
+      await act(async () => {
+        ReactDom.render(
+          <BetterListPropertyPane
+            pickerDataSource={{
+              loadFields: async () => [
+                { internalName: 'Title', title: 'Title', typeAsString: 'Text' },
+                {
+                  internalName: 'Category',
+                  title: 'Category',
+                  typeAsString: 'Lookup',
+                  lookupField: 'Title',
+                  lookupFields: [
+                    { internalName: 'Active', title: 'Active', typeAsString: 'Boolean' }
+                  ]
+                }
+              ],
+              loadLists: async () => [{ id: 'services', title: 'Services' }],
+              resolveListUrl: async () => ({ id: 'services', title: 'Services' })
+            }}
+            value={value}
+            onChange={onChange}
+          />,
+          container
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      const groupsSection = Array.from(container.querySelectorAll('button')).find(
+        (button) => button.textContent?.trim() === 'Groups'
+      );
+      await act(async () => {
+        Simulate.click(groupsSection as HTMLButtonElement);
+      });
+      const groupingTrigger = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Grouping column: Title"]'
+      );
+      await act(async () => {
+        Simulate.click(groupingTrigger as HTMLButtonElement);
+        await Promise.resolve();
+      });
+
+      const titleOption = Array.from(
+        document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')
+      ).find((candidate) => candidate.textContent?.trim() === 'Title');
+      const groupingParent = Array.from(
+        document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')
+      ).find((candidate) => candidate.textContent?.trim() === 'Category');
+      const titleCheckmark = titleOption?.querySelector<HTMLElement>(
+        '.fui-MenuItem__checkmark'
+      );
+      const titleContent = titleOption?.querySelector<HTMLElement>(
+        '.fui-MenuItem__content'
+      );
+      const parentContent = groupingParent?.querySelector<HTMLElement>(
+        '.fui-MenuItem__content'
+      );
+
+      expect(titleOption?.getAttribute('aria-checked')).toBe('true');
+      expect(titleCheckmark?.querySelector('svg')).not.toBeNull();
+      expect(window.getComputedStyle(titleCheckmark as HTMLElement).order).toBe('1');
+      expect(window.getComputedStyle(titleCheckmark as HTMLElement).visibility).toBe('visible');
+      expect(window.getComputedStyle(titleContent as HTMLElement).order).toBe(
+        window.getComputedStyle(parentContent as HTMLElement).order
+      );
+
+      await act(async () => {
+        Simulate.keyDown(groupingParent as HTMLElement, { key: 'ArrowRight' });
+        await Promise.resolve();
+      });
+      const activeOption = Array.from(
+        document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')
+      ).find((candidate) => candidate.textContent?.trim() === 'Active');
+      const activeCheckmark = activeOption?.querySelector<HTMLElement>(
+        '.fui-MenuItem__checkmark'
+      );
+      expect(activeOption?.getAttribute('aria-checked')).toBe('false');
+      expect(window.getComputedStyle(activeCheckmark as HTMLElement).order).toBe('1');
+
+      await act(async () => {
+        Simulate.click(activeOption as HTMLElement);
+      });
+      expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
+        tabs: expect.arrayContaining([
+          expect.objectContaining({
+            groupingOverride: expect.objectContaining({ column: 'Category/Active' })
+          })
+        ])
+      }));
     } finally {
       ReactDom.unmountComponentAtNode(container);
       container.remove();
