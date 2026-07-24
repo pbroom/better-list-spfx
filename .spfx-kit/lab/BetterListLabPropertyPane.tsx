@@ -4,13 +4,6 @@ import {
   Combobox,
   Dropdown,
   Input,
-  Menu,
-  MenuButton,
-  MenuItem,
-  MenuItemRadio,
-  MenuList,
-  MenuPopover,
-  MenuTrigger,
   Option,
   Switch,
   makeStyles,
@@ -26,7 +19,6 @@ import type {
 
 import {
   createBetterListMetadataMappings,
-  createBetterListColumnReferenceMenuGroups,
   createBetterListFieldPathCatalog,
   createBetterListSortableFieldOptions,
   createBetterListGroupingOverride,
@@ -50,8 +42,6 @@ import {
   BetterListDefaultSort,
   BetterListViewerSortOption,
   getBetterListDefaultSortFieldPath,
-  getBetterListColumnReferenceMenuLabel,
-  IBetterListFieldPathOption,
   IBetterListTabConfig,
   normalizeBetterListDefaultSortSelection,
   normalizeBetterListViewerSortConfiguration,
@@ -65,6 +55,7 @@ import { ItemPropertyBuilder } from '../../src/webparts/betterList/components/pr
 import { PropertyPaneSection } from '../../src/webparts/betterList/components/propertyPane/PropertyPaneSection';
 import { ViewerSortingOptions } from '../../src/webparts/betterList/components/propertyPane/ViewerSortingOptions';
 import { GroupOrderEditorDialog } from '../../src/webparts/betterList/components/propertyPane/GroupOrderEditorDialog';
+import { GroupingColumnMenu } from '../../src/webparts/betterList/components/propertyPane/GroupingColumnMenu';
 import {
   appendNewTab,
   IBetterListTabFilterField,
@@ -122,9 +113,6 @@ const useStyles = makeStyles({
     marginBottom: '12px',
     fontSize: '12px',
     fontWeight: 600
-  },
-  groupingMenu: {
-    width: '100%'
   },
   groupingMenuPopover: {
     maxHeight: 'min(360px, calc(100vh - 24px))',
@@ -684,8 +672,8 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
         <div className={classes.groupingField}>
           <span>Grouping column</span>
           <GroupingColumnMenu
-            classes={classes}
             options={groupingOptions}
+            popoverClassName={classes.groupingMenuPopover}
             selectedLabel={selectedGroupingOption?.label}
             selectedPath={selectedGroupingOption?.fieldPath || activeGrouping.column}
             onChange={(groupsColumn) => {
@@ -852,82 +840,6 @@ function isGroupingColumn(field: (typeof servicesAuthoringFields)[number]): bool
     type.indexOf('date') >= 0
   );
 }
-
-const noGroupingValue = '__no_grouping__';
-
-const GroupingColumnMenu: React.FunctionComponent<{
-  classes: ReturnType<typeof useStyles>;
-  options: readonly IBetterListFieldPathOption[];
-  selectedLabel?: string;
-  selectedPath: string;
-  onChange: (fieldPath: string) => void;
-}> = ({ classes, options, selectedLabel, selectedPath, onChange }) => {
-  const groups = createBetterListColumnReferenceMenuGroups(options);
-  const checkedValues = {
-    groupingColumn: [selectedPath || noGroupingValue]
-  };
-  const select = (fieldPath: string | undefined): void => {
-    if (fieldPath) {
-      onChange(fieldPath === noGroupingValue ? '' : fieldPath);
-    }
-  };
-
-  return (
-    <Menu
-      checkedValues={checkedValues}
-      onCheckedValueChange={(_event, data) => select(data.checkedItems[0])}
-    >
-      <MenuTrigger disableButtonEnhancement>
-        <MenuButton
-          appearance="outline"
-          aria-label={`Grouping column: ${selectedLabel || 'No grouping'}`}
-          className={classes.groupingMenu}
-        >
-          {selectedLabel || 'No grouping'}
-        </MenuButton>
-      </MenuTrigger>
-      <MenuPopover className={classes.groupingMenuPopover}>
-        <MenuList>
-          <MenuItemRadio name="groupingColumn" value={noGroupingValue}>
-            No grouping
-          </MenuItemRadio>
-          {groups.map((group) =>
-            group.label ? (
-              <Menu checkedValues={checkedValues} key={group.key}>
-                <MenuTrigger disableButtonEnhancement>
-                  <MenuItem>{group.label}</MenuItem>
-                </MenuTrigger>
-                <MenuPopover className={classes.groupingMenuPopover}>
-                  <MenuList>
-                    {group.options.map((option) => (
-                      <MenuItemRadio
-                        key={option.fieldPath}
-                        name="groupingColumn"
-                        value={option.fieldPath}
-                      >
-                        {getBetterListColumnReferenceMenuLabel(option)}
-                      </MenuItemRadio>
-                    ))}
-                  </MenuList>
-                </MenuPopover>
-              </Menu>
-            ) : (
-              group.options.map((option) => (
-                <MenuItemRadio
-                  key={option.fieldPath}
-                  name="groupingColumn"
-                  value={option.fieldPath}
-                >
-                  {getBetterListColumnReferenceMenuLabel(option)}
-                </MenuItemRadio>
-              ))
-            )
-          )}
-        </MenuList>
-      </MenuPopover>
-    </Menu>
-  );
-};
 
 function readTabs(serialized: string): readonly IBetterListTabConfig[] {
   try {

@@ -583,11 +583,20 @@ describe('BetterListPropertyPane', () => {
       expect(groupingTrigger?.getAttribute('aria-label')).toBe(
         'Grouping column: Category → Active'
       );
+      expect(groupingTrigger?.type).toBe('button');
+      expect(groupingTrigger?.getAttribute('role')).toBeNull();
+      expect(groupingTrigger?.getAttribute('aria-haspopup')).toBe('menu');
+      expect(groupingTrigger?.getAttribute('aria-expanded')).toBeNull();
+      expect(groupingTrigger?.classList.contains('fui-Button')).toBe(true);
+      expect(groupingTrigger?.classList.contains('fui-MenuButton')).toBe(false);
       expect(groupingTrigger?.textContent).toContain('Category → Active');
+      const closedTriggerClassName = groupingTrigger?.className;
       await act(async () => {
         Simulate.click(groupingTrigger as HTMLButtonElement);
         await Promise.resolve();
       });
+      expect(groupingTrigger?.getAttribute('aria-expanded')).toBe('true');
+      expect(groupingTrigger?.className).toBe(closedTriggerClassName);
       const groupingParent = Array.from(
         document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')
       ).find((candidate) => candidate.textContent?.trim() === 'Category');
@@ -631,6 +640,86 @@ describe('BetterListPropertyPane', () => {
           'button[aria-label="Choose visitor sorting columns"]'
         )?.textContent
       ).toContain('Category → Active');
+    } finally {
+      ReactDom.unmountComponentAtNode(container);
+      container.remove();
+    }
+  });
+
+  it('keeps menu-trigger semantics and clears grouping through No grouping', async () => {
+    const container = document.createElement('div');
+    const onChange = jest.fn();
+    const value: IBetterListAuthoringState = {
+      ...createValue(),
+      groupsColumn: 'Category/Active'
+    };
+    document.body.append(container);
+
+    try {
+      await act(async () => {
+        ReactDom.render(
+          <BetterListPropertyPane
+            pickerDataSource={{
+              loadFields: async () => [
+                {
+                  internalName: 'Category',
+                  title: 'Category',
+                  typeAsString: 'Lookup',
+                  lookupField: 'Title',
+                  lookupFields: [
+                    { internalName: 'Active', title: 'Active', typeAsString: 'Boolean' }
+                  ]
+                }
+              ],
+              loadLists: async () => [{ id: 'services', title: 'Services' }],
+              resolveListUrl: async () => ({ id: 'services', title: 'Services' })
+            }}
+            value={value}
+            onChange={onChange}
+          />,
+          container
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      const groupsSection = Array.from(container.querySelectorAll('button')).find(
+        (button) => button.textContent?.trim() === 'Groups'
+      );
+      await act(async () => {
+        Simulate.click(groupsSection as HTMLButtonElement);
+      });
+
+      const groupingTrigger = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Grouping column: Category → Active"]'
+      );
+      const closedTriggerClassName = groupingTrigger?.className;
+      await act(async () => {
+        Simulate.keyDown(groupingTrigger as HTMLButtonElement, { key: 'ArrowDown' });
+        await Promise.resolve();
+      });
+
+      expect(groupingTrigger?.getAttribute('aria-haspopup')).toBe('menu');
+      expect(groupingTrigger?.getAttribute('aria-expanded')).toBe('true');
+      expect(groupingTrigger?.className).toBe(closedTriggerClassName);
+      const noGroupingOption = Array.from(
+        document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')
+      ).find((candidate) => candidate.textContent?.trim() === 'No grouping');
+      expect(noGroupingOption?.getAttribute('aria-checked')).toBe('false');
+
+      await act(async () => {
+        Simulate.click(noGroupingOption as HTMLElement);
+      });
+
+      expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
+        tabs: expect.arrayContaining([
+          expect.objectContaining({
+            groupingOverride: { mode: 'none' }
+          })
+        ])
+      }));
+      expect(groupingTrigger?.getAttribute('aria-expanded')).toBeNull();
+      expect(groupingTrigger?.className).toBe(closedTriggerClassName);
     } finally {
       ReactDom.unmountComponentAtNode(container);
       container.remove();
