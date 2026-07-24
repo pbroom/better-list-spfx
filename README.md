@@ -10,6 +10,24 @@ in the deployment repository and use `npm ci` for repeatable installs.
 Use `npm run build` for a production build and `npm run ship` to produce the
 configured package under `sharepoint/solution/`.
 
+## Releases
+
+Merge normal work to `main` with Conventional Commit titles; do not bump
+versions in feature pull requests. Release Please maintains a release pull
+request with the semantic version, changelog, npm lockfile, and synchronized
+four-part SPFx versions. Merging that release pull request creates the immutable
+`vX.Y.Z` tag and GitHub Release.
+
+The tag workflow rebuilds with the supported Node/npm toolchain and attaches:
+
+- `better-list-spfx-X.Y.Z.sppkg` for an existing CDN deployment
+- `better-list-spfx-cdn-X.Y.Z.zip` with the identical package, CDN assets,
+  manifests, checksums, and installation instructions
+- `SHA256SUMS` for the two downloadable artifacts
+
+See [docs/releases.md](docs/releases.md) for the commit rules, release
+operations, prerequisites, recovery procedure, and both installation paths.
+
 ## Debug On SharePoint
 
 Set `SPFX_SERVE_TENANT_DOMAIN` to a development tenant and site path, such as

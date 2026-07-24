@@ -1,0 +1,66 @@
+name: Prepare release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: release-please-main
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: Update release pull request
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create or update the release pull request
+        id: release
+        uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          target-branch: main
+
+      # SPFx requires a four-part package version. Release Please owns the
+      # SemVer package/lockfile bump; this commit synchronizes x.y.z.0 onto the
+      # release PR before it can be merged.
+      - name: Check out the release pull request
+        if: steps.release.outputs.prs_created == 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+
+      - name: Set up supported Node.js
+        if: steps.release.outputs.prs_created == 'true'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Synchronize SPFx release versions
+        if: steps.release.outputs.prs_created == 'true'
+        run: |
+          npm run version:sync
+          npm run version:check
+
+      - name: Commit synchronized SPFx versions
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          RELEASE_BRANCH: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+        run: |
+          if git diff --quiet -- config/package-solution.json; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add config/package-solution.json
+          git commit -m "chore: sync SPFx release version"
+          git push origin "HEAD:${RELEASE_BRANCH}"
