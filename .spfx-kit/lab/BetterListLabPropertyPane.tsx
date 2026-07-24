@@ -191,6 +191,7 @@ export const betterListCssControl: LabPropertyControl = {
   targetComment: `/*
 Better List CSS/SCSS targets:
 .better-list - web part surface and design tokens.
+.better-list__title - optional list title.
 .better-list__toolbar - tabs and search row.
 .better-list__group - grouped section.
 .better-list__pagination - page navigation.
@@ -450,6 +451,20 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
 
   return (
     <section className={classes.root}>
+      <label className={classes.groupingField}>
+        <span>Title</span>
+        <Input
+          aria-label="Title"
+          placeholder="Title (optional)"
+          value={headingInput}
+          onBlur={commitHeading}
+          onChange={(_event, data) => {
+            headingInputRef.current = data.value;
+            setHeadingInput(data.value);
+            scheduleHeadingCommit();
+          }}
+        />
+      </label>
       <Combobox
         aria-label="Source list"
         className={classes.listPicker}
@@ -499,20 +514,6 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
         <Option value={servicesListId}>{servicesListTitle}</Option>
       </Combobox>
       {sourceError ? <div role="alert">{sourceError}</div> : null}
-      <label className={classes.groupingField}>
-        <span>Title</span>
-        <Input
-          aria-label="Title"
-          placeholder="Title (optional)"
-          value={headingInput}
-          onBlur={commitHeading}
-          onChange={(_event, data) => {
-            headingInputRef.current = data.value;
-            setHeadingInput(data.value);
-            scheduleHeadingCommit();
-          }}
-        />
-      </label>
       <div className={classes.topSettings}>
         <label className={classes.groupingField}>
           <span>Columns</span>
@@ -895,6 +896,7 @@ function createCssTargets(): LabCssEditorTarget[] {
   return [
     { label: 'Web part', selector: '.better-list', snippet: '.better-list {\n  /* layout and theme overrides */\n}' },
     { label: 'Header', selector: '.better-list__header', snippet: '.better-list__header {\n  /* tabs and search area */\n}' },
+    { label: 'Title', selector: '.better-list__title', snippet: '.better-list__title {\n  /* optional list title */\n}' },
     { label: 'Tabs', selector: '.better-list__tabs', snippet: '.better-list__tabs {\n  /* tab row */\n}' },
     { label: 'Group', selector: '.better-list__group', snippet: '.better-list__group {\n  /* grouped section */\n}' },
     {

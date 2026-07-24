@@ -1119,6 +1119,7 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
     'better-list': classes.root,
     'better-list__header': classes.header,
     'better-list__heading': classes.heading,
+    'better-list__title': classes.heading,
     'better-list__navigation': classes.navigation,
     'better-list__toolbar': classes.toolbar,
     'better-list__tabs': classes.tabs,
@@ -1183,7 +1184,9 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
         className={mergeClasses(wrapperClassName, classes.navigation, 'better-list__navigation')}
         key={key}
       >
-        <h2 className={mergeClasses(classes.heading, 'better-list__heading')}>{normalizedHeading}</h2>
+        <h2 className={mergeClasses(classes.heading, 'better-list__heading', 'better-list__title')}>
+          {normalizedHeading}
+        </h2>
         {tabList}
       </div>
     );
