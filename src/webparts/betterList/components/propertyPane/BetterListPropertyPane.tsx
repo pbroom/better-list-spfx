@@ -47,6 +47,7 @@ import {
   getBetterListDefaultSortFieldPath,
   getBetterListColumnReferenceMenuLabel,
   getBetterListPortalMountNode,
+  itemPropertyFieldPathsEqual,
   IBetterListFieldDescriptor,
   IBetterListFieldMappings,
   IBetterListFieldPathOption,
@@ -696,8 +697,8 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
   };
   const groupingFields = fields.filter(isGroupingColumn);
   const groupingOptions = createGroupingColumnOptions(groupingFields);
-  const selectedGroupingOption = groupingOptions.find(
-    (option) => option.fieldPath === activeGrouping.column
+  const selectedGroupingOption = groupingOptions.find((option) =>
+    itemPropertyFieldPathsEqual(option.fieldPath, activeGrouping.column)
   );
   const defaultSortColumnOptions = createBetterListSortableFieldOptions(fields);
   const tabFilterFields = createTabFilterFields(props.value.fieldMappings, fields);
@@ -919,7 +920,7 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
           <GroupingColumnMenu
             options={groupingOptions}
             selectedLabel={selectedGroupingOption?.label}
-            selectedPath={activeGrouping.column}
+            selectedPath={selectedGroupingOption?.fieldPath || activeGrouping.column}
             targetDocument={targetDocument}
             onChange={updateGroupColumn}
           />

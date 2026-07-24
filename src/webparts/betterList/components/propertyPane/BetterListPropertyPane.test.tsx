@@ -637,6 +637,80 @@ describe('BetterListPropertyPane', () => {
     }
   });
 
+  it('resolves persisted grouping paths that use dotted separators', async () => {
+    const container = document.createElement('div');
+    const value: IBetterListAuthoringState = {
+      ...createValue(),
+      groupsColumn: 'Category.Active'
+    };
+    document.body.append(container);
+
+    try {
+      await act(async () => {
+        ReactDom.render(
+          <BetterListPropertyPane
+            pickerDataSource={{
+              loadFields: async () => [
+                { internalName: 'Title', title: 'Title', typeAsString: 'Text' },
+                {
+                  internalName: 'Category',
+                  title: 'Category',
+                  typeAsString: 'Lookup',
+                  lookupField: 'Title',
+                  lookupFields: [
+                    { internalName: 'Title', title: 'Title', typeAsString: 'Text' },
+                    { internalName: 'Active', title: 'Active', typeAsString: 'Boolean' }
+                  ]
+                }
+              ],
+              loadLists: async () => [{ id: 'services', title: 'Services' }],
+              resolveListUrl: async () => ({ id: 'services', title: 'Services' })
+            }}
+            value={value}
+            onChange={() => undefined}
+          />,
+          container
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      const groupsSection = Array.from(container.querySelectorAll('button')).find(
+        (button) => button.textContent?.trim() === 'Groups'
+      );
+      await act(async () => {
+        Simulate.click(groupsSection as HTMLButtonElement);
+      });
+
+      const groupingTrigger = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Grouping column: Category → Active"]'
+      );
+      expect(groupingTrigger?.getAttribute('aria-label')).toBe(
+        'Grouping column: Category → Active'
+      );
+      expect(groupingTrigger?.textContent).toContain('Category → Active');
+
+      await act(async () => {
+        Simulate.click(groupingTrigger as HTMLButtonElement);
+        await Promise.resolve();
+      });
+      const groupingParent = Array.from(
+        document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')
+      ).find((candidate) => candidate.textContent?.trim() === 'Category');
+      await act(async () => {
+        Simulate.keyDown(groupingParent as HTMLElement, { key: 'ArrowRight' });
+        await Promise.resolve();
+      });
+      const activeOption = Array.from(
+        document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')
+      ).find((candidate) => candidate.textContent?.trim() === 'Active');
+      expect(activeOption?.getAttribute('aria-checked')).toBe('true');
+    } finally {
+      ReactDom.unmountComponentAtNode(container);
+      container.remove();
+    }
+  });
+
   it('commits the title after the debounce interval', async () => {
     jest.useFakeTimers();
     const container = document.createElement('div');
