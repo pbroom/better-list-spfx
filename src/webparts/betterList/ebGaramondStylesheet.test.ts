@@ -34,8 +34,14 @@ describe('EB Garamond stylesheet', () => {
     ).toHaveLength(1);
   });
 
-  it('ignores invalid and non-web module base URLs', () => {
-    expect(resolveEbGaramondStylesheetUrl(['not a URL', 'file:///tmp/'])).toBeUndefined();
+  it('ignores invalid and non-https module base URLs', () => {
+    expect(
+      resolveEbGaramondStylesheetUrl([
+        'not a URL',
+        'file:///tmp/',
+        'http://cdn.example.test/spfx/better-list/',
+      ]),
+    ).toBeUndefined();
     expect(ensureEbGaramondStylesheet(document, [])).toBeUndefined();
   });
 });

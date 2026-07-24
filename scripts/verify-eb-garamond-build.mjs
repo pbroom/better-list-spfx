@@ -3,6 +3,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import {
   EB_GARAMOND_ASSET_DIRECTORY,
   EB_GARAMOND_FONT_FILES,
@@ -105,8 +106,10 @@ export async function verifyEbGaramondBuild({ appDir = process.cwd() } = {}) {
   }
 }
 
-await verifyEbGaramondBuild({
-  appDir: process.argv.includes('--app')
-    ? process.argv[process.argv.indexOf('--app') + 1]
-    : '.',
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await verifyEbGaramondBuild({
+    appDir: process.argv.includes('--app')
+      ? process.argv[process.argv.indexOf('--app') + 1]
+      : '.',
+  });
+}

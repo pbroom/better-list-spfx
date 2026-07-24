@@ -7,7 +7,7 @@ export function resolveEbGaramondStylesheetUrl(
   const baseUrl = internalModuleBaseUrls.find((candidate) => {
     try {
       const parsed = new URL(candidate);
-      return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+      return parsed.protocol === 'https:';
     } catch {
       return false;
     }
