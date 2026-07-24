@@ -2,7 +2,6 @@ import '@fontsource-variable/geist-mono';
 
 import * as React from 'react';
 import * as ReactDom from 'react-dom';
-import { GriffelRenderer, RendererProvider } from '@griffel/react';
 import {
   FluentProvider,
   PortalMountNodeProvider,
@@ -27,6 +26,7 @@ import {
   BetterListViewerSortOption,
   BetterListGroupIconOverride,
   BetterListItemElementLinks,
+  BetterListFluentRoot,
   BetterListRequestEpoch,
   betterListStylePresetVersion,
   createDefaultTabs,
@@ -90,10 +90,6 @@ import {
   SharePointImageAssetProvider,
   inferBetterListFieldKind
 } from './services';
-
-const BetterListRendererProvider = RendererProvider as unknown as React.ComponentType<{
-  renderer: GriffelRenderer;
-}>;
 
 const normalizeMaxItemsPerPage = (value: unknown): number => {
   const numericValue = Number(value);
@@ -324,8 +320,11 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
 
     ReactDom.render(
       React.createElement(
-        BetterListRendererProvider,
-        { renderer: getBetterListRenderer(this.domElement.ownerDocument) },
+        BetterListFluentRoot,
+        {
+          renderer: getBetterListRenderer(this.domElement.ownerDocument),
+          targetDocument: this.domElement.ownerDocument
+        },
         React.createElement(
           FluentProvider,
           {
@@ -497,8 +496,11 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
         onRender: (domElement, _context, changeCallback): void => {
           ReactDom.render(
             React.createElement(
-              BetterListRendererProvider,
-              { renderer: getBetterListRenderer(domElement.ownerDocument) },
+              BetterListFluentRoot,
+              {
+                renderer: getBetterListRenderer(domElement.ownerDocument),
+                targetDocument: domElement.ownerDocument
+              },
               React.createElement(BetterListPropertyPane, {
                 activeTabId: this._activeTabKey,
                 targetDocument: domElement.ownerDocument,

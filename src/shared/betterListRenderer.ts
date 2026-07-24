@@ -1,13 +1,55 @@
-import { createDOMRenderer, GriffelRenderer } from '@griffel/react';
-import type { PortalProps, PositioningProps } from '@fluentui/react-components';
+import * as React from 'react';
+import {
+  createDOMRenderer,
+  IdPrefixProvider,
+  RendererProvider
+} from '@fluentui/react-components';
+import type {
+  GriffelRenderer,
+  PortalProps,
+  PositioningProps
+} from '@fluentui/react-components';
 
 const renderers: WeakMap<Document, GriffelRenderer> = new WeakMap<Document, GriffelRenderer>();
 
+const FluentIdPrefixProvider = IdPrefixProvider as unknown as React.ComponentType<{
+  value: string;
+}>;
+const FluentRendererProvider = RendererProvider as unknown as React.ComponentType<{
+  renderer: GriffelRenderer;
+  targetDocument: Document;
+}>;
+
+export interface IBetterListFluentRootProps {
+  children?: React.ReactNode;
+  renderer: GriffelRenderer;
+  targetDocument: Document;
+}
+
+export const betterListFluentIdPrefix = 'better-list-';
 export const betterListFluentSurfaceClassName = 'better-list-fluent-surface';
 export const betterListFluentTooltipContentClassName = 'better-list-fluent-tooltip-content';
 export const betterListPortalMountNodeProps: PortalProps['mountNode'] = {
   className: 'better-list-portal'
 };
+
+/**
+ * Keeps both Fluent's renderer context and generated element IDs in Better
+ * List's namespace. SharePoint hosts a separate Fluent root whose provider IDs
+ * begin at `fui-FluentProvider1`; reusing that ID makes Fluent adopt and later
+ * remove the host's theme stylesheet.
+ */
+export function BetterListFluentRoot(props: IBetterListFluentRootProps): React.ReactElement {
+  return React.createElement(
+    FluentIdPrefixProvider,
+    { value: betterListFluentIdPrefix },
+    React.createElement(
+      FluentRendererProvider,
+      { renderer: props.renderer, targetDocument: props.targetDocument },
+      props.children
+    )
+  );
+}
 
 const runtimeStyleAttribute = 'data-better-list-runtime-styles';
 
