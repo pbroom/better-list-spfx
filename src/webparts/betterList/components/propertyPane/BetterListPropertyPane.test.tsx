@@ -451,7 +451,15 @@ describe('BetterListPropertyPane', () => {
           pickerDataSource={{
             loadFields: async () => [
               { internalName: 'Title', title: 'Title', typeAsString: 'Text' },
-              { internalName: 'Modified', title: 'Modified', typeAsString: 'DateTime' }
+              {
+                internalName: 'Category',
+                title: 'Category',
+                typeAsString: 'Lookup',
+                lookupFields: [
+                  { internalName: 'Title', title: 'Title', typeAsString: 'Text' },
+                  { internalName: 'Active', title: 'Active', typeAsString: 'Boolean' }
+                ]
+              }
             ],
             loadLists: async () => [{ id: 'services', title: 'Services' }],
             resolveListUrl: async () => ({ id: 'services', title: 'Services' })
@@ -492,22 +500,141 @@ describe('BetterListPropertyPane', () => {
       await Promise.resolve();
     });
 
-    const modifiedOption = Array.from(
-      document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')
-    ).find((candidate) => candidate.textContent?.trim() === 'Modified');
-    expect(modifiedOption).toBeDefined();
+    const categoryMenuItem = Array.from(
+      document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')
+    ).find((candidate) => candidate.textContent?.trim() === 'Category');
+    expect(categoryMenuItem?.getAttribute('aria-haspopup')).toBe('menu');
     await act(async () => {
-      Simulate.click(modifiedOption as HTMLElement);
+      Simulate.keyDown(categoryMenuItem as HTMLElement, { key: 'ArrowRight' });
+      await Promise.resolve();
+    });
+    const activeOption = Array.from(
+      document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')
+    ).find((candidate) => candidate.textContent?.trim() === 'Active');
+    expect(activeOption).toBeDefined();
+    await act(async () => {
+      Simulate.click(activeOption as HTMLElement);
     });
 
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
       defaultSort: 'column',
-      defaultSortColumn: 'Modified'
+      defaultSortColumn: 'Category/Active'
     }));
     expect(
       container.querySelector('button[aria-label="Default sorting column"]')
     ).toBeNull();
     ReactDom.unmountComponentAtNode(container);
+  });
+
+  it('groups lookup columns across authoring menus while keeping full selected labels', async () => {
+    const container = document.createElement('div');
+    const onChange = jest.fn();
+    const lookupPath = 'Category/Active';
+    const value: IBetterListAuthoringState = {
+      ...createValue(),
+      showSortingOptions: true,
+      sortingOptions: ['column'],
+      sortingColumns: [lookupPath],
+      defaultSort: 'column',
+      defaultSortColumn: lookupPath,
+      groupsColumn: lookupPath
+    };
+    document.body.append(container);
+
+    try {
+      await act(async () => {
+        ReactDom.render(
+          <BetterListPropertyPane
+            pickerDataSource={{
+              loadFields: async () => [
+                { internalName: 'Title', title: 'Title', typeAsString: 'Text' },
+                {
+                  internalName: 'Category',
+                  title: 'Category',
+                  typeAsString: 'Lookup',
+                  lookupField: 'Title',
+                  lookupFields: [
+                    { internalName: 'Title', title: 'Title', typeAsString: 'Text' },
+                    { internalName: 'Active', title: 'Active', typeAsString: 'Boolean' }
+                  ]
+                }
+              ],
+              loadLists: async () => [{ id: 'services', title: 'Services' }],
+              resolveListUrl: async () => ({ id: 'services', title: 'Services' })
+            }}
+            value={value}
+            onChange={onChange}
+          />,
+          container
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      const groupsSection = Array.from(container.querySelectorAll('button')).find(
+        (button) => button.textContent?.trim() === 'Groups'
+      );
+      await act(async () => {
+        Simulate.click(groupsSection as HTMLButtonElement);
+      });
+      const groupingTrigger = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Grouping column: Category → Active"]'
+      );
+      expect(groupingTrigger?.getAttribute('aria-label')).toBe(
+        'Grouping column: Category → Active'
+      );
+      expect(groupingTrigger?.textContent).toContain('Category → Active');
+      await act(async () => {
+        Simulate.click(groupingTrigger as HTMLButtonElement);
+        await Promise.resolve();
+      });
+      const groupingParent = Array.from(
+        document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')
+      ).find((candidate) => candidate.textContent?.trim() === 'Category');
+      expect(groupingParent?.getAttribute('aria-haspopup')).toBe('menu');
+      await act(async () => {
+        Simulate.keyDown(groupingParent as HTMLElement, { key: 'ArrowRight' });
+        await Promise.resolve();
+      });
+      const activeOption = Array.from(
+        document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')
+      ).find((candidate) => candidate.textContent?.trim() === 'Active');
+      expect(activeOption).toBeDefined();
+      expect(
+        Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')).some(
+          (candidate) => candidate.textContent?.trim() === 'Category → Active'
+        )
+      ).toBe(false);
+
+      await act(async () => {
+        Simulate.click(activeOption as HTMLElement);
+      });
+      expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
+        tabs: expect.arrayContaining([
+          expect.objectContaining({
+            groupingOverride: expect.objectContaining({ column: lookupPath })
+          })
+        ])
+      }));
+      const searchSection = Array.from(container.querySelectorAll('button')).find(
+        (button) => button.textContent?.trim() === 'Search & sorting'
+      );
+      await act(async () => {
+        Simulate.click(searchSection as HTMLButtonElement);
+      });
+      expect(
+        container.querySelector<HTMLButtonElement>('button[aria-label="Default sorting"]')
+          ?.textContent
+      ).toContain('Category → Active');
+      expect(
+        container.querySelector<HTMLButtonElement>(
+          'button[aria-label="Choose visitor sorting columns"]'
+        )?.textContent
+      ).toContain('Category → Active');
+    } finally {
+      ReactDom.unmountComponentAtNode(container);
+      container.remove();
+    }
   });
 
   it('commits the title after the debounce interval', async () => {

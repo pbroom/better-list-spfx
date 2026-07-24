@@ -63,10 +63,14 @@ import {
   betterListMaxItemRows,
   BetterListItemElementLinks,
   BetterListItemLayoutRows,
+  createBetterListColumnReferenceMenuGroups,
+  createBetterListFieldPathCatalog,
   createBetterListPortalPositioning,
   flattenItemLayoutRows,
+  getBetterListColumnReferenceMenuLabel,
   getBetterListFieldPathLabel,
   getBetterListFieldTargetFields,
+  IBetterListColumnReferenceOption,
   IBetterListFieldDescriptor,
   isBetterListLookupLikeField,
   normalizeItemElementLinks,
@@ -82,10 +86,7 @@ export interface IItemLayoutBuilderValue {
   links: BetterListItemElementLinks;
 }
 
-interface IItemLinkFieldOption {
-  fieldPath: string;
-  label: string;
-}
+type IItemLinkFieldOption = IBetterListColumnReferenceOption;
 
 export interface IItemPropertyBuilderProps {
   context?: React.ReactNode;
@@ -827,6 +828,7 @@ const ItemPropertyLinkMenu: React.FunctionComponent<{
   const surface = useBetterListAuthoringSurface();
   const selected = linkFields.find((option) => option.fieldPath === linkFieldPath);
   const currentLinkLabel = selected?.label || linkFieldPath;
+  const linkMenuGroups = createBetterListColumnReferenceMenuGroups(linkFields);
   const ariaLabel = currentLinkLabel
     ? `Change link column for ${fieldLabel}; currently ${currentLinkLabel}`
     : `Choose link column for ${fieldLabel}`;
@@ -860,15 +862,47 @@ const ItemPropertyLinkMenu: React.FunctionComponent<{
           <MenuItemRadio name="itemLink" value={noItemLinkValue}>
             No link
           </MenuItemRadio>
-          {linkFields.map((option) => (
-            <MenuItemRadio
-              key={option.fieldPath}
-              name="itemLink"
-              value={option.fieldPath}
-            >
-              {option.label}
-            </MenuItemRadio>
-          ))}
+          {linkMenuGroups.map((group) =>
+            group.label ? (
+              <Menu
+                checkedValues={{ itemLink: [linkFieldPath || noItemLinkValue] }}
+                key={group.key}
+                mountNode={surface.mountNode}
+                positioning={surface.submenuPositioning}
+                onCheckedValueChange={(_event, data) => {
+                  const nextValue = data.checkedItems[0];
+                  onChange(nextValue === noItemLinkValue ? '' : nextValue || '');
+                }}
+              >
+                <MenuTrigger disableButtonEnhancement>
+                  <MenuItem>{group.label}</MenuItem>
+                </MenuTrigger>
+                <MenuPopover className={mergeClasses(classes.menuPopover, betterListFluentSurfaceClassName)}>
+                  <MenuList>
+                    {group.options.map((option) => (
+                      <MenuItemRadio
+                        key={option.fieldPath}
+                        name="itemLink"
+                        value={option.fieldPath}
+                      >
+                        {getBetterListColumnReferenceMenuLabel(option)}
+                      </MenuItemRadio>
+                    ))}
+                  </MenuList>
+                </MenuPopover>
+              </Menu>
+            ) : (
+              group.options.map((option) => (
+                <MenuItemRadio
+                  key={option.fieldPath}
+                  name="itemLink"
+                  value={option.fieldPath}
+                >
+                  {getBetterListColumnReferenceMenuLabel(option)}
+                </MenuItemRadio>
+              ))
+            )
+          )}
         </MenuList>
       </MenuPopover>
     </Menu>
@@ -889,6 +923,10 @@ export function ColumnPickerMenu({
   const classes = useStyles();
   const surface = useBetterListAuthoringSurface(targetDocument);
   const rowActionAvailable = Boolean(onAddRow) && !addRowDisabled;
+  const fieldOptions = createBetterListFieldPathCatalog(fields).filter(
+    (option) => !selectedPaths?.has(option.fieldPath)
+  );
+  const fieldMenuGroups = createBetterListColumnReferenceMenuGroups(fieldOptions);
 
   if (fields.length === 0 && !rowActionAvailable) {
     return (
@@ -926,60 +964,55 @@ export function ColumnPickerMenu({
               {fields.length > 0 ? <MenuDivider /> : null}
             </>
           ) : null}
-          {fields.map((field) =>
-            isBetterListLookupLikeField(field) ? (
+          {fieldMenuGroups.map((group) =>
+            group.label ? (
               <Menu
                 hasIcons
-                key={field.internalName}
+                key={group.key}
                 mountNode={surface.mountNode}
                 positioning={surface.submenuPositioning}
               >
                 <MenuTrigger disableButtonEnhancement>
-                  <MenuItem>{field.title}</MenuItem>
+                  <MenuItem>{group.label}</MenuItem>
                 </MenuTrigger>
                 <MenuPopover className={mergeClasses(classes.menuPopover, betterListFluentSurfaceClassName)}>
                   <MenuList>
-                    {getBetterListFieldTargetFields(field)
-                      .filter(
-                        (targetField) =>
-                          !selectedPaths?.has(createLookupFieldPath(field, targetField))
-                      )
-                      .map((targetField) => (
+                    {group.options.map((option) => {
+                      const targetField = option.targetField || option.field;
+                      return (
                         <MenuItem
                           icon={
                             <span className={classes.menuIcon}>
                               {renderFieldIcon(targetField.typeAsString)}
                             </span>
                           }
-                          key={targetField.internalName}
-                          onClick={() =>
-                            onSelect(createLookupFieldPath(field, targetField))
-                          }
+                          key={option.fieldPath}
+                          onClick={() => onSelect(option.fieldPath)}
                         >
-                          {getBetterListFieldPathLabel(
-                            field,
-                            createLookupFieldPath(field, targetField)
-                          )}
-                          {targetField.internalName === (field.lookupField || 'Title')
+                          {getBetterListColumnReferenceMenuLabel(option)}
+                          {targetField.internalName === (option.field.lookupField || 'Title')
                             ? ' (default)'
                             : ''}
                         </MenuItem>
-                      ))}
+                      );
+                    })}
                   </MenuList>
                 </MenuPopover>
               </Menu>
             ) : (
-              <MenuItem
-                icon={
-                  <span className={classes.menuIcon}>
-                    {renderFieldIcon(field.typeAsString)}
-                  </span>
-                }
-                key={field.internalName}
-                onClick={() => onSelect(field.internalName)}
-              >
-                {field.title}
-              </MenuItem>
+              group.options.map((option) => (
+                <MenuItem
+                  icon={
+                    <span className={classes.menuIcon}>
+                      {renderFieldIcon((option.targetField || option.field).typeAsString)}
+                    </span>
+                  }
+                  key={option.fieldPath}
+                  onClick={() => onSelect(option.fieldPath)}
+                >
+                  {getBetterListColumnReferenceMenuLabel(option)}
+                </MenuItem>
+              ))
             )
           )}
         </MenuList>
@@ -1004,21 +1037,9 @@ function createLookupFieldPath(
 function getItemLinkFieldOptions(
   fields: readonly IBetterListFieldDescriptor[]
 ): readonly IItemLinkFieldOption[] {
-  return fields.reduce<IItemLinkFieldOption[]>((result, field) => {
-    if (isBetterListLookupLikeField(field)) {
-      getBetterListFieldTargetFields(field)
-        .filter((targetField) => isHyperlinkField(targetField))
-        .forEach((targetField) => {
-          result.push({
-            fieldPath: createLookupFieldPath(field, targetField),
-            label: getBetterListFieldPathLabel(field, createLookupFieldPath(field, targetField))
-          });
-        });
-    } else if (isHyperlinkField(field)) {
-      result.push({ fieldPath: field.internalName, label: field.title });
-    }
-    return result;
-  }, []);
+  return createBetterListFieldPathCatalog(fields).filter((option) =>
+    isHyperlinkField(option.targetField || option.field)
+  );
 }
 
 function isHyperlinkField(field: IBetterListFieldDescriptor): boolean {

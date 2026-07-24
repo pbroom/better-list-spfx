@@ -6,6 +6,13 @@ import {
   Dropdown,
   FluentProvider,
   Input,
+  Menu,
+  MenuButton,
+  MenuItem,
+  MenuItemRadio,
+  MenuList,
+  MenuPopover,
+  MenuTrigger,
   Option,
   PortalMountNodeProvider,
   Switch,
@@ -17,6 +24,7 @@ import { AddRegular, EditRegular } from '@fluentui/react-icons';
 import {
   createBetterListFieldMapping,
   createBetterListFieldPathCatalog,
+  createBetterListColumnReferenceMenuGroups,
   createBetterListGroupingOverride,
   createBetterListItemLayoutOverride,
   createBetterListMetadataMappings,
@@ -37,9 +45,11 @@ import {
   BetterListViewerSortOption,
   createBetterListPortalPositioning,
   getBetterListDefaultSortFieldPath,
+  getBetterListColumnReferenceMenuLabel,
   getBetterListPortalMountNode,
   IBetterListFieldDescriptor,
   IBetterListFieldMappings,
+  IBetterListFieldPathOption,
   IBetterListGroupIconsConfiguration,
   IBetterListGroupOrderEntry,
   IBetterListQueryField,
@@ -686,7 +696,9 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
   };
   const groupingFields = fields.filter(isGroupingColumn);
   const groupingOptions = createGroupingColumnOptions(groupingFields);
-  const selectedGroupingOption = groupingOptions.find((option) => option.value === activeGrouping.column);
+  const selectedGroupingOption = groupingOptions.find(
+    (option) => option.fieldPath === activeGrouping.column
+  );
   const defaultSortColumnOptions = createBetterListSortableFieldOptions(fields);
   const tabFilterFields = createTabFilterFields(props.value.fieldMappings, fields);
   const groupFilterFields = createGroupFilterFields(fields, activeGrouping.column);
@@ -904,27 +916,13 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
         />
         <label className="bl-pane__field">
           <span className="bl-pane__label">Grouping column</span>
-          <Dropdown
-            aria-label="Grouping column"
-            listbox={{
-              className: betterListFluentSurfaceClassName,
-              style: { maxHeight: 'min(360px, calc(100vh - 16px))', overflowY: 'auto' }
-            }}
-            mountNode={betterListPortalMountNodeProps}
-            positioning={createBetterListPortalPositioning(targetDocument)}
-            selectedOptions={[activeGrouping.column || noGroupingValue]}
-            value={selectedGroupingOption?.label || 'No grouping'}
-            onOptionSelect={(_event, data) =>
-              updateGroupColumn(data.optionValue === noGroupingValue ? '' : data.optionValue || '')
-            }
-          >
-            <Option text="No grouping" value={noGroupingValue}>No grouping</Option>
-            {groupingOptions.map((option) => (
-              <Option key={option.value} text={option.label} value={option.value}>
-                {option.label}
-              </Option>
-            ))}
-          </Dropdown>
+          <GroupingColumnMenu
+            options={groupingOptions}
+            selectedLabel={selectedGroupingOption?.label}
+            selectedPath={activeGrouping.column}
+            targetDocument={targetDocument}
+            onChange={updateGroupColumn}
+          />
         </label>
         {activeGrouping.column ? (
           <>
@@ -1148,12 +1146,93 @@ function toGroupQueryField(field: IBetterListTabFilterField): IBetterListQueryFi
   };
 }
 
-interface IGroupingColumnOption {
-  label: string;
-  value: string;
-}
-
 const noGroupingValue = '__no_grouping__';
+
+const GroupingColumnMenu: React.FunctionComponent<{
+  options: readonly IBetterListFieldPathOption[];
+  selectedLabel?: string;
+  selectedPath: string;
+  targetDocument?: Document;
+  onChange: (fieldPath: string) => void;
+}> = ({ options, selectedLabel, selectedPath, targetDocument, onChange }) => {
+  const groups = createBetterListColumnReferenceMenuGroups(options);
+  const checkedValues = {
+    groupingColumn: [selectedPath || noGroupingValue]
+  };
+  const select = (fieldPath: string | undefined): void => {
+    if (fieldPath) {
+      onChange(fieldPath === noGroupingValue ? '' : fieldPath);
+    }
+  };
+
+  return (
+    <Menu
+      checkedValues={checkedValues}
+      mountNode={betterListPortalMountNodeProps}
+      positioning={createBetterListPortalPositioning(targetDocument)}
+      onCheckedValueChange={(_event, data) => select(data.checkedItems[0])}
+    >
+      <MenuTrigger disableButtonEnhancement>
+        <MenuButton
+          appearance="outline"
+          aria-label={`Grouping column: ${selectedLabel || 'No grouping'}`}
+          className="bl-pane__column-menu"
+        >
+          {selectedLabel || 'No grouping'}
+        </MenuButton>
+      </MenuTrigger>
+      <MenuPopover
+        className={`bl-pane__column-menu-popover ${betterListFluentSurfaceClassName}`}
+      >
+        <MenuList>
+          <MenuItemRadio name="groupingColumn" value={noGroupingValue}>
+            No grouping
+          </MenuItemRadio>
+          {groups.map((group) =>
+            group.label ? (
+              <Menu
+                checkedValues={checkedValues}
+                key={group.key}
+                mountNode={betterListPortalMountNodeProps}
+                positioning={createBetterListPortalPositioning(targetDocument, 'submenu')}
+                onCheckedValueChange={(_event, data) => select(data.checkedItems[0])}
+              >
+                <MenuTrigger disableButtonEnhancement>
+                  <MenuItem>{group.label}</MenuItem>
+                </MenuTrigger>
+                <MenuPopover
+                  className={`bl-pane__column-menu-popover ${betterListFluentSurfaceClassName}`}
+                >
+                  <MenuList>
+                    {group.options.map((option) => (
+                      <MenuItemRadio
+                        key={option.fieldPath}
+                        name="groupingColumn"
+                        value={option.fieldPath}
+                      >
+                        {getBetterListColumnReferenceMenuLabel(option)}
+                      </MenuItemRadio>
+                    ))}
+                  </MenuList>
+                </MenuPopover>
+              </Menu>
+            ) : (
+              group.options.map((option) => (
+                <MenuItemRadio
+                  key={option.fieldPath}
+                  name="groupingColumn"
+                  value={option.fieldPath}
+                >
+                  {getBetterListColumnReferenceMenuLabel(option)}
+                </MenuItemRadio>
+              ))
+            )
+          )}
+        </MenuList>
+      </MenuPopover>
+    </Menu>
+  );
+};
 
 interface ITabSettingInheritanceProps {
   inherited: boolean;
@@ -1188,11 +1267,8 @@ function getTabLabel(tabs: readonly IBetterListTabConfig[], tabId: string | unde
 
 function createGroupingColumnOptions(
   fields: readonly ISharePointFieldOption[]
-): readonly IGroupingColumnOption[] {
-  return createBetterListFieldPathCatalog(fields).map((option) => ({
-    label: option.label,
-    value: option.fieldPath
-  }));
+): readonly IBetterListFieldPathOption[] {
+  return createBetterListFieldPathCatalog(fields);
 }
 
 function isGroupingColumn(field: ISharePointFieldOption): boolean {
@@ -1219,6 +1295,8 @@ const propertyPaneCss = `
 .bl-pane__label { font-size: 12px; font-weight: 600; }
 .bl-pane__source-dropdown { min-width: 0; width: 100%; }
 .bl-pane__compact-dropdown { min-width: 0; width: 100%; }
+.bl-pane__column-menu { justify-content: space-between; min-width: 0; width: 100%; }
+.bl-pane__column-menu-popover { max-height: min(360px, calc(100vh - 16px)); overflow-y: auto; overscroll-behavior: contain; }
 .bl-pane__source-listbox { font-family: "Segoe UI", sans-serif; }
 .bl-pane__help { color: #616161; font-size: 11px; line-height: 1.4; margin: -4px 0 12px; }
 .bl-pane__error { background: #fdf3f4; border-left: 3px solid #c50f1f; color: #8a1219; font-size: 12px; padding: 8px; }

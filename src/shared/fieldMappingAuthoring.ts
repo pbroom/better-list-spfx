@@ -31,8 +31,28 @@ export interface IBetterListFieldDescriptor {
 export interface IBetterListFieldPathOption {
   field: IBetterListFieldDescriptor;
   fieldPath: string;
+  /** Full context retained anywhere the authored selection is displayed. */
   label: string;
+  /** Concise text used only while the option is inside its parent submenu. */
+  menuLabel: string;
+  /** Present when this option belongs under a lookup/person parent submenu. */
+  parentLabel?: string;
   targetField?: IBetterListFieldDescriptor;
+}
+
+export interface IBetterListColumnReferenceOption {
+  fieldPath: string;
+  label: string;
+  menuLabel?: string;
+  parentLabel?: string;
+}
+
+export interface IBetterListColumnReferenceMenuGroup<
+  TOption extends IBetterListColumnReferenceOption = IBetterListColumnReferenceOption
+> {
+  key: string;
+  label?: string;
+  options: readonly TOption[];
 }
 
 export interface IBetterListSemanticSlotDescriptor {
@@ -147,6 +167,7 @@ export function createBetterListMetadataMappings(
   fieldPaths: readonly string[]
 ): readonly IBetterListMetadataFieldMapping[] {
   const seen = new Set<string>();
+  const pathOptions = createBetterListFieldPathCatalog(fields);
   return fieldPaths.reduce<IBetterListMetadataFieldMapping[]>((result, fieldPath) => {
     const parsed = parseBetterListFieldPath(fieldPath);
     const canonicalPath = canonicalBetterListFieldPath(parsed.source, parsed.target);
@@ -162,10 +183,14 @@ export function createBetterListMetadataMappings(
     const targetField = lookupValueField
       ? getBetterListFieldTargetFields(field).find((candidate) => candidate.internalName === lookupValueField)
       : undefined;
+    const pathOption = pathOptions.find((option) => option.fieldPath === canonicalPath);
     seen.add(canonicalPath);
     result.push({
       key: canonicalPath,
-      label: lookupValueField ? `${field.title} → ${targetField?.title || lookupValueField}` : field.title,
+      label: pathOption?.label ||
+        (lookupValueField ? `${field.title} → ${targetField?.title || lookupValueField}` : field.title),
+      menuLabel: pathOption?.menuLabel,
+      parentLabel: pathOption?.parentLabel,
       mapping: createBetterListFieldMapping(field, undefined, lookupValueField)
     });
     return result;
@@ -226,21 +251,88 @@ export function createBetterListFieldPathCatalog(
   return catalog.reduce<IBetterListFieldPathOption[]>((options, field) => {
     const sourceLabel = disambiguatedTitle(field, sourceTitleCounts);
     if (!isBetterListLookupLikeField(field)) {
-      options.push({ field, fieldPath: field.internalName, label: sourceLabel });
+      options.push({
+        field,
+        fieldPath: field.internalName,
+        label: sourceLabel,
+        menuLabel: sourceLabel
+      });
       return options;
     }
     const targets = getBetterListFieldTargetFields(field);
     const targetTitleCounts = countTitles(targets);
     targets.forEach((targetField) => {
+      const targetLabel = disambiguatedTitle(targetField, targetTitleCounts);
       options.push({
         field,
         fieldPath: canonicalBetterListFieldPath(field.internalName, targetField.internalName),
-        label: `${sourceLabel} → ${disambiguatedTitle(targetField, targetTitleCounts)}`,
+        label: `${sourceLabel} → ${targetLabel}`,
+        menuLabel: targetLabel,
+        parentLabel: sourceLabel,
         targetField
       });
     });
     return options;
   }, []);
+}
+
+/**
+ * Converts canonical column references into the hierarchy shared by all menu
+ * surfaces. Nested paths are grouped by source column while their full labels
+ * remain untouched for selected/persisted display.
+ */
+export function createBetterListColumnReferenceMenuGroups<
+  TOption extends IBetterListColumnReferenceOption
+>(
+  options: readonly TOption[]
+): readonly IBetterListColumnReferenceMenuGroup<TOption>[] {
+  const groups: IBetterListColumnReferenceMenuGroup<TOption>[] = [];
+  const nestedGroupIndexes = new Map<string, number>();
+
+  options.forEach((option) => {
+    const parsed = parseBetterListFieldPath(option.fieldPath);
+    if (!parsed.target) {
+      groups.push({
+        key: `field:${option.fieldPath}`,
+        options: [option]
+      });
+      return;
+    }
+
+    const sourceKey = parsed.source.toLocaleLowerCase();
+    const currentIndex = nestedGroupIndexes.get(sourceKey);
+    if (currentIndex !== undefined) {
+      const current = groups[currentIndex];
+      groups[currentIndex] = {
+        ...current,
+        options: current.options.concat(option)
+      };
+      return;
+    }
+
+    const label = option.parentLabel || columnReferenceParentLabel(option, parsed.source);
+    nestedGroupIndexes.set(sourceKey, groups.length);
+    groups.push({
+      key: `parent:${parsed.source}`,
+      label,
+      options: [option]
+    });
+  });
+
+  return groups;
+}
+
+export function getBetterListColumnReferenceMenuLabel(
+  option: IBetterListColumnReferenceOption
+): string {
+  if (option.menuLabel) {
+    return option.menuLabel;
+  }
+  const separator = option.label.lastIndexOf(' → ');
+  if (separator >= 0) {
+    return option.label.slice(separator + 3);
+  }
+  return parseBetterListFieldPath(option.fieldPath).target || option.label;
 }
 
 export function getBetterListFieldPathLabel(
@@ -337,6 +429,14 @@ function disambiguatedTitle(
   return (counts.get(title.trim().toLocaleLowerCase()) || 0) > 1
     ? `${title} (${field.internalName})`
     : title;
+}
+
+function columnReferenceParentLabel(
+  option: IBetterListColumnReferenceOption,
+  fallback: string
+): string {
+  const separator = option.label.indexOf(' → ');
+  return separator >= 0 ? option.label.slice(0, separator) : fallback;
 }
 
 function getScalarFieldKind(

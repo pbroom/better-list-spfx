@@ -4,6 +4,13 @@ import {
   Combobox,
   Dropdown,
   Input,
+  Menu,
+  MenuButton,
+  MenuItem,
+  MenuItemRadio,
+  MenuList,
+  MenuPopover,
+  MenuTrigger,
   Option,
   Switch,
   makeStyles,
@@ -19,6 +26,8 @@ import type {
 
 import {
   createBetterListMetadataMappings,
+  createBetterListColumnReferenceMenuGroups,
+  createBetterListFieldPathCatalog,
   createBetterListSortableFieldOptions,
   createBetterListGroupingOverride,
   createBetterListItemLayoutOverride,
@@ -41,9 +50,12 @@ import {
   BetterListDefaultSort,
   BetterListViewerSortOption,
   getBetterListDefaultSortFieldPath,
+  getBetterListColumnReferenceMenuLabel,
+  IBetterListFieldPathOption,
   IBetterListTabConfig,
   normalizeBetterListDefaultSortSelection,
   normalizeBetterListViewerSortConfiguration,
+  itemPropertyFieldPathsEqual,
   resolveBetterListTabConfigurations,
   serializeBetterListViewerSortOptions
 } from '../../src/shared';
@@ -110,6 +122,14 @@ const useStyles = makeStyles({
     marginBottom: '12px',
     fontSize: '12px',
     fontWeight: 600
+  },
+  groupingMenu: {
+    width: '100%'
+  },
+  groupingMenuPopover: {
+    maxHeight: 'min(360px, calc(100vh - 24px))',
+    overflowY: 'auto',
+    overscrollBehavior: 'contain'
   },
   topSettings: {
     display: 'grid',
@@ -292,7 +312,10 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
     [mappings]
   );
   const groupingFields = React.useMemo(() => servicesAuthoringFields.filter(isGroupingColumn), []);
-  const groupingOptions = React.useMemo(() => createGroupingColumnOptions(groupingFields), [groupingFields]);
+  const groupingOptions = React.useMemo(
+    () => createBetterListFieldPathCatalog(groupingFields),
+    [groupingFields]
+  );
   const defaultSortColumnOptions = React.useMemo(
     () => createBetterListSortableFieldOptions(servicesAuthoringFields),
     []
@@ -340,7 +363,9 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
     }));
   }, [activeConfiguration, activeGrouping.column, activeGrouping.filter, mappings]);
   const activeItemLayout = activeConfiguration?.itemLayout ?? itemLayout;
-  const selectedGroupingOption = groupingOptions.find((option) => option.value === activeGrouping.column);
+  const selectedGroupingOption = groupingOptions.find((option) =>
+    itemPropertyFieldPathsEqual(option.fieldPath, activeGrouping.column)
+  );
   const updateActiveTab = (patch: Partial<IBetterListTabConfig>): IBetterListTabConfig[] =>
     tabs.map((tab) => tab.id === activeTabId ? { ...tab, ...patch } : tab);
   const createDerivedMetadata = (
@@ -656,14 +681,14 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
             </Button>
           ) : null}
         </div>
-        <label className={classes.groupingField}>
+        <div className={classes.groupingField}>
           <span>Grouping column</span>
-          <Dropdown
-            aria-label="Grouping column"
-            selectedOptions={[activeGrouping.column || noGroupingValue]}
-            value={selectedGroupingOption?.label || 'No grouping'}
-            onOptionSelect={(_event, data) => {
-              const groupsColumn = data.optionValue === noGroupingValue ? '' : data.optionValue || '';
+          <GroupingColumnMenu
+            classes={classes}
+            options={groupingOptions}
+            selectedLabel={selectedGroupingOption?.label}
+            selectedPath={selectedGroupingOption?.fieldPath || activeGrouping.column}
+            onChange={(groupsColumn) => {
               patchActiveGrouping({
                 column: groupsColumn,
                 collapsible: groupsColumn ? activeGrouping.collapsible : false,
@@ -676,15 +701,8 @@ export const BetterListLabPropertyPane: React.FunctionComponent<LabPropertyPaneR
                 groupOrder: groupsColumn === activeGrouping.column ? activeGrouping.groupOrder : []
               });
             }}
-          >
-            <Option text="No grouping" value={noGroupingValue}>No grouping</Option>
-            {groupingOptions.map((option) => (
-              <Option key={option.value} text={option.label} value={option.value}>
-                {option.label}
-              </Option>
-            ))}
-          </Dropdown>
-        </label>
+          />
+        </div>
         {activeGrouping.column ? (
           <>
             <Button
@@ -835,34 +853,81 @@ function isGroupingColumn(field: (typeof servicesAuthoringFields)[number]): bool
   );
 }
 
-interface IGroupingColumnOption {
-  label: string;
-  value: string;
-}
-
 const noGroupingValue = '__no_grouping__';
 
-function createGroupingColumnOptions(
-  fields: ReadonlyArray<(typeof servicesAuthoringFields)[number]>
-): readonly IGroupingColumnOption[] {
-  return fields.reduce<IGroupingColumnOption[]>((options, field) => {
-    const isLookup = field.typeAsString.toLocaleLowerCase().indexOf('lookup') >= 0;
-    if (!isLookup) {
-      options.push({ label: field.title, value: field.internalName });
-      return options;
+const GroupingColumnMenu: React.FunctionComponent<{
+  classes: ReturnType<typeof useStyles>;
+  options: readonly IBetterListFieldPathOption[];
+  selectedLabel?: string;
+  selectedPath: string;
+  onChange: (fieldPath: string) => void;
+}> = ({ classes, options, selectedLabel, selectedPath, onChange }) => {
+  const groups = createBetterListColumnReferenceMenuGroups(options);
+  const checkedValues = {
+    groupingColumn: [selectedPath || noGroupingValue]
+  };
+  const select = (fieldPath: string | undefined): void => {
+    if (fieldPath) {
+      onChange(fieldPath === noGroupingValue ? '' : fieldPath);
     }
-    const lookupFields = field.lookupFields?.length
-      ? field.lookupFields
-      : [{ internalName: field.lookupField || 'Title', title: field.lookupField || 'Title', typeAsString: 'Text' }];
-    lookupFields.forEach((lookupField) => {
-      options.push({
-        label: `${field.title} → ${lookupField.title}`,
-        value: `${field.internalName}.${lookupField.internalName}`
-      });
-    });
-    return options;
-  }, []);
-}
+  };
+
+  return (
+    <Menu
+      checkedValues={checkedValues}
+      onCheckedValueChange={(_event, data) => select(data.checkedItems[0])}
+    >
+      <MenuTrigger disableButtonEnhancement>
+        <MenuButton
+          appearance="outline"
+          aria-label={`Grouping column: ${selectedLabel || 'No grouping'}`}
+          className={classes.groupingMenu}
+        >
+          {selectedLabel || 'No grouping'}
+        </MenuButton>
+      </MenuTrigger>
+      <MenuPopover className={classes.groupingMenuPopover}>
+        <MenuList>
+          <MenuItemRadio name="groupingColumn" value={noGroupingValue}>
+            No grouping
+          </MenuItemRadio>
+          {groups.map((group) =>
+            group.label ? (
+              <Menu checkedValues={checkedValues} key={group.key}>
+                <MenuTrigger disableButtonEnhancement>
+                  <MenuItem>{group.label}</MenuItem>
+                </MenuTrigger>
+                <MenuPopover className={classes.groupingMenuPopover}>
+                  <MenuList>
+                    {group.options.map((option) => (
+                      <MenuItemRadio
+                        key={option.fieldPath}
+                        name="groupingColumn"
+                        value={option.fieldPath}
+                      >
+                        {getBetterListColumnReferenceMenuLabel(option)}
+                      </MenuItemRadio>
+                    ))}
+                  </MenuList>
+                </MenuPopover>
+              </Menu>
+            ) : (
+              group.options.map((option) => (
+                <MenuItemRadio
+                  key={option.fieldPath}
+                  name="groupingColumn"
+                  value={option.fieldPath}
+                >
+                  {getBetterListColumnReferenceMenuLabel(option)}
+                </MenuItemRadio>
+              ))
+            )
+          )}
+        </MenuList>
+      </MenuPopover>
+    </Menu>
+  );
+};
 
 function readTabs(serialized: string): readonly IBetterListTabConfig[] {
   try {

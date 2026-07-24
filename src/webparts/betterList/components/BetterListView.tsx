@@ -46,6 +46,7 @@ import {
   betterListFluentSurfaceClassName,
   betterListFluentTooltipContentClassName,
   betterListViewerSortChoices,
+  createBetterListColumnReferenceMenuGroups,
   BetterListColumnCount,
   BetterListComparableValue,
   BetterListDefaultSort,
@@ -57,12 +58,14 @@ import {
   BetterListTemplateFragmentName,
   BetterListTemplateSlotName,
   BetterListViewerSortOption,
+  IBetterListColumnReferenceOption,
   IBetterListTemplateElementNode,
   IBetterListTemplateNode,
   IBetterListGroupIconsConfiguration,
   IBetterListThemeColor,
   defaultBetterListGroupIconsConfiguration,
   getBetterListGroupIconOverride,
+  getBetterListColumnReferenceMenuLabel,
   getBetterListViewerSortValueKey,
   normalizeBetterListColumnCount,
   normalizeBetterListDefaultSort,
@@ -150,9 +153,7 @@ export interface IBetterListItemElement {
   href?: string;
 }
 
-export interface IBetterListViewerSortColumn {
-  fieldPath: string;
-  label: string;
+export interface IBetterListViewerSortColumn extends IBetterListColumnReferenceOption {
   kind: BetterListFieldKind;
   valueKey: string;
 }
@@ -281,6 +282,11 @@ const useStyles = makeStyles({
   },
   sortTrigger: {
     flexShrink: 0
+  },
+  sortMenuPopover: {
+    maxHeight: 'min(360px, calc(100vh - 16px))',
+    overflowY: 'auto',
+    overscrollBehavior: 'contain'
   },
   sortTags: {
     minWidth: 0
@@ -910,6 +916,10 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
   const columnSortEnabled =
     normalizedViewerSortOptions.indexOf('column') >= 0 &&
     viewerSortColumns.length > 0;
+  const viewerSortColumnMenuGroups = React.useMemo(
+    () => createBetterListColumnReferenceMenuGroups(viewerSortColumns),
+    [viewerSortColumns]
+  );
   React.useEffect(() => {
     setSortOverride(undefined);
   }, [defaultSortFieldPath, normalizedDefaultSort]);
@@ -960,6 +970,14 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
     : betterListViewerSortChoices.find(
         (choice) => choice.value === activeSortOverride?.mode
       )?.label;
+  const selectViewerSortColumn = (fieldPath: string | undefined): void => {
+    if (
+      fieldPath &&
+      viewerSortColumns.some((column) => column.fieldPath === fieldPath)
+    ) {
+      setSortOverride({ mode: 'column', fieldPath });
+    }
+  };
   const sortActive = Boolean(activeSortOverride) || normalizedDefaultSort !== 'listOrder';
   const compareVisibleItems = React.useCallback(
     (left: IBetterListItem, right: IBetterListItem): number =>
@@ -1568,7 +1586,12 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
                     title="Sort items"
                   />
                 </MenuTrigger>
-                <MenuPopover className={betterListFluentSurfaceClassName}>
+                <MenuPopover
+                  className={mergeClasses(
+                    classes.sortMenuPopover,
+                    betterListFluentSurfaceClassName
+                  )}
+                >
                   <MenuList aria-label="Sort items">
                     {enabledViewerSortChoices.map((choice) => (
                       <MenuItemRadio
@@ -1589,31 +1612,68 @@ export const BetterListView: React.FunctionComponent<IBetterListViewProps> = ({
                               : []
                         }}
                         onCheckedValueChange={(_event, data) => {
-                          const fieldPath = data.checkedItems[0];
-                          if (
-                            fieldPath &&
-                            viewerSortColumns.some(
-                              (column) => column.fieldPath === fieldPath
-                            )
-                          ) {
-                            setSortOverride({ mode: 'column', fieldPath });
-                          }
+                          selectViewerSortColumn(data.checkedItems[0]);
                         }}
                       >
                         <MenuTrigger disableButtonEnhancement>
                           <MenuItem>Column</MenuItem>
                         </MenuTrigger>
-                        <MenuPopover className={betterListFluentSurfaceClassName}>
+                        <MenuPopover
+                          className={mergeClasses(
+                            classes.sortMenuPopover,
+                            betterListFluentSurfaceClassName
+                          )}
+                        >
                           <MenuList aria-label="Sort by column">
-                            {viewerSortColumns.map((column) => (
-                              <MenuItemRadio
-                                key={column.fieldPath}
-                                name="sortColumn"
-                                value={column.fieldPath}
-                              >
-                                {column.label}
-                              </MenuItemRadio>
-                            ))}
+                            {viewerSortColumnMenuGroups.map((group) =>
+                              group.label ? (
+                                <Menu
+                                  checkedValues={{
+                                    sortColumn:
+                                      activeSortOverride?.mode === 'column' &&
+                                      activeSortOverride.fieldPath
+                                        ? [activeSortOverride.fieldPath]
+                                        : []
+                                  }}
+                                  key={group.key}
+                                  onCheckedValueChange={(_event, data) =>
+                                    selectViewerSortColumn(data.checkedItems[0])
+                                  }
+                                >
+                                  <MenuTrigger disableButtonEnhancement>
+                                    <MenuItem>{group.label}</MenuItem>
+                                  </MenuTrigger>
+                                  <MenuPopover
+                                    className={mergeClasses(
+                                      classes.sortMenuPopover,
+                                      betterListFluentSurfaceClassName
+                                    )}
+                                  >
+                                    <MenuList aria-label={`Sort by ${group.label}`}>
+                                      {group.options.map((column) => (
+                                        <MenuItemRadio
+                                          key={column.fieldPath}
+                                          name="sortColumn"
+                                          value={column.fieldPath}
+                                        >
+                                          {getBetterListColumnReferenceMenuLabel(column)}
+                                        </MenuItemRadio>
+                                      ))}
+                                    </MenuList>
+                                  </MenuPopover>
+                                </Menu>
+                              ) : (
+                                group.options.map((column) => (
+                                  <MenuItemRadio
+                                    key={column.fieldPath}
+                                    name="sortColumn"
+                                    value={column.fieldPath}
+                                  >
+                                    {getBetterListColumnReferenceMenuLabel(column)}
+                                  </MenuItemRadio>
+                                ))
+                              )
+                            )}
                           </MenuList>
                         </MenuPopover>
                       </Menu>

@@ -120,6 +120,10 @@ export type BetterListFieldMapping =
 export interface IBetterListMetadataFieldMapping {
   key: string;
   label: string;
+  /** Concise text used only while the field is shown inside its parent submenu. */
+  menuLabel?: string;
+  /** Disambiguated lookup/person parent label used to build nested menus. */
+  parentLabel?: string;
   mapping: BetterListFieldMapping;
 }
 

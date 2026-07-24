@@ -53,6 +53,7 @@ import {
   IBetterListThemeColor,
   IBetterListItem as ICoreBetterListItem,
   IBetterListTabConfig,
+  parseBetterListFieldPath,
   parseItemLayoutConfiguration,
   parseBetterListGroupIconsConfiguration,
   parseItemPropertyFields,
@@ -242,15 +243,30 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
     );
     const viewerSortColumns: readonly IBetterListViewerSortColumn[] = viewerSortMetadata
       .filter((entry) => entry.mode === 'column')
-      .map((entry) => ({
-        fieldPath: entry.fieldPath || '',
-        kind: entry.kind,
-        label:
-          fieldMappings.metadata?.find((candidate) =>
-            itemPropertyFieldPathsEqual(candidate.key, entry.sourceKey)
-          )?.label || entry.fieldPath || '',
-        valueKey: entry.valueKey
-      }));
+      .map((entry) => {
+        const fieldPath = entry.fieldPath || '';
+        const parsedPath = parseBetterListFieldPath(fieldPath);
+        const metadata = fieldMappings.metadata?.find((candidate) =>
+          itemPropertyFieldPathsEqual(candidate.key, entry.sourceKey)
+        );
+        const label = metadata?.label || fieldPath;
+        return {
+          fieldPath,
+          kind: entry.kind,
+          label,
+          menuLabel: parsedPath.target
+            ? metadata?.menuLabel ||
+              metadata?.mapping.relationship?.target.label ||
+              parsedPath.target
+            : label,
+          parentLabel: parsedPath.target
+            ? metadata?.parentLabel ||
+              metadata?.mapping.displayName ||
+              parsedPath.source
+            : undefined,
+          valueKey: entry.valueKey
+        };
+      });
     const resolvedViewerSortOptions = sortingConfiguration.enabled.filter((mode) =>
       mode === 'listOrder' ||
       mode === 'titleAscending' ||
