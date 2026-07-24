@@ -72,6 +72,24 @@ async function createFixture({ placeholderCdn = false, sppkgVersion = `${VERSION
     }),
     writeFile(path.join(rootDir, '.nvmrc'), '22.22.3\n'),
     writeFile(path.join(rootDir, 'release', 'assets', 'app.js'), 'app();\n'),
+    writeFile(
+      path.join(rootDir, 'release', 'assets', 'better-list-eb-garamond.css'),
+      `@font-face { font-family: "EB Garamond"; font-style: normal; font-display: swap; font-weight: 400 800; src: url("./better-list-eb-garamond-latin-wght-normal.woff2") format("woff2-variations"); }
+@font-face { font-family: "EB Garamond"; font-style: italic; font-display: swap; font-weight: 400 800; src: url("./better-list-eb-garamond-latin-wght-italic.woff2") format("woff2-variations"); }
+`,
+    ),
+    writeFile(
+      path.join(rootDir, 'release', 'assets', 'better-list-eb-garamond-latin-wght-normal.woff2'),
+      Buffer.from('wOF2normal-fixture'),
+    ),
+    writeFile(
+      path.join(rootDir, 'release', 'assets', 'better-list-eb-garamond-latin-wght-italic.woff2'),
+      Buffer.from('wOF2italic-fixture'),
+    ),
+    writeFile(
+      path.join(rootDir, 'release', 'assets', 'better-list-eb-garamond-OFL.txt'),
+      'Copyright 2017 The EB Garamond Project Authors\nSIL OPEN FONT LICENSE Version 1.1\n',
+    ),
   ]);
 
   const packageFixture = path.join(rootDir, 'sppkg-fixture');
@@ -151,7 +169,13 @@ test('constructs and verifies a deterministic release payload manifest', async (
         .sha256,
       await sha256(prepared.standalonePath),
     );
-    assert.deepEqual(manifest.cdnFiles, ['app.js']);
+    assert.deepEqual(manifest.cdnFiles, [
+      'app.js',
+      'better-list-eb-garamond-OFL.txt',
+      'better-list-eb-garamond-latin-wght-italic.woff2',
+      'better-list-eb-garamond-latin-wght-normal.woff2',
+      'better-list-eb-garamond.css',
+    ]);
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }

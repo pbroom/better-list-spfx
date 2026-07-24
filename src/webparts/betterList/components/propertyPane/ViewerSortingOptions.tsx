@@ -10,6 +10,7 @@ import {
   MenuTrigger,
   makeStyles,
   mergeClasses,
+  shorthands,
   tokens
 } from '@fluentui/react-components';
 
@@ -45,6 +46,7 @@ const useStyles = makeStyles({
     gap: tokens.spacingHorizontalS
   },
   columnTrigger: {
+    ...shorthands.borderWidth(tokens.strokeWidthThin),
     flexGrow: 1,
     justifyContent: 'space-between',
     minWidth: 0

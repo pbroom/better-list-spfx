@@ -91,6 +91,7 @@ import {
   SharePointImageAssetProvider,
   inferBetterListFieldKind
 } from './services';
+import { ensureEbGaramondStylesheet } from './ebGaramondStylesheet';
 
 const normalizeMaxItemsPerPage = (value: unknown): number => {
   const numericValue = Number(value);
@@ -367,6 +368,10 @@ export default class BetterListWebPart extends BaseClientSideWebPart<IBetterList
   }
 
   protected async onInit(): Promise<void> {
+    ensureEbGaramondStylesheet(
+      this.domElement.ownerDocument,
+      this.manifest.loaderConfig.internalModuleBaseUrls
+    );
     this.properties.heading = this.properties.heading || '';
     this.properties.itemColumns = normalizeBetterListColumnCount(this.properties.itemColumns);
     this.properties.maxItemsPerPage = normalizeMaxItemsPerPage(this.properties.maxItemsPerPage);

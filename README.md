@@ -57,6 +57,13 @@ classes, while `@scope` keeps arbitrary persisted selectors inside this web
 part. Changes to rendering or CSS authoring must retain regression coverage for
 class-name collisions and selectors outside the Better List instance.
 
+## Bundled Fonts
+
+Production exports self-host EB Garamond variable webfonts for weights 400–800 in normal and
+italic styles. Custom CSS can use `font-family: "EB Garamond", serif;` without loading a
+third-party font service. The single-package export embeds the font assets in the `.sppkg`; the
+CDN export places the same files at the CDN root with a `better-list-eb-garamond-` prefix.
+
 ## HTML Templates
 
 The Advanced property pane includes a valid-only HTML editor. A template is a

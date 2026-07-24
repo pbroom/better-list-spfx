@@ -17,7 +17,7 @@
     "test:release": "node --test scripts/release-artifacts.test.mjs",
     "serve": "heft start --clean",
     "start": "heft start --clean",
-    "ship": "heft test --clean --production && node scripts/verify-monaco-css.mjs && heft package-solution --production",
+    "ship": "heft test --clean --production && node scripts/verify-monaco-css.mjs && node scripts/copy-eb-garamond-assets.mjs --app . && heft package-solution --production && node scripts/verify-eb-garamond-build.mjs --app .",
     "version:check": "node scripts/sync-spfx-version.mjs --check",
     "version:sync": "node scripts/sync-spfx-version.mjs",
     "eject-webpack": "heft eject-webpack"
@@ -28,6 +28,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@fluentui/react-components": "9.74.3",
     "@fluentui/react-icons": "2.0.330",
+    "@fontsource-variable/eb-garamond": "5.3.0",
     "@fontsource-variable/geist-mono": "5.3.0",
     "@iconify/react": "^4.1.1",
     "@microsoft/sp-component-base": "1.23.2",

@@ -52,14 +52,31 @@ describe('ViewerSortingOptions', () => {
           container
         );
       });
+      const trigger = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Choose visitor sorting columns"]'
+      );
+      expect(trigger?.classList.contains('fui-MenuButton')).toBe(true);
+      expect(trigger?.getAttribute('aria-haspopup')).toBe('menu');
+      expect(trigger?.getAttribute('aria-expanded')).toBe('false');
+      const closedTriggerStyles = window.getComputedStyle(trigger as HTMLButtonElement);
+      const closedTriggerBorderWidths = [
+        closedTriggerStyles.borderTopWidth,
+        closedTriggerStyles.borderRightWidth,
+        closedTriggerStyles.borderBottomWidth,
+        closedTriggerStyles.borderLeftWidth
+      ];
       await act(async () => {
-        Simulate.click(
-          container.querySelector<HTMLButtonElement>(
-            'button[aria-label="Choose visitor sorting columns"]'
-          ) as HTMLButtonElement
-        );
+        Simulate.keyDown(trigger as HTMLButtonElement, { key: 'ArrowDown' });
         await Promise.resolve();
       });
+      const openTriggerStyles = window.getComputedStyle(trigger as HTMLButtonElement);
+      expect(trigger?.getAttribute('aria-expanded')).toBe('true');
+      expect([
+        openTriggerStyles.borderTopWidth,
+        openTriggerStyles.borderRightWidth,
+        openTriggerStyles.borderBottomWidth,
+        openTriggerStyles.borderLeftWidth
+      ]).toEqual(closedTriggerBorderWidths);
       const categoryItem = Array.from(
         document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')
       ).find((item) => item.textContent?.trim() === 'Category');
