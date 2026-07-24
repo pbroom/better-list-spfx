@@ -22,6 +22,9 @@ import {
 const noGroupingValue = '__no_grouping__';
 
 const useStyles = makeStyles({
+  trailingCheckmark: {
+    order: 1
+  },
   trigger: {
     justifyContent: 'space-between',
     minWidth: 0,
@@ -94,7 +97,11 @@ export const GroupingColumnMenu: React.FunctionComponent<IGroupingColumnMenuProp
       </MenuTrigger>
       <MenuPopover className={popoverClassName}>
         <MenuList>
-          <MenuItemRadio name="groupingColumn" value={noGroupingValue}>
+          <MenuItemRadio
+            checkmark={{ className: classes.trailingCheckmark }}
+            name="groupingColumn"
+            value={noGroupingValue}
+          >
             No grouping
           </MenuItemRadio>
           {groups.map((group) =>
@@ -113,6 +120,7 @@ export const GroupingColumnMenu: React.FunctionComponent<IGroupingColumnMenuProp
                   <MenuList>
                     {group.options.map((option) => (
                       <MenuItemRadio
+                        checkmark={{ className: classes.trailingCheckmark }}
                         key={option.fieldPath}
                         name="groupingColumn"
                         value={option.fieldPath}
@@ -126,6 +134,7 @@ export const GroupingColumnMenu: React.FunctionComponent<IGroupingColumnMenuProp
             ) : (
               group.options.map((option) => (
                 <MenuItemRadio
+                  checkmark={{ className: classes.trailingCheckmark }}
                   key={option.fieldPath}
                   name="groupingColumn"
                   value={option.fieldPath}

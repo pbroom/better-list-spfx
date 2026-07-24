@@ -9,6 +9,7 @@ import {
   MenuTrigger,
   makeStyles,
   mergeClasses,
+  shorthands,
   tokens
 } from '@fluentui/react-components';
 import { CheckmarkRegular } from '@fluentui/react-icons';
@@ -34,6 +35,7 @@ export interface IDefaultSortingMenuProps {
 
 const useStyles = makeStyles({
   trigger: {
+    ...shorthands.borderWidth(tokens.strokeWidthThin),
     width: '100%',
     justifyContent: 'space-between',
     fontWeight: tokens.fontWeightRegular
