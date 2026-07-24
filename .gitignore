@@ -16,6 +16,7 @@ release/assets/
 release/manifests/
 release/analysis-logs/
 release/component-dependency-audit/
+release-output/
 sharepoint/solution/*.sppkg
 sharepoint/solution/debug/
 *.tsbuildinfo
