@@ -207,6 +207,17 @@ describe('createBetterListFieldMapping', () => {
     expect(group.options[0].label).toBe('Category → Parent → Active → state');
   });
 
+  it('derives parent and leaf labels from the last separator for legacy multi-arrow labels', () => {
+    const options = [{
+      fieldPath: 'Category/Active',
+      label: 'A → B → C'
+    }];
+    const [group] = createBetterListColumnReferenceMenuGroups(options);
+
+    expect(group.label).toBe('A → B');
+    expect(getBetterListColumnReferenceMenuLabel(group.options[0])).toBe('C');
+  });
+
   it('persists disambiguated parent and leaf labels for runtime column menus', () => {
     const fields: readonly IBetterListFieldDescriptor[] = [
       {

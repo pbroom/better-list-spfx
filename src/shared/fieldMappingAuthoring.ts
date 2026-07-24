@@ -435,7 +435,9 @@ function columnReferenceParentLabel(
   option: IBetterListColumnReferenceOption,
   fallback: string
 ): string {
-  const separator = option.label.indexOf(' → ');
+  // Match getBetterListColumnReferenceMenuLabel: split on the last separator so
+  // legacy labels like "A → B → C" keep parent "A → B" and leaf "C".
+  const separator = option.label.lastIndexOf(' → ');
   return separator >= 0 ? option.label.slice(0, separator) : fallback;
 }
 
