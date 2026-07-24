@@ -261,6 +261,39 @@ test('preparation rejects an SPPKG whose embedded version does not match the tag
   }
 });
 
+test('preparation rejects remote EB Garamond font URLs', async () => {
+  const rootDir = await createFixture();
+  const outputDir = path.join(rootDir, 'release-output');
+  try {
+    const stylesheetPath = path.join(
+      rootDir,
+      'release',
+      'assets',
+      'better-list-eb-garamond.css',
+    );
+    const stylesheet = await readFile(stylesheetPath, 'utf8');
+    await writeFile(
+      stylesheetPath,
+      stylesheet.replace(
+        './better-list-eb-garamond-latin-wght-normal.woff2',
+        'https://fonts.gstatic.com/eb-garamond.woff2',
+      ),
+    );
+    await assert.rejects(
+      prepareReleaseArtifacts({
+        rootDir,
+        outputDir,
+        tag: TAG,
+        commit: COMMIT,
+        sourceDateEpoch: SOURCE_DATE_EPOCH,
+      }),
+      /local, relative font URLs/,
+    );
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test('release preparation synchronizes four-part SPFx solution and feature versions', async () => {
   const rootDir = await createFixture();
   try {

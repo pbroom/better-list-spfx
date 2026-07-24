@@ -1,7 +1,8 @@
-import { readdir, readFile } from "node:fs/promises";
+import { access, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 const distDir = path.resolve("dist");
+const releaseAssetsDir = path.resolve("release", "assets");
 const chunkNames = (await readdir(distDir)).filter(
   (name) =>
     name.startsWith("chunk.source-editor-monaco") && name.endsWith(".js"),
@@ -31,4 +32,17 @@ if (moduleImeSelector.test(bundledSource)) {
   );
 }
 
-console.log(`Verified global Monaco CSS in ${chunkNames.join(", ")}`);
+await Promise.all(
+  chunkNames.map(async (name) => {
+    const releaseChunk = path.join(releaseAssetsDir, name);
+    try {
+      await access(releaseChunk);
+    } catch {
+      throw new Error(
+        `The bundled Monaco editor chunk is missing from the flat CDN payload: ${name}`,
+      );
+    }
+  }),
+);
+
+console.log(`Verified bundled Monaco CSS and flat CDN payload in ${chunkNames.join(", ")}`);

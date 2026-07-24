@@ -78,6 +78,14 @@ Retain CDN files for every package version still installed by a tenant. Use a
 distinct flat CDN base path per installed version, or treat each upload as an
 in-place upgrade.
 
+### Monaco editor runtime
+
+Monaco is bundled by the SPFx production build into the `chunk.source-editor-monaco_*.js`
+runtime chunk and its companion root-level assets (such as `codicon_*.ttf`). It does not
+load `monaco-editor/min/vs` from a separate public CDN. Those hashed, flat files are included
+in `cdnFiles`; upload them with the rest of the payload. The production ship check verifies
+the Monaco chunk is present in `release/assets` before artifacts are packaged.
+
 ## Manual recovery
 
 If the tag publication workflow fails after Release Please has already created
