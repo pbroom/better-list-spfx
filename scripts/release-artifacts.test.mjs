@@ -43,8 +43,7 @@ async function createFixture({ placeholderCdn = false, sppkgVersion = `${VERSION
   const rootDir = await mkdtemp(path.join(os.tmpdir(), 'better-list-release-test-'));
   await Promise.all([
     mkdir(path.join(rootDir, 'config'), { recursive: true }),
-    mkdir(path.join(rootDir, 'release', 'assets', 'chunks'), { recursive: true }),
-    mkdir(path.join(rootDir, 'release', 'manifests'), { recursive: true }),
+    mkdir(path.join(rootDir, 'release', 'assets'), { recursive: true }),
     mkdir(path.join(rootDir, 'sharepoint', 'solution'), { recursive: true }),
   ]);
   await Promise.all([
@@ -72,8 +71,7 @@ async function createFixture({ placeholderCdn = false, sppkgVersion = `${VERSION
         : 'https://cdn.contoso.test/spfx/better-list-spfx/',
     }),
     writeFile(path.join(rootDir, '.nvmrc'), '22.22.3\n'),
-    writeFile(path.join(rootDir, 'release', 'assets', 'chunks', 'app.js'), 'app();\n'),
-    writeFile(path.join(rootDir, 'release', 'manifests', 'manifest.js'), '{}\n'),
+    writeFile(path.join(rootDir, 'release', 'assets', 'app.js'), 'app();\n'),
   ]);
 
   const packageFixture = path.join(rootDir, 'sppkg-fixture');
@@ -132,13 +130,13 @@ test('constructs and verifies a deterministic release payload manifest', async (
       .trim()
       .split(/\r?\n/);
     assert.deepEqual(zipEntries, [...zipEntries].sort());
-    assert(zipEntries.includes(`better-list-spfx-${VERSION}/RELEASE-MANIFEST.json`));
+    assert(zipEntries.includes('RELEASE-MANIFEST.json'));
 
     const manifest = JSON.parse(
       run('unzip', [
         '-p',
         prepared.zipPath,
-        `better-list-spfx-${VERSION}/RELEASE-MANIFEST.json`,
+        'RELEASE-MANIFEST.json',
       ]),
     );
     assert.equal(manifest.version, VERSION);
@@ -149,10 +147,11 @@ test('constructs and verifies a deterministic release payload manifest', async (
       [...manifest.files.map((file) => file.path)].sort(),
     );
     assert.equal(
-      manifest.files.find((file) => file.path === `sharepoint/better-list-spfx-${VERSION}.sppkg`)
+      manifest.files.find((file) => file.path === `better-list-spfx-${VERSION}.sppkg`)
         .sha256,
       await sha256(prepared.standalonePath),
     );
+    assert.deepEqual(manifest.cdnFiles, ['app.js']);
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }
@@ -173,6 +172,27 @@ test('verification detects a changed release asset', async () => {
     await assert.rejects(
       verifyReleaseArtifacts({ rootDir, outputDir, tag: TAG, commit: COMMIT }),
       /Checksum mismatch/,
+    );
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('preparation rejects nested CDN assets rather than flattening colliding filenames', async () => {
+  const rootDir = await createFixture();
+  const outputDir = path.join(rootDir, 'release-output');
+  try {
+    await mkdir(path.join(rootDir, 'release', 'assets', 'nested'), { recursive: true });
+    await writeFile(path.join(rootDir, 'release', 'assets', 'nested', 'app.js'), 'nested app();\n');
+    await assert.rejects(
+      prepareReleaseArtifacts({
+        rootDir,
+        outputDir,
+        tag: TAG,
+        commit: COMMIT,
+        sourceDateEpoch: SOURCE_DATE_EPOCH,
+      }),
+      /CDN payload must be flat; found nested asset: nested\/app\.js/,
     );
   } finally {
     await rm(rootDir, { recursive: true, force: true });

@@ -17,7 +17,7 @@
     "test:release": "node --test scripts/release-artifacts.test.mjs",
     "serve": "heft start --clean",
     "start": "heft start --clean",
-    "ship": "heft test --clean --production && node scripts/verify-monaco-css.mjs && node scripts/copy-monaco-assets.mjs --app . && heft package-solution --production",
+    "ship": "heft test --clean --production && node scripts/verify-monaco-css.mjs && heft package-solution --production",
     "version:check": "node scripts/sync-spfx-version.mjs --check",
     "version:sync": "node scripts/sync-spfx-version.mjs",
     "eject-webpack": "heft eject-webpack"
