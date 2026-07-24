@@ -20,6 +20,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { inspectVersions } from './sync-spfx-version.mjs';
+import { validateEbGaramondAssets } from './copy-eb-garamond-assets.mjs';
 
 const TAG_PATTERN = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
@@ -323,6 +324,7 @@ export async function prepareReleaseArtifacts({
       throw new Error(`Production build did not generate release/${label}`);
     }
   }
+  await validateEbGaramondAssets(generatedAssets);
 
   await mkdir(outputDir, { recursive: false });
   const standaloneName = `better-list-spfx-${versions.version}.sppkg`;
@@ -458,6 +460,7 @@ export async function verifyReleaseArtifacts({
   try {
     run('unzip', ['-q', zipPath, '-d', extractParent]);
     const bundleRoot = path.join(extractParent, bundleName);
+    await validateEbGaramondAssets(path.join(bundleRoot, 'assets'));
     const manifest = await readJson(path.join(bundleRoot, MANIFEST_NAME));
     if (
       manifest.schemaVersion !== 1 ||
