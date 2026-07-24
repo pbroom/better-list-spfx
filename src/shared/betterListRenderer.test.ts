@@ -75,9 +75,11 @@ describe('Better List Griffel renderer', () => {
     observer.observe(targetDocument.head, { childList: true });
     const mountNode = targetDocument.createElement('div');
     targetDocument.body.appendChild(mountNode);
+    let isMounted = false;
 
     const renderer = getBetterListRenderer(targetDocument);
     const renderWithTheme = (theme: typeof webLightTheme): void => {
+      isMounted = true;
       ReactDom.render(
         React.createElement(
           BetterListFluentRoot,
@@ -94,47 +96,58 @@ describe('Better List Griffel renderer', () => {
     const isolatedThemeSelector =
       `style[data-better-list-griffel][id^="${betterListFluentIdPrefix}fui-FluentProvider"]`;
 
-    renderWithTheme(webLightTheme);
-    const isolatedThemeStyles = targetDocument.head.querySelectorAll<HTMLStyleElement>(
-      isolatedThemeSelector
-    );
+    try {
+      renderWithTheme(webLightTheme);
+      const isolatedThemeStyles = targetDocument.head.querySelectorAll<HTMLStyleElement>(
+        isolatedThemeSelector
+      );
 
-    expect(isolatedThemeStyles).toHaveLength(1);
-    expect(isolatedThemeStyles[0]).not.toBe(hostStyle);
-    expect(isolatedThemeStyles[0].id).toContain(`${betterListFluentIdPrefix}fui-FluentProvider`);
-    expect(isolatedThemeStyles[0].sheet?.cssRules.length).toBeGreaterThan(0);
-    expect(
-      targetDocument.head.querySelectorAll(
-        'style[data-make-styles-bucket]:not([data-better-list-griffel])'
-      )
-    ).toHaveLength(0);
+      expect(isolatedThemeStyles).toHaveLength(1);
+      expect(isolatedThemeStyles[0]).not.toBe(hostStyle);
+      expect(isolatedThemeStyles[0].id).toContain(`${betterListFluentIdPrefix}fui-FluentProvider`);
+      expect(isolatedThemeStyles[0].sheet?.cssRules.length).toBeGreaterThan(0);
+      expect(
+        targetDocument.head.querySelectorAll(
+          'style[data-make-styles-bucket]:not([data-better-list-griffel])'
+        )
+      ).toHaveLength(0);
 
-    renderWithTheme({
-      ...webLightTheme,
-      colorNeutralForeground1: '#123456'
-    });
+      renderWithTheme({
+        ...webLightTheme,
+        colorNeutralForeground1: '#123456'
+      });
 
-    expect(targetDocument.getElementById('fui-FluentProvider1')).toBe(hostStyle);
-    expect(hostStyle.sheet?.cssRules.length).toBe(originalHostRuleCount);
-    expect(hostStyle.sheet?.cssRules[0]?.cssText).toBe(originalHostRule);
-    expect(targetDocument.head.querySelectorAll(isolatedThemeSelector)).toHaveLength(1);
+      expect(targetDocument.getElementById('fui-FluentProvider1')).toBe(hostStyle);
+      expect(hostStyle.sheet?.cssRules.length).toBe(originalHostRuleCount);
+      expect(hostStyle.sheet?.cssRules[0]?.cssText).toBe(originalHostRule);
+      expect(targetDocument.head.querySelectorAll(isolatedThemeSelector)).toHaveLength(1);
 
-    ReactDom.unmountComponentAtNode(mountNode);
-    const headMutations = observer.takeRecords();
-    const removedNodes = headMutations.reduce<Node[]>(
-      (nodes, record) => nodes.concat(Array.from(record.removedNodes)),
-      []
-    );
+      ReactDom.unmountComponentAtNode(mountNode);
+      isMounted = false;
+      const headMutations = observer.takeRecords();
+      const removedNodes = headMutations.reduce<Node[]>(
+        (nodes, record) => nodes.concat(Array.from(record.removedNodes)),
+        []
+      );
 
-    expect(targetDocument.getElementById('fui-FluentProvider1')).toBe(hostStyle);
-    expect(hostStyle.textContent).toBe('.sharepoint-publish { color: white; }');
-    expect(hostStyle.sheet?.cssRules.length).toBe(originalHostRuleCount);
-    expect(hostStyle.sheet?.cssRules[0]?.cssText).toBe(originalHostRule);
-    expect(removedNodes).not.toContain(hostStyle);
-    expect(targetDocument.head.querySelectorAll('style[id="fui-FluentProvider1"]')).toHaveLength(1);
-    observer.disconnect();
-    hostStyle.remove();
-    mountNode.remove();
+      expect(targetDocument.getElementById('fui-FluentProvider1')).toBe(hostStyle);
+      expect(hostStyle.textContent).toBe('.sharepoint-publish { color: white; }');
+      expect(hostStyle.sheet?.cssRules.length).toBe(originalHostRuleCount);
+      expect(hostStyle.sheet?.cssRules[0]?.cssText).toBe(originalHostRule);
+      expect(removedNodes).not.toContain(hostStyle);
+      expect(targetDocument.head.querySelectorAll('style[id="fui-FluentProvider1"]')).toHaveLength(1);
+    } finally {
+      observer.disconnect();
+      try {
+        if (isMounted) {
+          // eslint-disable-next-line @rushstack/pair-react-dom-render-unmount -- failure-path cleanup
+          ReactDom.unmountComponentAtNode(mountNode);
+        }
+      } finally {
+        hostStyle.remove();
+        mountNode.remove();
+      }
+    }
   });
 
   it('restores critical portal styles when an instance is removed and later re-added', () => {
