@@ -21,11 +21,17 @@ import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { inspectVersions } from './sync-spfx-version.mjs';
 import { validateEbGaramondAssets } from './copy-eb-garamond-assets.mjs';
+import {
+  CDN_TEMPLATE_SENTINEL,
+  inspectArchiveEntries,
+} from './materialize-cdn-package.mjs';
 
 const TAG_PATTERN = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
 const MANIFEST_NAME = 'RELEASE-MANIFEST.json';
 const INSTALL_NAME = 'INSTALL.md';
+const MATERIALIZER_NAME = 'materialize-cdn-package.mjs';
+const EMBEDDED_PACKAGE_BASE_PATH = 'HTTPS://SPCLIENTSIDEASSETLIBRARY/';
 
 function comparePaths(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
@@ -40,10 +46,6 @@ function parseArguments(argv) {
       throw new Error(`Unexpected argument: ${argument}`);
     }
     const name = argument.slice(2);
-    if (name === 'allow-placeholder-cdn') {
-      options.allowPlaceholderCdn = true;
-      continue;
-    }
     const value = rest[index + 1];
     if (!value || value.startsWith('--')) {
       throw new Error(`Missing value for --${name}`);
@@ -57,16 +59,19 @@ function parseArguments(argv) {
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
     cwd: options.cwd,
-    encoding: 'utf8',
+    encoding: options.binary ? null : 'utf8',
     env: { ...process.env, ...options.env },
     input: options.input,
+    maxBuffer: 256 * 1024 * 1024,
     stdio: options.capture ? 'pipe' : options.input ? ['pipe', 'inherit', 'inherit'] : 'inherit',
   });
   if (result.error) {
     throw result.error;
   }
   if (result.status !== 0) {
-    const detail = options.capture ? `\n${result.stderr || result.stdout}` : '';
+    const detail = options.capture
+      ? `\n${result.stderr?.toString('utf8') || result.stdout?.toString('utf8')}`
+      : '';
     throw new Error(`${command} exited with status ${result.status}${detail}`);
   }
   return options.capture ? result.stdout : '';
@@ -87,6 +92,10 @@ async function readJson(filePath) {
 
 async function sha256(filePath) {
   const content = await readFile(filePath);
+  return createHash('sha256').update(content).digest('hex');
+}
+
+function sha256Content(content) {
   return createHash('sha256').update(content).digest('hex');
 }
 
@@ -190,27 +199,6 @@ function validateReleaseIdentity(tag, commit, expectedVersion) {
   }
 }
 
-async function readCdnBasePath(rootDir, allowPlaceholderCdn) {
-  const config = await readJson(path.join(rootDir, 'config', 'write-manifests.json'));
-  let parsed;
-  try {
-    parsed = new URL(config.cdnBasePath);
-  } catch {
-    throw new Error(`config/write-manifests.json has an invalid cdnBasePath: ${config.cdnBasePath}`);
-  }
-  if (parsed.protocol !== 'https:') {
-    throw new Error('CDN base path must use HTTPS');
-  }
-  const isPlaceholder =
-    parsed.hostname === 'example.com' || parsed.hostname.endsWith('.example.com');
-  if (isPlaceholder && !allowPlaceholderCdn) {
-    throw new Error(
-      'Refusing to publish assets for the placeholder example.com CDN. Configure config/write-manifests.json first.',
-    );
-  }
-  return config.cdnBasePath;
-}
-
 async function normalizeTimes(rootDir, epochSeconds) {
   const date = new Date(epochSeconds * 1000);
   const files = await walkFiles(rootDir);
@@ -244,21 +232,44 @@ async function canonicalizeZip(sourcePath, destinationPath, epochSeconds) {
   }
 }
 
-function installationText({ cdnBasePath, packageName, version }) {
-  return `# Better List ${version} installation
+function standaloneInstallationText({ packageName, version }) {
+  return `# Better List ${version} self-contained installation
 
-This bundle was built from the matching immutable GitHub release tag.
+This archive was built from the matching immutable GitHub release tag. The SharePoint package
+contains its client-side assets and does not require a separately configured CDN.
 
-## CDN deployment
+1. Upload \`${packageName}\` to the SharePoint tenant App Catalog.
+2. Deploy the app, approve any tenant prompts, and add Better List to a modern page.
 
-1. Extract this archive. Its CDN runtime files are flat at the archive root.
-2. Upload the files listed in \`RELEASE-MANIFEST.json\` under \`cdnFiles\` without renaming.
-3. Serve those files from \`${cdnBasePath}\`.
-4. Upload \`${packageName}\` to the SharePoint tenant App Catalog.
-5. Deploy the app, approve any tenant prompts, and add Better List to a modern page.
+Keep \`RELEASE-MANIFEST.json\` with the package as its provenance and checksum record.
+`;
+}
 
-Keep the CDN files in place while this package version is installed. The separately downloadable
-\`${packageName}\` is byte-identical to the package included here.
+function cdnKitInstallationText({ templateName, version }) {
+  return `# Better List ${version} CDN deployment kit
+
+This kit is URL-agnostic. The included \`${templateName}\` is intentionally not deployable until
+it is materialized with the final HTTPS CDN base path.
+
+## Create the URL-bound SharePoint package
+
+1. Extract the kit on a machine with Node.js 22, \`zip\`, and \`unzip\`.
+2. Choose a version-specific HTTPS base URL whose directory will contain every file listed under
+   \`cdnFiles\` in \`RELEASE-MANIFEST.json\`.
+3. Run:
+
+   \`node ${MATERIALIZER_NAME} \\
+     --template ${templateName} \\
+     --cdn-base-path https://cdn.example.test/spfx/better-list/${version}/\`
+
+   Replace the example.test URL with the real deployment URL. The command writes a final
+   \`.sppkg\` and a matching \`.sha256\` file.
+4. Upload the flat CDN files without renaming them and serve them from that exact base URL.
+5. Upload the materialized \`.sppkg\` to the SharePoint tenant App Catalog, deploy it, and add
+   Better List to a modern page.
+
+Do not upload the template package. Retain the CDN files while the materialized package is
+installed.
 `;
 }
 
@@ -280,11 +291,146 @@ async function buildManifest(bundleRoot, metadata) {
     spfxVersion: metadata.spfxVersion,
     tag: metadata.tag,
     commit: metadata.commit,
-    cdnBasePath: metadata.cdnBasePath,
+    artifactType: metadata.artifactType,
     nodeVersion: metadata.nodeVersion,
-    cdnFiles: metadata.cdnFiles,
+    productId: metadata.productId,
+    sourceDateEpoch: metadata.sourceDateEpoch,
     files,
+    ...(metadata.cdnFiles ? { cdnFiles: metadata.cdnFiles } : {}),
+    ...(metadata.templateBasePath ? { templateBasePath: metadata.templateBasePath } : {}),
   };
+}
+
+async function writeBundleManifest(bundleRoot, metadata) {
+  const manifest = await buildManifest(bundleRoot, metadata);
+  await writeFile(
+    path.join(bundleRoot, MANIFEST_NAME),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+  );
+}
+
+async function createDeterministicBundle(bundleRoot, destinationPath, epochSeconds) {
+  await normalizeTimes(bundleRoot, epochSeconds);
+  const archiveFiles = await walkFiles(bundleRoot);
+  run('zip', ['-0', '-X', '-q', destinationPath, '-@'], {
+    cwd: bundleRoot,
+    env: { TZ: 'UTC' },
+    input: `${archiveFiles.join('\n')}\n`,
+  });
+}
+
+function readComponentXmlDocuments(sppkgPath) {
+  const documents = [];
+  for (const entry of listZipEntries(sppkgPath).filter(
+    (file) => file.endsWith('.xml') && !file.includes('['),
+  )) {
+    const content = run('unzip', ['-p', sppkgPath, entry], { capture: true });
+    if (content.includes('<ClientSideComponent')) {
+      documents.push({ entry, content });
+    }
+  }
+  if (documents.length === 0) {
+    throw new Error(`${path.basename(sppkgPath)} has no ClientSideComponent manifest`);
+  }
+  return documents;
+}
+
+function validateStandaloneSppkg(sppkgPath, identity, cdnFiles, cdnAssetHashes) {
+  validateSppkg(sppkgPath, identity);
+  const entries = listZipEntries(sppkgPath).map((entry) => entry.replaceAll('\\', '/'));
+  const embeddedEntries = entries.filter(
+    (entry) => entry.includes('ClientSideAssets/') && !entry.endsWith('/'),
+  );
+  if (embeddedEntries.length === 0) {
+    throw new Error('Self-contained SPPKG has no embedded ClientSideAssets');
+  }
+  const embeddedAssets = embeddedEntries.map((entry) => {
+    const marker = 'ClientSideAssets/';
+    const relativePath = entry.slice(entry.indexOf(marker) + marker.length);
+    const segments = relativePath.split('/');
+    if (segments.length !== 1 || !segments[0]) {
+      throw new Error(`Self-contained SPPKG has an unexpected embedded asset path: ${entry}`);
+    }
+    return { entry, file: segments[0] };
+  });
+  const embeddedFiles = embeddedAssets.map(({ file }) => file).sort(comparePaths);
+  if (JSON.stringify(embeddedFiles) !== JSON.stringify(cdnFiles)) {
+    throw new Error(
+      `Self-contained SPPKG assets do not exactly match the CDN payload: ${embeddedFiles.join(', ')}`,
+    );
+  }
+  for (const { entry, file } of embeddedAssets) {
+    const embeddedContent = run('unzip', ['-p', sppkgPath, entry], {
+      binary: true,
+      capture: true,
+    });
+    if (sha256Content(embeddedContent) !== cdnAssetHashes.get(file)) {
+      throw new Error(`Self-contained SPPKG asset bytes do not match the CDN payload: ${file}`);
+    }
+  }
+  const componentXml = readComponentXmlDocuments(sppkgPath)
+    .map(({ content }) => content)
+    .join('\n');
+  if (/cdn\.(?:invalid|example)\b/i.test(componentXml)) {
+    throw new Error('Self-contained SPPKG contains an external CDN placeholder');
+  }
+  if (!componentXml.includes(EMBEDDED_PACKAGE_BASE_PATH)) {
+    throw new Error(`Self-contained SPPKG does not use ${EMBEDDED_PACKAGE_BASE_PATH}`);
+  }
+}
+
+function validateCdnTemplateSppkg(sppkgPath, identity) {
+  validateSppkg(sppkgPath, identity);
+  const entries = listZipEntries(sppkgPath).map((entry) => entry.replaceAll('\\', '/'));
+  if (entries.some((entry) => entry.includes('ClientSideAssets/'))) {
+    throw new Error('CDN template SPPKG unexpectedly embeds ClientSideAssets');
+  }
+  const componentXml = readComponentXmlDocuments(sppkgPath)
+    .map(({ content }) => content)
+    .join('\n');
+  if (!componentXml.includes(CDN_TEMPLATE_SENTINEL)) {
+    throw new Error(`CDN template SPPKG does not contain ${CDN_TEMPLATE_SENTINEL}`);
+  }
+}
+
+async function verifyBundleManifest(bundleRoot, expected) {
+  const manifest = await readJson(path.join(bundleRoot, MANIFEST_NAME));
+  for (const [field, value] of Object.entries(expected)) {
+    if (manifest[field] !== value) {
+      throw new Error(`${expected.artifactType} manifest ${field} does not match the release`);
+    }
+  }
+  const actualPayloadFiles = (await walkFiles(bundleRoot)).filter(
+    (file) => file !== MANIFEST_NAME,
+  );
+  const manifestPaths = manifest.files.map((file) => file.path);
+  if (
+    JSON.stringify(manifestPaths) !== JSON.stringify([...manifestPaths].sort()) ||
+    new Set(manifestPaths).size !== manifestPaths.length
+  ) {
+    throw new Error(`${expected.artifactType} manifest paths must be unique and sorted`);
+  }
+  if (JSON.stringify(actualPayloadFiles) !== JSON.stringify(manifestPaths)) {
+    throw new Error(`${expected.artifactType} files do not exactly match RELEASE-MANIFEST.json`);
+  }
+  for (const entry of manifest.files) {
+    const filePath = path.join(bundleRoot, ...entry.path.split('/'));
+    const fileStat = await stat(filePath);
+    if (fileStat.size !== entry.size || (await sha256(filePath)) !== entry.sha256) {
+      throw new Error(`${expected.artifactType} manifest mismatch for ${entry.path}`);
+    }
+  }
+  if (!Number.isInteger(manifest.sourceDateEpoch) || manifest.sourceDateEpoch < 315532800) {
+    throw new Error(`${expected.artifactType} manifest has an invalid sourceDateEpoch`);
+  }
+  return manifest;
+}
+
+async function verifyCanonicalBundle(archivePath, bundleRoot, sourceDateEpoch, rebuiltPath) {
+  await createDeterministicBundle(bundleRoot, rebuiltPath, sourceDateEpoch);
+  if ((await sha256(archivePath)) !== (await sha256(rebuiltPath))) {
+    throw new Error(`${path.basename(archivePath)} is not the canonical validated archive`);
+  }
 }
 
 export async function prepareReleaseArtifacts({
@@ -293,7 +439,6 @@ export async function prepareReleaseArtifacts({
   tag,
   commit,
   sourceDateEpoch,
-  allowPlaceholderCdn = false,
 }) {
   const versions = await inspectVersions(rootDir);
   if (versions.errors.length > 0) {
@@ -309,103 +454,103 @@ export async function prepareReleaseArtifacts({
     throw new Error(`Output directory already exists: ${outputDir}`);
   }
 
-  const cdnBasePath = await readCdnBasePath(rootDir, allowPlaceholderCdn);
-  const solutionDir = path.join(rootDir, 'sharepoint', 'solution');
-  const solutionEntries = await readdir(solutionDir, { withFileTypes: true });
-  const sppkgFiles = solutionEntries.filter(
-    (entry) => entry.isFile() && entry.name.endsWith('.sppkg'),
-  );
-  if (sppkgFiles.length !== 1) {
-    throw new Error(`Expected exactly one generated SPPKG, found ${sppkgFiles.length}`);
+  const releaseBuildDir = path.join(rootDir, 'release-build');
+  const sourceStandalone = path.join(releaseBuildDir, 'standalone.sppkg');
+  const sourceCdnTemplate = path.join(releaseBuildDir, 'cdn-template.sppkg');
+  const generatedAssets = path.join(releaseBuildDir, 'cdn-assets');
+  const materializerSource = path.join(rootDir, 'scripts', MATERIALIZER_NAME);
+  for (const requiredPath of [sourceStandalone, sourceCdnTemplate, generatedAssets, materializerSource]) {
+    if (!(await exists(requiredPath))) {
+      throw new Error(`Release build input is missing: ${requiredPath}`);
+    }
   }
-  const sourceSppkg = path.join(solutionDir, sppkgFiles[0].name);
   const sppkgIdentity = {
     expectedProductId: versions.solutionConfig.solution.id,
     expectedVersion: versions.spfxVersion,
   };
-  validateSppkg(sourceSppkg, sppkgIdentity);
-
-  const generatedAssets = path.join(rootDir, 'release', 'assets');
-  for (const [label, directory] of [['assets', generatedAssets]]) {
-    if (!(await exists(directory)) || (await walkFiles(directory)).length === 0) {
-      throw new Error(`Production build did not generate release/${label}`);
-    }
-  }
   const cdnFiles = await walkFiles(generatedAssets);
+  if (cdnFiles.length === 0) {
+    throw new Error('CDN deployment kit has no runtime assets');
+  }
   assertFlatCdnPayload(cdnFiles);
   await validateEbGaramondAssets(generatedAssets);
+  const cdnAssetHashes = new Map();
+  for (const file of cdnFiles) {
+    cdnAssetHashes.set(file, await sha256(path.join(generatedAssets, file)));
+  }
+  validateStandaloneSppkg(sourceStandalone, sppkgIdentity, cdnFiles, cdnAssetHashes);
+  validateCdnTemplateSppkg(sourceCdnTemplate, sppkgIdentity);
 
   await mkdir(outputDir, { recursive: false });
-  const standaloneName = `better-list-spfx-${versions.version}.sppkg`;
-  const zipName = `better-list-spfx-cdn-${versions.version}.zip`;
-  const standalonePath = path.join(outputDir, standaloneName);
-  const zipPath = path.join(outputDir, zipName);
-  const checksumsPath = path.join(outputDir, 'SHA256SUMS');
-  await canonicalizeZip(sourceSppkg, standalonePath, epoch);
-  validateSppkg(standalonePath, sppkgIdentity);
+  const standalonePackageName = `better-list-spfx-${versions.version}.sppkg`;
+  const cdnTemplateName = `better-list-spfx-${versions.version}-cdn-template.sppkg`;
+  const standaloneZipName = `better-list-spfx-standalone-${versions.version}.zip`;
+  const cdnKitZipName = `better-list-spfx-cdn-kit-${versions.version}.zip`;
+  const standaloneZipPath = path.join(outputDir, standaloneZipName);
+  const cdnKitZipPath = path.join(outputDir, cdnKitZipName);
+  const nodeVersion = (await readFile(path.join(rootDir, '.nvmrc'), 'utf8')).trim();
 
   const tempParent = await mkdtemp(path.join(os.tmpdir(), 'better-list-release-'));
-  const bundleRoot = path.join(tempParent, 'bundle');
   try {
-    await cp(generatedAssets, bundleRoot, { recursive: true });
-    await copyFile(standalonePath, path.join(bundleRoot, standaloneName));
+    const standaloneRoot = path.join(tempParent, 'standalone');
+    await mkdir(standaloneRoot, { recursive: true });
+    await canonicalizeZip(
+      sourceStandalone,
+      path.join(standaloneRoot, standalonePackageName),
+      epoch,
+    );
     await writeFile(
-      path.join(bundleRoot, INSTALL_NAME),
-      installationText({
-        cdnBasePath,
-        packageName: standaloneName,
+      path.join(standaloneRoot, INSTALL_NAME),
+      standaloneInstallationText({
+        packageName: standalonePackageName,
         version: versions.version,
       }),
     );
-
-    const manifest = await buildManifest(bundleRoot, {
-      cdnBasePath,
-      cdnFiles,
+    await writeBundleManifest(standaloneRoot, {
+      artifactType: 'standalone',
       commit,
-      nodeVersion: (await readFile(path.join(rootDir, '.nvmrc'), 'utf8')).trim(),
+      nodeVersion,
+      productId: versions.solutionConfig.solution.id,
+      sourceDateEpoch: epoch,
       spfxVersion: versions.spfxVersion,
       tag,
       version: versions.version,
     });
-    await writeFile(
-      path.join(bundleRoot, MANIFEST_NAME),
-      `${JSON.stringify(manifest, null, 2)}\n`,
-    );
-    await normalizeTimes(bundleRoot, epoch);
+    await createDeterministicBundle(standaloneRoot, standaloneZipPath, epoch);
 
-    const archiveFiles = await walkFiles(bundleRoot);
-    run('zip', ['-0', '-X', '-q', zipPath, '-@'], {
-      cwd: bundleRoot,
-      env: { TZ: 'UTC' },
-      input: `${archiveFiles.join('\n')}\n`,
+    const cdnKitRoot = path.join(tempParent, 'cdn-kit');
+    await cp(generatedAssets, cdnKitRoot, { recursive: true });
+    await canonicalizeZip(
+      sourceCdnTemplate,
+      path.join(cdnKitRoot, cdnTemplateName),
+      epoch,
+    );
+    await copyFile(materializerSource, path.join(cdnKitRoot, MATERIALIZER_NAME));
+    await writeFile(
+      path.join(cdnKitRoot, INSTALL_NAME),
+      cdnKitInstallationText({
+        templateName: cdnTemplateName,
+        version: versions.version,
+      }),
+    );
+    await writeBundleManifest(cdnKitRoot, {
+      artifactType: 'cdn-deployment-kit',
+      cdnFiles,
+      commit,
+      nodeVersion,
+      productId: versions.solutionConfig.solution.id,
+      sourceDateEpoch: epoch,
+      spfxVersion: versions.spfxVersion,
+      tag,
+      templateBasePath: CDN_TEMPLATE_SENTINEL,
+      version: versions.version,
     });
+    await createDeterministicBundle(cdnKitRoot, cdnKitZipPath, epoch);
   } finally {
     await rm(tempParent, { recursive: true, force: true });
   }
 
-  const releaseAssets = [standaloneName, zipName].sort();
-  const checksumLines = [];
-  for (const assetName of releaseAssets) {
-    checksumLines.push(`${await sha256(path.join(outputDir, assetName))}  ${assetName}`);
-  }
-  await writeFile(checksumsPath, `${checksumLines.join('\n')}\n`);
-
-  return { checksumsPath, standalonePath, zipPath };
-}
-
-function parseChecksums(content) {
-  const checksums = new Map();
-  for (const line of content.trim().split(/\r?\n/)) {
-    const match = /^([0-9a-f]{64})  ([^/\\]+)$/.exec(line);
-    if (!match) {
-      throw new Error(`Invalid SHA256SUMS line: ${line}`);
-    }
-    if (checksums.has(match[2])) {
-      throw new Error(`Duplicate SHA256SUMS entry: ${match[2]}`);
-    }
-    checksums.set(match[2], match[1]);
-  }
-  return checksums;
+  return { cdnKitZipPath, standaloneZipPath };
 }
 
 export async function verifyReleaseArtifacts({
@@ -420,111 +565,152 @@ export async function verifyReleaseArtifacts({
   }
   validateReleaseIdentity(tag, commit, versions.version);
 
-  const standaloneName = `better-list-spfx-${versions.version}.sppkg`;
-  const zipName = `better-list-spfx-cdn-${versions.version}.zip`;
-  const standalonePath = path.join(outputDir, standaloneName);
-  const zipPath = path.join(outputDir, zipName);
-  const checksumsPath = path.join(outputDir, 'SHA256SUMS');
+  const standalonePackageName = `better-list-spfx-${versions.version}.sppkg`;
+  const cdnTemplateName = `better-list-spfx-${versions.version}-cdn-template.sppkg`;
+  const standaloneZipName = `better-list-spfx-standalone-${versions.version}.zip`;
+  const cdnKitZipName = `better-list-spfx-cdn-kit-${versions.version}.zip`;
+  const standaloneZipPath = path.join(outputDir, standaloneZipName);
+  const cdnKitZipPath = path.join(outputDir, cdnKitZipName);
   const outputFiles = (await readdir(outputDir, { withFileTypes: true }))
     .filter((entry) => entry.isFile())
     .map((entry) => entry.name)
     .sort();
-  const expectedOutputFiles = ['SHA256SUMS', standaloneName, zipName].sort();
+  const expectedOutputFiles = [standaloneZipName, cdnKitZipName].sort();
   if (JSON.stringify(outputFiles) !== JSON.stringify(expectedOutputFiles)) {
     throw new Error(`Unexpected release output files: ${outputFiles.join(', ')}`);
-  }
-
-  const checksums = parseChecksums(await readFile(checksumsPath, 'utf8'));
-  if (
-    checksums.size !== 2 ||
-    !checksums.has(standaloneName) ||
-    !checksums.has(zipName)
-  ) {
-    throw new Error('SHA256SUMS must contain exactly the standalone SPPKG and CDN ZIP');
-  }
-  for (const [assetName, expectedHash] of checksums) {
-    const actualHash = await sha256(path.join(outputDir, assetName));
-    if (actualHash !== expectedHash) {
-      throw new Error(`Checksum mismatch for ${assetName}`);
-    }
   }
 
   const sppkgIdentity = {
     expectedProductId: versions.solutionConfig.solution.id,
     expectedVersion: versions.spfxVersion,
   };
-  validateSppkg(standalonePath, sppkgIdentity);
-  run('unzip', ['-tq', zipPath], { capture: true });
-  const zipEntries = listZipEntries(zipPath);
-  assertFlatCdnPayload(zipEntries);
-
-  const extractParent = await mkdtemp(path.join(os.tmpdir(), 'better-list-verify-'));
+  const nodeVersion = (await readFile(path.join(rootDir, '.nvmrc'), 'utf8')).trim();
+  const extractParent = await mkdtemp(path.join(os.tmpdir(), 'better-list-release-verify-'));
   try {
-    run('unzip', ['-q', zipPath, '-d', extractParent]);
-    const bundleRoot = extractParent;
-    await validateEbGaramondAssets(bundleRoot);
-    const manifest = await readJson(path.join(bundleRoot, MANIFEST_NAME));
-    if (
-      manifest.schemaVersion !== 1 ||
-      manifest.version !== versions.version ||
-      manifest.spfxVersion !== versions.spfxVersion ||
-      manifest.tag !== tag ||
-      manifest.commit !== commit ||
-      manifest.cdnBasePath !==
-        (await readJson(path.join(rootDir, 'config', 'write-manifests.json'))).cdnBasePath ||
-      manifest.nodeVersion !== (await readFile(path.join(rootDir, '.nvmrc'), 'utf8')).trim()
-    ) {
-      throw new Error('CDN bundle manifest release identity does not match the requested release');
+    const standaloneRoot = path.join(extractParent, 'standalone');
+    const cdnKitRoot = path.join(extractParent, 'cdn-kit');
+    await Promise.all([
+      mkdir(standaloneRoot, { recursive: true }),
+      mkdir(cdnKitRoot, { recursive: true }),
+    ]);
+    for (const [archivePath, destination] of [
+      [standaloneZipPath, standaloneRoot],
+      [cdnKitZipPath, cdnKitRoot],
+    ]) {
+      run('unzip', ['-tq', archivePath], { capture: true });
+      inspectArchiveEntries(archivePath, {
+        maxArchiveBytes: 256 * 1024 * 1024,
+        maxCompressionRatio: 500,
+        maxEntries: 4096,
+        maxEntryBytes: 128 * 1024 * 1024,
+        maxUncompressedBytes: 512 * 1024 * 1024,
+      });
+      assertSafeArchiveEntries(listZipEntries(archivePath), path.basename(archivePath));
+      run('unzip', ['-q', archivePath, '-d', destination]);
     }
 
-    const actualPayloadFiles = (await walkFiles(bundleRoot)).filter(
-      (file) => file !== MANIFEST_NAME,
+    const standaloneManifest = await verifyBundleManifest(standaloneRoot, {
+      artifactType: 'standalone',
+      commit,
+      nodeVersion,
+      productId: versions.solutionConfig.solution.id,
+      schemaVersion: 1,
+      spfxVersion: versions.spfxVersion,
+      tag,
+      version: versions.version,
+    });
+    const cdnKitManifest = await verifyBundleManifest(cdnKitRoot, {
+      artifactType: 'cdn-deployment-kit',
+      commit,
+      nodeVersion,
+      productId: versions.solutionConfig.solution.id,
+      schemaVersion: 1,
+      spfxVersion: versions.spfxVersion,
+      tag,
+      templateBasePath: CDN_TEMPLATE_SENTINEL,
+      version: versions.version,
+    });
+    await verifyCanonicalBundle(
+      standaloneZipPath,
+      standaloneRoot,
+      standaloneManifest.sourceDateEpoch,
+      path.join(extractParent, 'standalone-rebuilt.zip'),
     );
-    const manifestPaths = manifest.files.map((file) => file.path);
-    if (
-      JSON.stringify(manifestPaths) !== JSON.stringify([...manifestPaths].sort()) ||
-      new Set(manifestPaths).size !== manifestPaths.length
-    ) {
-      throw new Error('CDN bundle manifest paths must be unique and sorted');
-    }
-    if (JSON.stringify(actualPayloadFiles) !== JSON.stringify(manifestPaths)) {
-      throw new Error('CDN bundle files do not exactly match RELEASE-MANIFEST.json');
-    }
-    if (!Array.isArray(manifest.cdnFiles) || manifest.cdnFiles.length === 0) {
-      throw new Error('CDN bundle manifest does not list CDN files');
-    }
-    assertFlatCdnPayload(manifest.cdnFiles);
-    if (new Set(manifest.cdnFiles).size !== manifest.cdnFiles.length) {
-      throw new Error('CDN bundle manifest CDN files must be unique');
-    }
-    if (JSON.stringify(manifest.cdnFiles) !== JSON.stringify([...manifest.cdnFiles].sort())) {
-      throw new Error('CDN bundle manifest CDN files must be sorted');
-    }
-    const expectedCdnFiles = actualPayloadFiles.filter(
-      (file) => file !== MANIFEST_NAME && file !== INSTALL_NAME && file !== standaloneName,
+    await verifyCanonicalBundle(
+      cdnKitZipPath,
+      cdnKitRoot,
+      cdnKitManifest.sourceDateEpoch,
+      path.join(extractParent, 'cdn-kit-rebuilt.zip'),
     );
-    if (JSON.stringify(manifest.cdnFiles) !== JSON.stringify(expectedCdnFiles)) {
-      throw new Error('CDN bundle manifest CDN files do not exactly match the flat payload');
+    if (!Array.isArray(cdnKitManifest.cdnFiles) || cdnKitManifest.cdnFiles.length === 0) {
+      throw new Error('CDN deployment kit manifest does not list CDN files');
     }
-
-    for (const entry of manifest.files) {
-      const filePath = path.join(bundleRoot, ...entry.path.split('/'));
-      const fileStat = await stat(filePath);
-      if (fileStat.size !== entry.size || (await sha256(filePath)) !== entry.sha256) {
-        throw new Error(`CDN bundle manifest mismatch for ${entry.path}`);
-      }
+    assertFlatCdnPayload(cdnKitManifest.cdnFiles);
+    if (
+      JSON.stringify(cdnKitManifest.cdnFiles) !==
+        JSON.stringify([...cdnKitManifest.cdnFiles].sort()) ||
+      new Set(cdnKitManifest.cdnFiles).size !== cdnKitManifest.cdnFiles.length
+    ) {
+      throw new Error('CDN deployment kit files must be unique and sorted');
     }
+    const expectedCdnFiles = (await walkFiles(cdnKitRoot)).filter(
+      (file) =>
+        ![
+          MANIFEST_NAME,
+          INSTALL_NAME,
+          MATERIALIZER_NAME,
+          cdnTemplateName,
+        ].includes(file),
+    );
+    if (JSON.stringify(cdnKitManifest.cdnFiles) !== JSON.stringify(expectedCdnFiles)) {
+      throw new Error('CDN deployment kit manifest does not exactly list the runtime payload');
+    }
+    await validateEbGaramondAssets(cdnKitRoot);
+    const cdnAssetHashes = new Map();
+    for (const file of cdnKitManifest.cdnFiles) {
+      cdnAssetHashes.set(file, await sha256(path.join(cdnKitRoot, file)));
+    }
+    validateStandaloneSppkg(
+      path.join(standaloneRoot, standalonePackageName),
+      sppkgIdentity,
+      cdnKitManifest.cdnFiles,
+      cdnAssetHashes,
+    );
+    validateCdnTemplateSppkg(path.join(cdnKitRoot, cdnTemplateName), sppkgIdentity);
 
-    const bundledSppkg = path.join(bundleRoot, standaloneName);
-    validateSppkg(bundledSppkg, sppkgIdentity);
-    if ((await sha256(bundledSppkg)) !== (await sha256(standalonePath))) {
-      throw new Error('Bundled SPPKG is not byte-identical to the standalone release asset');
+    const materializedPackage = path.join(extractParent, 'materialized.sppkg');
+    run(
+      process.execPath,
+      [
+        path.join(cdnKitRoot, MATERIALIZER_NAME),
+        '--template',
+        path.join(cdnKitRoot, cdnTemplateName),
+        '--cdn-base-path',
+        'https://cdn.contoso.test/spfx/better-list/',
+        '--output',
+        materializedPackage,
+      ],
+      { capture: true },
+    );
+    validateSppkg(materializedPackage, sppkgIdentity);
+    const materializedEntries = listZipEntries(materializedPackage);
+    if (materializedEntries.some((entry) => entry.includes('ClientSideAssets/'))) {
+      throw new Error('Materialized CDN SPPKG unexpectedly embeds ClientSideAssets');
+    }
+    const materializedXml = readComponentXmlDocuments(materializedPackage)
+      .map(({ content }) => content)
+      .join('\n');
+    if (
+      !materializedXml.includes('https://cdn.contoso.test/spfx/better-list/') ||
+      materializedXml.includes(CDN_TEMPLATE_SENTINEL)
+    ) {
+      throw new Error('Materialized CDN SPPKG does not contain only the requested CDN base path');
     }
   } finally {
     await rm(extractParent, { recursive: true, force: true });
   }
 
-  return { standalonePath, zipPath, checksumsPath };
+  return { cdnKitZipPath, standaloneZipPath };
 }
 
 async function main() {
@@ -538,7 +724,6 @@ async function main() {
       tag: options.tag,
       commit: options.commit,
       sourceDateEpoch: options.sourceDateEpoch,
-      allowPlaceholderCdn: options.allowPlaceholderCdn,
     });
     console.log(`Prepared validated release assets in ${outputDir}`);
     return;
@@ -550,7 +735,7 @@ async function main() {
       tag: options.tag,
       commit: options.commit,
     });
-    console.log(`Verified release checksums and archive integrity in ${outputDir}`);
+    console.log(`Verified self-contained and CDN deployment kit archives in ${outputDir}`);
     return;
   }
   throw new Error('Usage: release-artifacts.mjs <prepare|verify> [options]');

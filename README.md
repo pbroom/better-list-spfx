@@ -20,10 +20,9 @@ four-part SPFx versions. Merging that release pull request creates the immutable
 
 The tag workflow rebuilds with the supported Node/npm toolchain and attaches:
 
-- `better-list-spfx-X.Y.Z.sppkg` for an existing CDN deployment
-- `better-list-spfx-cdn-X.Y.Z.zip` with the identical package, CDN assets,
-  manifests, checksums, and installation instructions
-- `SHA256SUMS` for the two downloadable artifacts
+- `better-list-spfx-standalone-X.Y.Z.zip` with a self-contained `.sppkg`
+- `better-list-spfx-cdn-kit-X.Y.Z.zip` with flat CDN assets, a non-deployable
+  package template, and a script that binds the final HTTPS CDN URL
 
 See [docs/releases.md](docs/releases.md) for the commit rules, release
 operations, prerequisites, recovery procedure, and both installation paths.
