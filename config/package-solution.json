@@ -4,7 +4,7 @@
     "name": "Better List",
     "id": "f1622b36-0843-4eb0-aca9-df6ac57a15c4",
     "version": "0.1.11.0",
-    "includeClientSideAssets": false,
+    "includeClientSideAssets": true,
     "skipFeatureDeployment": false,
     "isDomainIsolated": false,
     "features": [

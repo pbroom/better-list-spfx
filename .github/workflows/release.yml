@@ -84,8 +84,8 @@ jobs:
       - name: Run release tooling tests
         run: npm run test:release
 
-      - name: Build production SPFx package
-        run: npm run ship
+      - name: Build self-contained package and CDN template
+        run: npm run release:build
 
       - name: Construct release assets
         run: |
@@ -95,7 +95,7 @@ jobs:
             --source-date-epoch "${{ steps.release-ref.outputs.source_date_epoch }}" \
             --output-dir release-output
 
-      - name: Verify checksums and archive integrity
+      - name: Verify package modes and archive integrity
         run: |
           npm run release:verify -- \
             --tag "$RELEASE_TAG" \
@@ -111,10 +111,26 @@ jobs:
           retention-days: 30
 
       - name: Attach artifacts to matching GitHub Release
+        shell: bash
         run: |
+          set -euo pipefail
           mapfile -t assets < <(find release-output -maxdepth 1 -type f -print | sort)
-          if [[ "${#assets[@]}" -ne 3 ]]; then
-            echo "Expected exactly three validated release assets" >&2
+          if [[ "${#assets[@]}" -ne 2 ]]; then
+            echo "Expected exactly two validated release archives" >&2
             exit 1
           fi
           gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+          for asset in "${assets[@]}"; do
+            asset_name="$(basename "$asset")"
+            local_digest="sha256:$(sha256sum "$asset" | cut -d' ' -f1)"
+            remote_digest="$(
+              gh api "repos/$GH_REPO/releases/tags/$RELEASE_TAG" \
+                --jq ".assets[] | select(.name == \"$asset_name\") | .digest"
+            )"
+            if [[ -z "$remote_digest" || "$remote_digest" != "$local_digest" ]]; then
+              echo "GitHub asset digest mismatch for $asset_name" >&2
+              echo "local:  $local_digest" >&2
+              echo "remote: ${remote_digest:-missing}" >&2
+              exit 1
+            fi
+          done
