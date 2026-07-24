@@ -25,6 +25,7 @@ import { validateEbGaramondAssets } from './copy-eb-garamond-assets.mjs';
 const TAG_PATTERN = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
 const MANIFEST_NAME = 'RELEASE-MANIFEST.json';
+const INSTALL_NAME = 'INSTALL.md';
 
 function comparePaths(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
@@ -111,6 +112,14 @@ async function walkFiles(rootDir, relativeDir = '') {
     }
   }
   return files.sort(comparePaths);
+}
+
+function assertFlatCdnPayload(files) {
+  for (const file of files) {
+    if (file.includes('/')) {
+      throw new Error(`CDN payload must be flat; found nested asset: ${file}`);
+    }
+  }
 }
 
 function assertSafeArchiveEntries(entries, archiveName) {
@@ -242,10 +251,11 @@ This bundle was built from the matching immutable GitHub release tag.
 
 ## CDN deployment
 
-1. Upload every file under \`assets/\` and \`manifests/\` without renaming or flattening paths.
-2. Serve those paths from \`${cdnBasePath}\`.
-3. Upload \`sharepoint/${packageName}\` to the SharePoint tenant App Catalog.
-4. Deploy the app, approve any tenant prompts, and add Better List to a modern page.
+1. Extract this archive. Its CDN runtime files are flat at the archive root.
+2. Upload the files listed in \`RELEASE-MANIFEST.json\` under \`cdnFiles\` without renaming.
+3. Serve those files from \`${cdnBasePath}\`.
+4. Upload \`${packageName}\` to the SharePoint tenant App Catalog.
+5. Deploy the app, approve any tenant prompts, and add Better List to a modern page.
 
 Keep the CDN files in place while this package version is installed. The separately downloadable
 \`${packageName}\` is byte-identical to the package included here.
@@ -272,6 +282,7 @@ async function buildManifest(bundleRoot, metadata) {
     commit: metadata.commit,
     cdnBasePath: metadata.cdnBasePath,
     nodeVersion: metadata.nodeVersion,
+    cdnFiles: metadata.cdnFiles,
     files,
   };
 }
@@ -315,15 +326,13 @@ export async function prepareReleaseArtifacts({
   validateSppkg(sourceSppkg, sppkgIdentity);
 
   const generatedAssets = path.join(rootDir, 'release', 'assets');
-  const generatedManifests = path.join(rootDir, 'release', 'manifests');
-  for (const [label, directory] of [
-    ['assets', generatedAssets],
-    ['manifests', generatedManifests],
-  ]) {
+  for (const [label, directory] of [['assets', generatedAssets]]) {
     if (!(await exists(directory)) || (await walkFiles(directory)).length === 0) {
       throw new Error(`Production build did not generate release/${label}`);
     }
   }
+  const cdnFiles = await walkFiles(generatedAssets);
+  assertFlatCdnPayload(cdnFiles);
   await validateEbGaramondAssets(generatedAssets);
 
   await mkdir(outputDir, { recursive: false });
@@ -336,15 +345,12 @@ export async function prepareReleaseArtifacts({
   validateSppkg(standalonePath, sppkgIdentity);
 
   const tempParent = await mkdtemp(path.join(os.tmpdir(), 'better-list-release-'));
-  const bundleName = `better-list-spfx-${versions.version}`;
-  const bundleRoot = path.join(tempParent, bundleName);
+  const bundleRoot = path.join(tempParent, 'bundle');
   try {
-    await mkdir(path.join(bundleRoot, 'sharepoint'), { recursive: true });
-    await cp(generatedAssets, path.join(bundleRoot, 'assets'), { recursive: true });
-    await cp(generatedManifests, path.join(bundleRoot, 'manifests'), { recursive: true });
-    await copyFile(standalonePath, path.join(bundleRoot, 'sharepoint', standaloneName));
+    await cp(generatedAssets, bundleRoot, { recursive: true });
+    await copyFile(standalonePath, path.join(bundleRoot, standaloneName));
     await writeFile(
-      path.join(bundleRoot, 'INSTALL.md'),
+      path.join(bundleRoot, INSTALL_NAME),
       installationText({
         cdnBasePath,
         packageName: standaloneName,
@@ -354,6 +360,7 @@ export async function prepareReleaseArtifacts({
 
     const manifest = await buildManifest(bundleRoot, {
       cdnBasePath,
+      cdnFiles,
       commit,
       nodeVersion: (await readFile(path.join(rootDir, '.nvmrc'), 'utf8')).trim(),
       spfxVersion: versions.spfxVersion,
@@ -366,11 +373,9 @@ export async function prepareReleaseArtifacts({
     );
     await normalizeTimes(bundleRoot, epoch);
 
-    const archiveFiles = (await walkFiles(bundleRoot)).map((file) =>
-      path.posix.join(bundleName, file),
-    );
+    const archiveFiles = await walkFiles(bundleRoot);
     run('zip', ['-0', '-X', '-q', zipPath, '-@'], {
-      cwd: tempParent,
+      cwd: bundleRoot,
       env: { TZ: 'UTC' },
       input: `${archiveFiles.join('\n')}\n`,
     });
@@ -451,16 +456,13 @@ export async function verifyReleaseArtifacts({
   validateSppkg(standalonePath, sppkgIdentity);
   run('unzip', ['-tq', zipPath], { capture: true });
   const zipEntries = listZipEntries(zipPath);
-  const bundleName = `better-list-spfx-${versions.version}`;
-  if (!zipEntries.every((entry) => entry.startsWith(`${bundleName}/`))) {
-    throw new Error(`CDN ZIP contains entries outside ${bundleName}/`);
-  }
+  assertFlatCdnPayload(zipEntries);
 
   const extractParent = await mkdtemp(path.join(os.tmpdir(), 'better-list-verify-'));
   try {
     run('unzip', ['-q', zipPath, '-d', extractParent]);
-    const bundleRoot = path.join(extractParent, bundleName);
-    await validateEbGaramondAssets(path.join(bundleRoot, 'assets'));
+    const bundleRoot = extractParent;
+    await validateEbGaramondAssets(bundleRoot);
     const manifest = await readJson(path.join(bundleRoot, MANIFEST_NAME));
     if (
       manifest.schemaVersion !== 1 ||
@@ -488,11 +490,21 @@ export async function verifyReleaseArtifacts({
     if (JSON.stringify(actualPayloadFiles) !== JSON.stringify(manifestPaths)) {
       throw new Error('CDN bundle files do not exactly match RELEASE-MANIFEST.json');
     }
-    if (!manifestPaths.some((file) => file.startsWith('assets/'))) {
-      throw new Error('CDN bundle does not contain generated assets');
+    if (!Array.isArray(manifest.cdnFiles) || manifest.cdnFiles.length === 0) {
+      throw new Error('CDN bundle manifest does not list CDN files');
     }
-    if (!manifestPaths.some((file) => file.startsWith('manifests/'))) {
-      throw new Error('CDN bundle does not contain generated manifests');
+    assertFlatCdnPayload(manifest.cdnFiles);
+    if (new Set(manifest.cdnFiles).size !== manifest.cdnFiles.length) {
+      throw new Error('CDN bundle manifest CDN files must be unique');
+    }
+    if (JSON.stringify(manifest.cdnFiles) !== JSON.stringify([...manifest.cdnFiles].sort())) {
+      throw new Error('CDN bundle manifest CDN files must be sorted');
+    }
+    const expectedCdnFiles = actualPayloadFiles.filter(
+      (file) => file !== MANIFEST_NAME && file !== INSTALL_NAME && file !== standaloneName,
+    );
+    if (JSON.stringify(manifest.cdnFiles) !== JSON.stringify(expectedCdnFiles)) {
+      throw new Error('CDN bundle manifest CDN files do not exactly match the flat payload');
     }
 
     for (const entry of manifest.files) {
@@ -503,7 +515,7 @@ export async function verifyReleaseArtifacts({
       }
     }
 
-    const bundledSppkg = path.join(bundleRoot, 'sharepoint', standaloneName);
+    const bundledSppkg = path.join(bundleRoot, standaloneName);
     validateSppkg(bundledSppkg, sppkgIdentity);
     if ((await sha256(bundledSppkg)) !== (await sha256(standalonePath))) {
       throw new Error('Bundled SPPKG is not byte-identical to the standalone release asset');

@@ -38,9 +38,8 @@ Every successful GitHub Release has three assets:
 
 - `better-list-spfx-X.Y.Z.sppkg` — the SharePoint package produced by the tag
   build.
-- `better-list-spfx-cdn-X.Y.Z.zip` — the same `.sppkg` plus the exact generated
-  `assets/` and `manifests/` trees, `INSTALL.md`, and
-  `RELEASE-MANIFEST.json`.
+- `better-list-spfx-cdn-X.Y.Z.zip` — the same `.sppkg`, flat CDN runtime files,
+  `INSTALL.md`, and `RELEASE-MANIFEST.json`.
 - `SHA256SUMS` — SHA-256 hashes for the standalone package and CDN ZIP.
 
 `RELEASE-MANIFEST.json` records the release version, four-part SPFx version,
@@ -68,14 +67,24 @@ self-contained package.
 Use the CDN ZIP to deploy a version from scratch.
 
 1. Verify the ZIP against `SHA256SUMS`, then extract it.
-2. Upload every file under `assets/` and `manifests/` without renaming or
-   flattening paths. Serve them from the base URL recorded in
-   `RELEASE-MANIFEST.json`.
-3. Upload the package under `sharepoint/` to the tenant App Catalog.
+2. Upload the flat file names listed in `RELEASE-MANIFEST.json` under
+   `cdnFiles`, without renaming. Serve them from the base URL recorded in the
+   manifest.
+3. Upload the `.sppkg` at the archive root to the tenant App Catalog.
 4. Deploy the app, approve any tenant prompts, and add Better List to a modern
    page.
 
-Retain CDN files for every package version still installed by a tenant.
+Retain CDN files for every package version still installed by a tenant. Use a
+distinct flat CDN base path per installed version, or treat each upload as an
+in-place upgrade.
+
+### Monaco editor runtime
+
+Monaco is bundled by the SPFx production build into the `chunk.source-editor-monaco_*.js`
+runtime chunk and its companion root-level assets (such as `codicon_*.ttf`). It does not
+load `monaco-editor/min/vs` from a separate public CDN. Those hashed, flat files are included
+in `cdnFiles`; upload them with the rest of the payload. The production ship check verifies
+the Monaco chunk is present in `release/assets` before artifacts are packaged.
 
 ## Manual recovery
 

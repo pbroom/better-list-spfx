@@ -1,4 +1,4 @@
-const EB_GARAMOND_STYLESHEET_PATH = 'fonts/eb-garamond/eb-garamond.css';
+const EB_GARAMOND_STYLESHEET_PATH = 'better-list-eb-garamond.css';
 const EB_GARAMOND_STYLESHEET_ATTRIBUTE = 'data-better-list-eb-garamond';
 
 export function resolveEbGaramondStylesheetUrl(

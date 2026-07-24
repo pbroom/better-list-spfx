@@ -1,16 +1,15 @@
 #!/usr/bin/env node
 
-import { access, copyFile, mkdir, readFile, readdir, rm } from 'node:fs/promises';
+import { access, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-export const EB_GARAMOND_ASSET_DIRECTORY = 'fonts/eb-garamond';
-export const EB_GARAMOND_STYLESHEET = 'eb-garamond.css';
-export const EB_GARAMOND_LICENSE = 'OFL.txt';
+export const EB_GARAMOND_STYLESHEET = 'better-list-eb-garamond.css';
+export const EB_GARAMOND_LICENSE = 'better-list-eb-garamond-OFL.txt';
 export const EB_GARAMOND_FONT_FILES = [
-  'eb-garamond-latin-wght-normal.woff2',
-  'eb-garamond-latin-wght-italic.woff2',
+  'better-list-eb-garamond-latin-wght-normal.woff2',
+  'better-list-eb-garamond-latin-wght-italic.woff2',
 ];
 
 const EXPECTED_FILES = [
@@ -30,21 +29,14 @@ async function exists(filePath) {
 }
 
 function assetPath(rootDir, fileName) {
-  return path.join(rootDir, ...EB_GARAMOND_ASSET_DIRECTORY.split('/'), fileName);
+  return path.join(rootDir, fileName);
 }
 
 export async function validateEbGaramondAssets(assetsRoot) {
-  const fontRoot = path.join(assetsRoot, ...EB_GARAMOND_ASSET_DIRECTORY.split('/'));
-  if (!(await exists(fontRoot))) {
-    throw new Error(`Missing EB Garamond asset directory: ${fontRoot}`);
-  }
-
-  const actualFiles = (await readdir(fontRoot, { withFileTypes: true }))
-    .filter((entry) => entry.isFile())
-    .map((entry) => entry.name)
-    .sort();
-  if (JSON.stringify(actualFiles) !== JSON.stringify(EXPECTED_FILES)) {
-    throw new Error(`Unexpected EB Garamond asset files: ${actualFiles.join(', ')}`);
+  for (const file of EXPECTED_FILES) {
+    if (!(await exists(assetPath(assetsRoot, file)))) {
+      throw new Error(`Missing flat EB Garamond asset: ${file}`);
+    }
   }
 
   const stylesheet = await readFile(assetPath(assetsRoot, EB_GARAMOND_STYLESHEET), 'utf8');
@@ -94,24 +86,28 @@ export async function copyEbGaramondAssets({ appDir = process.cwd() } = {}) {
   const packageRoot = path.dirname(
     appRequire.resolve('@fontsource-variable/eb-garamond/package.json'),
   );
-  const sourceRoot = path.join(rootDir, 'assets', ...EB_GARAMOND_ASSET_DIRECTORY.split('/'));
+  const sourceRoot = path.join(rootDir, 'assets', 'fonts', 'eb-garamond');
   const targets = [
     path.join(rootDir, 'release', 'assets'),
     path.join(rootDir, 'temp', 'deploy'),
   ];
 
   for (const assetsRoot of targets) {
-    const targetRoot = path.join(assetsRoot, ...EB_GARAMOND_ASSET_DIRECTORY.split('/'));
-    await rm(targetRoot, { recursive: true, force: true });
-    await mkdir(targetRoot, { recursive: true });
-    await copyFile(
-      path.join(sourceRoot, EB_GARAMOND_STYLESHEET),
-      path.join(targetRoot, EB_GARAMOND_STYLESHEET),
+    await mkdir(assetsRoot, { recursive: true });
+    const sourceStylesheet = await readFile(path.join(sourceRoot, 'eb-garamond.css'), 'utf8');
+    await writeFile(
+      assetPath(assetsRoot, EB_GARAMOND_STYLESHEET),
+      sourceStylesheet
+        .replaceAll('eb-garamond-latin-wght-normal.woff2', EB_GARAMOND_FONT_FILES[0])
+        .replaceAll('eb-garamond-latin-wght-italic.woff2', EB_GARAMOND_FONT_FILES[1]),
     );
-    for (const fontFile of EB_GARAMOND_FONT_FILES) {
-      await copyFile(path.join(packageRoot, 'files', fontFile), path.join(targetRoot, fontFile));
+    for (const [index, fontFile] of EB_GARAMOND_FONT_FILES.entries()) {
+      const sourceName = index === 0
+        ? 'eb-garamond-latin-wght-normal.woff2'
+        : 'eb-garamond-latin-wght-italic.woff2';
+      await copyFile(path.join(packageRoot, 'files', sourceName), assetPath(assetsRoot, fontFile));
     }
-    await copyFile(path.join(packageRoot, 'LICENSE'), path.join(targetRoot, EB_GARAMOND_LICENSE));
+    await copyFile(path.join(packageRoot, 'LICENSE'), assetPath(assetsRoot, EB_GARAMOND_LICENSE));
     await validateEbGaramondAssets(assetsRoot);
   }
 }

@@ -5,14 +5,13 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import {
-  EB_GARAMOND_ASSET_DIRECTORY,
   EB_GARAMOND_FONT_FILES,
   EB_GARAMOND_LICENSE,
   EB_GARAMOND_STYLESHEET,
   validateEbGaramondAssets,
 } from './copy-eb-garamond-assets.mjs';
 
-const STYLESHEET_PATH = `${EB_GARAMOND_ASSET_DIRECTORY}/${EB_GARAMOND_STYLESHEET}`;
+const STYLESHEET_PATH = EB_GARAMOND_STYLESHEET;
 const FORBIDDEN_FONT_HOSTS = /fonts\.googleapis\.com|fonts\.gstatic\.com|cdn\.jsdelivr\.net/i;
 
 async function walkFiles(rootDir, relativeDir = '') {
@@ -88,7 +87,7 @@ export async function verifyEbGaramondBuild({ appDir = process.cwd() } = {}) {
     EB_GARAMOND_STYLESHEET,
     ...EB_GARAMOND_FONT_FILES,
     EB_GARAMOND_LICENSE,
-  ].map((file) => `${EB_GARAMOND_ASSET_DIRECTORY}/${file}`);
+  ];
   const embeddedAssetFiles = expectedAssetFiles.filter((expected) =>
     sppkgEntries.some((entry) => entry.replaceAll('\\', '/').endsWith(expected)),
   );

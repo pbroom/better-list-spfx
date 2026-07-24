@@ -43,9 +43,7 @@ async function createFixture({ placeholderCdn = false, sppkgVersion = `${VERSION
   const rootDir = await mkdtemp(path.join(os.tmpdir(), 'better-list-release-test-'));
   await Promise.all([
     mkdir(path.join(rootDir, 'config'), { recursive: true }),
-    mkdir(path.join(rootDir, 'release', 'assets', 'chunks'), { recursive: true }),
-    mkdir(path.join(rootDir, 'release', 'assets', 'fonts', 'eb-garamond'), { recursive: true }),
-    mkdir(path.join(rootDir, 'release', 'manifests'), { recursive: true }),
+    mkdir(path.join(rootDir, 'release', 'assets'), { recursive: true }),
     mkdir(path.join(rootDir, 'sharepoint', 'solution'), { recursive: true }),
   ]);
   await Promise.all([
@@ -73,52 +71,25 @@ async function createFixture({ placeholderCdn = false, sppkgVersion = `${VERSION
         : 'https://cdn.contoso.test/spfx/better-list-spfx/',
     }),
     writeFile(path.join(rootDir, '.nvmrc'), '22.22.3\n'),
-    writeFile(path.join(rootDir, 'release', 'assets', 'chunks', 'app.js'), 'app();\n'),
+    writeFile(path.join(rootDir, 'release', 'assets', 'app.js'), 'app();\n'),
     writeFile(
-      path.join(rootDir, 'release', 'assets', 'fonts', 'eb-garamond', 'eb-garamond.css'),
-      `@font-face {
-  font-family: "EB Garamond";
-  font-style: normal;
-  font-display: swap;
-  font-weight: 400 800;
-  src: url("./eb-garamond-latin-wght-normal.woff2") format("woff2-variations");
-}
-@font-face {
-  font-family: "EB Garamond";
-  font-style: italic;
-  font-display: swap;
-  font-weight: 400 800;
-  src: url("./eb-garamond-latin-wght-italic.woff2") format("woff2-variations");
-}
+      path.join(rootDir, 'release', 'assets', 'better-list-eb-garamond.css'),
+      `@font-face { font-family: "EB Garamond"; font-style: normal; font-display: swap; font-weight: 400 800; src: url("./better-list-eb-garamond-latin-wght-normal.woff2") format("woff2-variations"); }
+@font-face { font-family: "EB Garamond"; font-style: italic; font-display: swap; font-weight: 400 800; src: url("./better-list-eb-garamond-latin-wght-italic.woff2") format("woff2-variations"); }
 `,
     ),
     writeFile(
-      path.join(
-        rootDir,
-        'release',
-        'assets',
-        'fonts',
-        'eb-garamond',
-        'eb-garamond-latin-wght-normal.woff2',
-      ),
+      path.join(rootDir, 'release', 'assets', 'better-list-eb-garamond-latin-wght-normal.woff2'),
       Buffer.from('wOF2normal-fixture'),
     ),
     writeFile(
-      path.join(
-        rootDir,
-        'release',
-        'assets',
-        'fonts',
-        'eb-garamond',
-        'eb-garamond-latin-wght-italic.woff2',
-      ),
+      path.join(rootDir, 'release', 'assets', 'better-list-eb-garamond-latin-wght-italic.woff2'),
       Buffer.from('wOF2italic-fixture'),
     ),
     writeFile(
-      path.join(rootDir, 'release', 'assets', 'fonts', 'eb-garamond', 'OFL.txt'),
+      path.join(rootDir, 'release', 'assets', 'better-list-eb-garamond-OFL.txt'),
       'Copyright 2017 The EB Garamond Project Authors\nSIL OPEN FONT LICENSE Version 1.1\n',
     ),
-    writeFile(path.join(rootDir, 'release', 'manifests', 'manifest.js'), '{}\n'),
   ]);
 
   const packageFixture = path.join(rootDir, 'sppkg-fixture');
@@ -177,25 +148,13 @@ test('constructs and verifies a deterministic release payload manifest', async (
       .trim()
       .split(/\r?\n/);
     assert.deepEqual(zipEntries, [...zipEntries].sort());
-    assert(zipEntries.includes(`better-list-spfx-${VERSION}/RELEASE-MANIFEST.json`));
-    for (const asset of [
-      'eb-garamond.css',
-      'eb-garamond-latin-wght-normal.woff2',
-      'eb-garamond-latin-wght-italic.woff2',
-      'OFL.txt',
-    ]) {
-      assert(
-        zipEntries.includes(
-          `better-list-spfx-${VERSION}/assets/fonts/eb-garamond/${asset}`,
-        ),
-      );
-    }
+    assert(zipEntries.includes('RELEASE-MANIFEST.json'));
 
     const manifest = JSON.parse(
       run('unzip', [
         '-p',
         prepared.zipPath,
-        `better-list-spfx-${VERSION}/RELEASE-MANIFEST.json`,
+        'RELEASE-MANIFEST.json',
       ]),
     );
     assert.equal(manifest.version, VERSION);
@@ -206,10 +165,17 @@ test('constructs and verifies a deterministic release payload manifest', async (
       [...manifest.files.map((file) => file.path)].sort(),
     );
     assert.equal(
-      manifest.files.find((file) => file.path === `sharepoint/better-list-spfx-${VERSION}.sppkg`)
+      manifest.files.find((file) => file.path === `better-list-spfx-${VERSION}.sppkg`)
         .sha256,
       await sha256(prepared.standalonePath),
     );
+    assert.deepEqual(manifest.cdnFiles, [
+      'app.js',
+      'better-list-eb-garamond-OFL.txt',
+      'better-list-eb-garamond-latin-wght-italic.woff2',
+      'better-list-eb-garamond-latin-wght-normal.woff2',
+      'better-list-eb-garamond.css',
+    ]);
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }
@@ -230,6 +196,27 @@ test('verification detects a changed release asset', async () => {
     await assert.rejects(
       verifyReleaseArtifacts({ rootDir, outputDir, tag: TAG, commit: COMMIT }),
       /Checksum mismatch/,
+    );
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('preparation rejects nested CDN assets rather than flattening colliding filenames', async () => {
+  const rootDir = await createFixture();
+  const outputDir = path.join(rootDir, 'release-output');
+  try {
+    await mkdir(path.join(rootDir, 'release', 'assets', 'nested'), { recursive: true });
+    await writeFile(path.join(rootDir, 'release', 'assets', 'nested', 'app.js'), 'nested app();\n');
+    await assert.rejects(
+      prepareReleaseArtifacts({
+        rootDir,
+        outputDir,
+        tag: TAG,
+        commit: COMMIT,
+        sourceDateEpoch: SOURCE_DATE_EPOCH,
+      }),
+      /CDN payload must be flat; found nested asset: nested\/app\.js/,
     );
   } finally {
     await rm(rootDir, { recursive: true, force: true });
@@ -282,15 +269,13 @@ test('preparation rejects remote EB Garamond font URLs', async () => {
       rootDir,
       'release',
       'assets',
-      'fonts',
-      'eb-garamond',
-      'eb-garamond.css',
+      'better-list-eb-garamond.css',
     );
     const stylesheet = await readFile(stylesheetPath, 'utf8');
     await writeFile(
       stylesheetPath,
       stylesheet.replace(
-        './eb-garamond-latin-wght-normal.woff2',
+        './better-list-eb-garamond-latin-wght-normal.woff2',
         'https://fonts.gstatic.com/eb-garamond.woff2',
       ),
     );

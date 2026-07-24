@@ -16,7 +16,7 @@ describe('EB Garamond stylesheet', () => {
         'https://cdn.example.test/spfx/better-list/',
       ]),
     ).toBe(
-      'https://cdn.example.test/spfx/better-list/fonts/eb-garamond/eb-garamond.css',
+      'https://cdn.example.test/spfx/better-list/better-list-eb-garamond.css',
     );
   });
 

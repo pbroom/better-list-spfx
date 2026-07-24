@@ -17,7 +17,7 @@
     "test:release": "node --test scripts/release-artifacts.test.mjs",
     "serve": "heft start --clean",
     "start": "heft start --clean",
-    "ship": "heft test --clean --production && node scripts/verify-monaco-css.mjs && node scripts/copy-monaco-assets.mjs --app . && node scripts/copy-eb-garamond-assets.mjs --app . && heft package-solution --production && node scripts/verify-eb-garamond-build.mjs --app .",
+    "ship": "heft test --clean --production && node scripts/verify-monaco-css.mjs && node scripts/copy-eb-garamond-assets.mjs --app . && heft package-solution --production && node scripts/verify-eb-garamond-build.mjs --app .",
     "version:check": "node scripts/sync-spfx-version.mjs --check",
     "version:sync": "node scripts/sync-spfx-version.mjs",
     "eject-webpack": "heft eject-webpack"

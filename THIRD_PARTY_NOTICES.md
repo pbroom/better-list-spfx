@@ -6,7 +6,7 @@ Better List includes the EB Garamond variable webfont, distributed through
 [Fontsource](https://fontsource.org/fonts/eb-garamond) from the
 [EB Garamond Project](https://github.com/octaviopardo/EBGaramond12).
 The font is licensed under the SIL Open Font License, Version 1.1. The complete copyright and
-license notice is distributed beside the font assets as `fonts/eb-garamond/OFL.txt`.
+license notice is distributed beside the font assets as `better-list-eb-garamond-OFL.txt`.
 
 ## Iconify
 
