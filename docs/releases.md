@@ -80,8 +80,9 @@ Retain CDN files for every package version still installed by a tenant.
 ## Manual recovery
 
 If the tag publication workflow fails after Release Please has already created
-the tag and GitHub Release, run **Publish release artifacts** manually and enter
-the existing `vX.Y.Z` tag.
+the tag and GitHub Release, run **Publish release artifacts** manually from the
+`main` workflow definition and enter the existing `vX.Y.Z` tag. Dispatches
+selected from another branch fail before checkout or publication.
 
 The recovery path does not accept branches, arbitrary SHAs, or untagged refs.
 It verifies that the tag exists, the matching GitHub Release exists, the tag
