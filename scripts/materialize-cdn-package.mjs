@@ -150,6 +150,13 @@ export function inspectArchiveEntries(archivePath, {
   if (entryNames.length !== entryMetadata.length) {
     throw new Error('ZIP entry metadata is ambiguous or contains unsupported names');
   }
+  const metadataByName = new Map();
+  for (const metadata of entryMetadata) {
+    if (metadataByName.has(metadata.name)) {
+      throw new Error(`Duplicate ZIP entry metadata: ${metadata.name}`);
+    }
+    metadataByName.set(metadata.name, metadata);
+  }
   if (entryNames.length > maxEntries) {
     throw new Error(`ZIP archive contains more than ${maxEntries} entries`);
   }
@@ -157,13 +164,13 @@ export function inspectArchiveEntries(archivePath, {
   const exactNames = new Set();
   const portableNames = new Set();
   let totalUncompressedSize = 0;
-  return entryNames.map((name, index) => {
+  return entryNames.map((name) => {
     const validated = validateArchivePath(name);
-    const metadata = entryMetadata[index];
-    const { compressedSize, type, uncompressedSize } = metadata;
-    if (metadata.name !== name) {
-      throw new Error('ZIP entry listings disagree about an entry name');
+    const metadata = metadataByName.get(name);
+    if (!metadata) {
+      throw new Error(`ZIP entry metadata is missing: ${name}`);
     }
+    const { compressedSize, type, uncompressedSize } = metadata;
     if (type !== '-' && type !== 'd') {
       throw new Error(`ZIP entry is not a regular file or directory: ${name}`);
     }
@@ -589,10 +596,8 @@ if (
   process.argv[1] &&
   realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1])
 ) {
-  try {
-    await main();
-  } catch (error) {
+  main().catch((error) => {
     console.error(error.message);
     process.exitCode = 1;
-  }
+  });
 }

@@ -125,7 +125,7 @@ jobs:
             local_digest="sha256:$(sha256sum "$asset" | cut -d' ' -f1)"
             remote_digest="$(
               gh api "repos/$GH_REPO/releases/tags/$RELEASE_TAG" \
-                --jq ".assets[] | select(.name == \"$asset_name\") | .digest"
+                --jq ".assets[] | select(.name == \"$asset_name\") | .digest // empty"
             )"
             if [[ -z "$remote_digest" || "$remote_digest" != "$local_digest" ]]; then
               echo "GitHub asset digest mismatch for $asset_name" >&2
