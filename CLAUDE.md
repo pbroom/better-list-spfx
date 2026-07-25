@@ -2,7 +2,7 @@
 
 - Use Node >=22.14.0 <23.0.0, npm 10, SPFx 1.23.2, React 17, TypeScript 5.8, and Heft.
 - Keep production-consumed code under src/.
-- CDN production packages use includeClientSideAssets=false and https://cdn.example.com/spfx/better-list-spfx/.
+- Canonical production packages embed client-side assets. Tagged releases also build a URL-agnostic CDN deployment kit whose non-deployable `.invalid` template is materialized with the final HTTPS CDN URL.
 - Provision SharePoint lists manually; do not add hidden PnP provisioning.
 - Keep Better List Fluent UI styles on a dedicated RendererProvider with its stable classNameHashSalt; never share the host page's Griffel class-name namespace.
 - Contain every persisted author stylesheet with the instance-rooted runtime @scope boundary. Editor validation alone is not sufficient protection against host-page CSS contamination.

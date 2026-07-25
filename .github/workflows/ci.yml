@@ -42,12 +42,28 @@ jobs:
       - name: Test release artifact tooling
         run: npm run test:release
 
-      - name: Build and package (ship)
-        run: npm run ship
+      - name: Build self-contained package and CDN template
+        run: npm run release:build
 
-      - name: Upload SharePoint package
+      - name: Construct and verify release archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          source_date_epoch="$(git show -s --format=%ct "$GITHUB_SHA")"
+          npm run release:prepare -- \
+            --tag "v$version" \
+            --commit "$GITHUB_SHA" \
+            --source-date-epoch "$source_date_epoch" \
+            --output-dir release-output
+          npm run release:verify -- \
+            --tag "v$version" \
+            --commit "$GITHUB_SHA" \
+            --output-dir release-output
+
+      - name: Upload validated release archives
         uses: actions/upload-artifact@v4
         with:
-          name: sppkg
-          path: sharepoint/solution/*.sppkg
+          name: release-archives
+          path: release-output/*.zip
           if-no-files-found: error

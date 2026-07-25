@@ -1,14 +1,21 @@
 # better-list-spfx CDN Handoff
 
-Upload the flat runtime files listed in `RELEASE-MANIFEST.json` to:
+Tagged GitHub Releases publish a URL-agnostic
+`better-list-spfx-cdn-kit-X.Y.Z.zip`. Its `.sppkg` template is intentionally
+non-deployable until the final CDN URL is supplied.
 
-`https://cdn.example.com/spfx/better-list-spfx/`
+After extracting the kit, run:
 
-The SharePoint package in `sharepoint/solution` references this CDN path through `config/write-manifests.json`.
-CDN upload is intentionally manual for v1.
+```bash
+node materialize-cdn-package.mjs \
+  --template better-list-spfx-X.Y.Z-cdn-template.sppkg \
+  --cdn-base-path https://cdn.contoso.example/spfx/better-list/X.Y.Z/
+```
 
-Tagged GitHub Releases package these flat generated files, the matching `.sppkg`, a
-checksum manifest, and installation instructions in the
-`better-list-spfx-cdn-X.Y.Z.zip` asset. Configure the real `cdnBasePath` before
-the first release; publication intentionally rejects the example.com
-placeholder.
+Upload the flat runtime files listed under `cdnFiles` in
+`RELEASE-MANIFEST.json` without renaming them, serve them from that exact URL,
+and upload the generated `.sppkg` to the App Catalog. Verify the package against
+the generated `.sha256` file first. The materializer authenticates the template
+and kit payload against `RELEASE-MANIFEST.json` before rewriting it; GitHub's
+release-asset digest authenticates the downloaded kit ZIP. CDN upload remains
+intentionally manual.

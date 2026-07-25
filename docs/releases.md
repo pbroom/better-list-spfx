@@ -29,54 +29,71 @@ Merging the release pull request causes Release Please to create the immutable
 `vX.Y.Z` tag and matching GitHub Release. The tag starts
 `.github/workflows/release.yml`, which checks out the tag, proves that its
 commit is reachable from `main`, installs with the repository lockfile, and runs
-the real `npm run ship` production build. Nothing is uploaded if build,
-provenance, package, archive, or checksum validation fails.
+the real two-mode production build. Nothing is uploaded if build, provenance,
+package-mode, archive, materialization, or checksum validation fails.
 
 ## Release assets
 
-Every successful GitHub Release has three assets:
+Every successful GitHub Release has exactly two assets:
 
-- `better-list-spfx-X.Y.Z.sppkg` — the SharePoint package produced by the tag
-  build.
-- `better-list-spfx-cdn-X.Y.Z.zip` — the same `.sppkg`, flat CDN runtime files,
-  `INSTALL.md`, and `RELEASE-MANIFEST.json`.
-- `SHA256SUMS` — SHA-256 hashes for the standalone package and CDN ZIP.
+- `better-list-spfx-standalone-X.Y.Z.zip` — an upload-ready `.sppkg` with its
+  client-side assets embedded, plus `INSTALL.md` and `RELEASE-MANIFEST.json`.
+- `better-list-spfx-cdn-kit-X.Y.Z.zip` — flat CDN runtime files, a deliberately
+  non-deployable `.sppkg` template, `materialize-cdn-package.mjs`, `INSTALL.md`,
+  and `RELEASE-MANIFEST.json`.
 
 `RELEASE-MANIFEST.json` records the release version, four-part SPFx version,
-tag, full commit SHA, Node version, configured CDN base path, and the size and
-SHA-256 hash of every payload file. The workflow tests both ZIP archives and
-recomputes all checksums before upload. The package inside the CDN ZIP must be
-byte-identical to the standalone asset.
+SharePoint product ID, tag, full commit SHA, Node version, artifact type, and
+the size and SHA-256 hash of every payload file. The CDN kit manifest also records its exact flat
+`cdnFiles` list and reserved template URL. The workflow verifies both ZIP
+archives, proves the standalone package embeds every runtime file, proves the
+CDN template embeds none, and materializes a test package with a real-looking
+HTTPS URL before upload. After upload, it also requires GitHub's SHA-256 digest
+for each of the two release assets to match the locally validated archive.
 
 ## Install the standalone package
 
-Use the standalone `.sppkg` when the files from the matching version are
-already hosted at the `cdnBasePath` in `config/write-manifests.json`.
+Use the standalone archive when Better List should be deployed entirely through
+the SharePoint App Catalog.
 
-1. Verify the `.sppkg` against `SHA256SUMS`.
-2. Upload it to the SharePoint tenant App Catalog.
+1. Extract the ZIP and retain `RELEASE-MANIFEST.json` as its provenance and
+   checksum record.
+2. Upload the included `.sppkg` to the SharePoint tenant App Catalog.
 3. Deploy the app, approve any tenant prompts, and add Better List to a modern
    page.
 
-This project uses `includeClientSideAssets: false`, so the `.sppkg` still
-expects its matching CDN files to exist. It is a standalone download, not a
-self-contained package.
+The package is built with `includeClientSideAssets: true`; SharePoint hosts its
+embedded JavaScript, CSS, font, and Monaco runtime files. No external CDN URL is
+required.
 
-## Install from the CDN bundle
+## Install from the CDN deployment kit
 
-Use the CDN ZIP to deploy a version from scratch.
+The CDN kit is portable across tenants and CDN providers because it does not
+contain a customer URL. Its template `.sppkg` uses the reserved
+`https://cdn.invalid/better-list-spfx/` sentinel and must not be uploaded.
 
-1. Verify the ZIP against `SHA256SUMS`, then extract it.
-2. Upload the flat file names listed in `RELEASE-MANIFEST.json` under
-   `cdnFiles`, without renaming. Serve them from the base URL recorded in the
-   manifest.
-3. Upload the `.sppkg` at the archive root to the tenant App Catalog.
-4. Deploy the app, approve any tenant prompts, and add Better List to a modern
-   page.
+1. Extract the ZIP on a machine with Node.js 22, `zip`, and `unzip`.
+2. Choose the final version-specific HTTPS CDN base URL.
+3. Run:
+
+   ```bash
+   node materialize-cdn-package.mjs \
+     --template better-list-spfx-X.Y.Z-cdn-template.sppkg \
+     --cdn-base-path https://cdn.contoso.example/spfx/better-list/X.Y.Z/
+   ```
+
+4. Upload the flat file names listed under `cdnFiles` in
+   `RELEASE-MANIFEST.json`, without renaming, and serve them from that exact
+   base URL.
+5. Verify the generated `.sppkg` against its generated `.sha256` file, upload
+   it to the tenant App Catalog, and deploy Better List.
 
 Retain CDN files for every package version still installed by a tenant. Use a
-distinct flat CDN base path per installed version, or treat each upload as an
-in-place upgrade.
+distinct flat CDN base path per version. The materializer rejects non-HTTPS
+URLs, credentials, query strings, fragments, unsafe package entries, embedded
+client assets, ZIPs outside conservative size and compression limits, and
+templates whose sentinel, release-manifest checksum, product ID, or version is
+missing or inconsistent. It never overwrites an existing package or checksum.
 
 ### Monaco editor runtime
 
@@ -106,23 +123,22 @@ Do not manually create or move a release tag to recover a failed build.
 
 Before enabling the first release:
 
-1. Replace the placeholder `https://cdn.example.com/...` value in
-   `config/write-manifests.json` with the production HTTPS CDN base path. The
-   publication script rejects the placeholder.
-2. Add a repository Actions secret named `RELEASE_PLEASE_TOKEN`. Use a
+1. Add a repository Actions secret named `RELEASE_PLEASE_TOKEN`. Use a
    fine-grained personal access token or GitHub App token that can write
    repository contents and pull requests (and issues, if release labels need
    it). The token must be allowed to push Release Please branches and create
    `v*` tags.
-3. In **Settings → Actions → General**, allow Actions to create pull requests
+2. In **Settings → Actions → General**, allow Actions to create pull requests
    and grant workflows read/write access, or grant equivalent rights through
    the configured token.
-4. Ensure branch rules allow the release bot to update its pull request while
+3. Ensure branch rules allow the release bot to update its pull request while
    keeping normal `main` review and CI requirements. If `v*` tags are
    protected, explicitly allow the release identity to create them and prevent
    later movement or deletion.
 
-The publication workflow uses the scoped `GITHUB_TOKEN` only to read the
-matching release and upload validated assets. No npm registry or CDN write
-credential is required because this repository publishes downloadable files,
-not an npm package or a live CDN deployment.
+The repository keeps the SPFx `<!-- PATH TO CDN -->` build placeholder for its
+self-contained package and uses a reserved `.invalid` sentinel only inside the
+CDN template build. No production CDN URL or CDN credential is a repository
+prerequisite. The publication workflow uses the scoped `GITHUB_TOKEN` only to
+read the matching release and upload validated assets; it publishes neither an
+npm package nor a live CDN deployment.
