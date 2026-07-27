@@ -1,55 +1,149 @@
 # Releasing Better List
 
-Better List uses Release Please to turn Conventional Commits on `main` into a
-reviewable release pull request. Product changes merge frequently without
-changing versions. Stable artifacts are built only after the release pull
-request is reviewed and merged.
+Better List keeps every merged `main` state versioned and releasable. Preparing
+a release captures one exact `main` commit, runs a separate release-candidate
+build, and saves a draft GitHub Release for human review. Publication is a
+different command.
 
-## Commit and version workflow
+## Versioning main
 
-Use a Conventional Commit title when merging a pull request:
+`package.json` is the SemVer authority. The root versions in
+`package-lock.json` and the solution and feature versions in
+`config/package-solution.json` must match it; SPFx uses `x.y.z.0`.
+`npm run version:check` rejects any drift.
 
-- `fix: ...` produces a patch candidate.
-- `feat: ...` produces a minor candidate.
-- `feat!: ...`, `fix!: ...`, or a `BREAKING CHANGE:` footer produces a major
-  candidate.
-- `docs:`, `test:`, `chore:`, and similar maintenance commits do not normally
-  produce a release by themselves.
+On every `main` update (normally one pull-request merge),
+`.github/workflows/version-main.yml` does one of two things:
 
-Do not manually bump `package.json`, `package-lock.json`, or
-`config/package-solution.json` in feature pull requests.
+- If the merged pull request already advanced all synchronized versions, it
+  verifies that the new version is strictly greater and leaves it unchanged.
+  Use this for an intentional minor or major jump.
+- Otherwise, it patch-increments the latest `main`, validates the result, and
+  pushes one version-only commit with a `Version-Bump-For` trailer.
 
-On every push to `main`, `.github/workflows/release-please.yml` creates or
-updates one release pull request. Release Please owns the SemVer version,
-lockfile, and changelog. The same workflow synchronizes that version to the
-four-part SPFx solution and feature versions (`x.y.z.0`) and commits the result
-to the release branch. CI rejects any version mismatch.
+Version jobs use optimistic retries, so closely spaced merge pushes are
+processed individually even if their jobs overlap. A single unusual push that
+contains several commits still represents one `main` update and gets one
+increment. The trailer makes a rerun idempotent. The scoped `GITHUB_TOKEN` push
+does not start another workflow run, preventing a bump loop.
 
-Merging the release pull request causes Release Please to create the immutable
-`vX.Y.Z` tag and matching GitHub Release. The tag starts
-`.github/workflows/release.yml`, which checks out the tag, proves that its
-commit is reachable from `main`, installs with the repository lockfile, and runs
-the real two-mode production build. Nothing is uploaded if build, provenance,
-package-mode, archive, materialization, or checksum validation fails.
+Do not cut a release while **Version main** is still running. The cut workflow
+also rejects a snapshot whose version did not advance from its first parent, so
+an unversioned merge cannot be released during that short window.
+
+To set a reviewed version intentionally:
+
+```bash
+npm run version:set -- 0.3.0
+npm run version:check
+```
+
+Commit all three changed files together:
+
+- `package.json`
+- `package-lock.json`
+- `config/package-solution.json`
+
+## Cut a release candidate
+
+Run the workflow from the current `main` workflow definition:
+
+```bash
+gh workflow run prepare-release.yml --ref main
+```
+
+The dispatch event records the exact `main` SHA at command time. The workflow:
+
+1. proves that SHA is reachable from `main` and carries a synchronized,
+   newly-advanced version;
+2. creates `release/vX.Y.Z` at exactly that SHA, or confirms an existing branch
+   already points there;
+3. installs from the lockfile and reruns the release tooling tests;
+4. performs both real production builds;
+5. constructs and verifies the deterministic standalone and CDN-kit ZIPs;
+6. creates a draft `vX.Y.Z` GitHub Release targeted to the full snapshot SHA;
+7. adds a title, generated release notes, and exactly the two validated assets;
+8. verifies the remote SHA-256 digest of both assets; and
+9. confirms that no Git tag was created while the release remains a draft.
+
+The snapshot branch is a provenance anchor. It is deliberately retained after
+publication.
+
+### Existing draft safety
+
+The workflow never changes a published release. It also stops when a draft for
+the same version targets another commit or contains a different asset set.
+Review that draft before explicitly reconciling it:
+
+```bash
+gh workflow run prepare-release.yml \
+  --ref main \
+  -f replace_existing_draft=true
+```
+
+That explicit option retargets the draft, regenerates its notes, removes its old
+assets, and replaces them with the two newly validated ZIPs. A matching draft
+for the same snapshot can be rerun without this option; its reviewed title and
+description are preserved.
+
+## Review the draft
+
+Before publication, confirm:
+
+- the title and description are complete;
+- the version and snapshot SHA are the intended point on `main`;
+- the Files section contains only the standalone and CDN-kit versioned ZIPs;
+- the **Cut release candidate** run passed; and
+- any product-specific smoke test or tenant validation required for this
+  release is complete.
+
+Draft metadata remains editable in GitHub. Editing the attached files is not
+part of review; rebuild the candidate if an asset must change.
+
+## Publish on command
+
+Publish only the reviewed draft:
+
+```bash
+gh workflow run publish-release.yml \
+  --ref main \
+  -f release_tag=v0.2.0
+```
+
+`.github/workflows/publish-release.yml` revalidates the draft, snapshot branch,
+version, and `main` ancestry. It then performs a clean install, reruns the
+release tests and both production builds, reconstructs the archives
+deterministically, and compares them byte for byte with the reviewed downloads
+and their GitHub digests.
+
+Only after those checks pass does the workflow atomically create `vX.Y.Z` at
+the already-reviewed snapshot SHA, verify the tag, recheck the draft and asset
+digests, and publish the draft as the latest release.
+
+The publish job uses the `release` environment. Configure a required reviewer
+for that environment when the repository should require an approval click in
+addition to the explicit publish command.
 
 ## Release assets
 
-Every successful GitHub Release has exactly two assets:
+Every published release has exactly two assets:
 
 - `better-list-spfx-standalone-X.Y.Z.zip` — an upload-ready `.sppkg` with its
-  client-side assets embedded, plus `INSTALL.md` and `RELEASE-MANIFEST.json`.
+  client-side assets embedded, plus `INSTALL.md` and
+  `RELEASE-MANIFEST.json`.
 - `better-list-spfx-cdn-kit-X.Y.Z.zip` — flat CDN runtime files, a deliberately
-  non-deployable `.sppkg` template, `materialize-cdn-package.mjs`, `INSTALL.md`,
-  and `RELEASE-MANIFEST.json`.
+  non-deployable `.sppkg` template, `materialize-cdn-package.mjs`,
+  `INSTALL.md`, and `RELEASE-MANIFEST.json`.
 
 `RELEASE-MANIFEST.json` records the release version, four-part SPFx version,
 SharePoint product ID, tag, full commit SHA, Node version, artifact type, and
-the size and SHA-256 hash of every payload file. The CDN kit manifest also records its exact flat
-`cdnFiles` list and reserved template URL. The workflow verifies both ZIP
-archives, proves the standalone package embeds every runtime file, proves the
-CDN template embeds none, and materializes a test package with a real-looking
-HTTPS URL before upload. After upload, it also requires GitHub's SHA-256 digest
-for each of the two release assets to match the locally validated archive.
+the size and SHA-256 hash of every payload file. The CDN kit also records its
+exact flat `cdnFiles` list and reserved template URL.
+
+Validation proves that the standalone package embeds every runtime file, the
+CDN template embeds none, and a test package can be materialized with a valid
+HTTPS URL. Both ZIPs are normalized using the snapshot commit time so the
+publish workflow can reproduce the exact reviewed bytes.
 
 ## Install the standalone package
 
@@ -97,48 +191,36 @@ missing or inconsistent. It never overwrites an existing package or checksum.
 
 ### Monaco editor runtime
 
-Monaco is bundled by the SPFx production build into the `chunk.source-editor-monaco_*.js`
-runtime chunk and its companion root-level assets (such as `codicon_*.ttf`). It does not
-load `monaco-editor/min/vs` from a separate public CDN. Those hashed, flat files are included
-in `cdnFiles`; upload them with the rest of the payload. The production ship check verifies
-the Monaco chunk is present in `release/assets` before artifacts are packaged.
+Monaco is bundled into the SPFx production output and its companion root-level
+assets are included in the CDN kit. It does not load
+`monaco-editor/min/vs` from a separate public CDN. The production ship check
+requires the Monaco chunk before artifacts are packaged.
 
-## Manual recovery
+## Recovery and invariants
 
-If the tag publication workflow fails after Release Please has already created
-the tag and GitHub Release, run **Publish release artifacts** manually from the
-`main` workflow definition and enter the existing `vX.Y.Z` tag. Dispatches
-selected from another branch fail before checkout or publication.
-
-The recovery path does not accept branches, arbitrary SHAs, or untagged refs.
-It verifies that the tag exists, the matching GitHub Release exists, the tag
-version matches the checked-in version files, and the tag commit is an ancestor
-of current `origin/main`. It then performs the same clean install, production
-build, validation, and upload. Existing assets are replaced only after the
-entire rebuilt set passes validation.
-
-Do not manually create or move a release tag to recover a failed build.
+- Rerun **Cut release candidate** for the same dispatch snapshot to recover a
+  failed draft upload. A snapshot branch that points elsewhere is never moved.
+- Published versions are immutable. Neither workflow overwrites an existing
+  tag or published release.
+- Rerun **Publish reviewed release** only while the release is a draft. A
+  failure before the final step leaves the draft unpublished. If publication
+  fails after the workflow pins the correct tag, rerun the publish workflow; it
+  accepts that tag only when it still resolves to the reviewed snapshot.
+- If the final post-publish verification fails, inspect the release and tag
+  before taking any corrective action; do not move or recreate the tag.
+- Never manually retarget a snapshot branch or release tag.
 
 ## Repository prerequisites
 
-Before enabling the first release:
+1. Grant Actions read/write repository access. The workflows request only
+   `contents: write`; no personal access token is required.
+2. Ensure the `github-actions[bot]` identity can push the version-only commit to
+   `main`. If branch rules are added later, preserve that narrow allowance.
+3. Keep pull-request CI required before merge.
+4. Create a `release` environment and add required reviewers when publication
+   needs an approval gate.
+5. Protect `v*` tags from movement or deletion after creation.
 
-1. Add a repository Actions secret named `RELEASE_PLEASE_TOKEN`. Use a
-   fine-grained personal access token or GitHub App token that can write
-   repository contents and pull requests (and issues, if release labels need
-   it). The token must be allowed to push Release Please branches and create
-   `v*` tags.
-2. In **Settings → Actions → General**, allow Actions to create pull requests
-   and grant workflows read/write access, or grant equivalent rights through
-   the configured token.
-3. Ensure branch rules allow the release bot to update its pull request while
-   keeping normal `main` review and CI requirements. If `v*` tags are
-   protected, explicitly allow the release identity to create them and prevent
-   later movement or deletion.
-
-The repository keeps the SPFx `<!-- PATH TO CDN -->` build placeholder for its
-self-contained package and uses a reserved `.invalid` sentinel only inside the
-CDN template build. No production CDN URL or CDN credential is a repository
-prerequisite. The publication workflow uses the scoped `GITHUB_TOKEN` only to
-read the matching release and upload validated assets; it publishes neither an
-npm package nor a live CDN deployment.
+No production CDN URL or credential is stored in the repository. The
+standalone archive is self-contained, and the CDN kit is bound to a deployment
+URL only after download.

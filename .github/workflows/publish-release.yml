@@ -1,0 +1,298 @@
+name: Publish reviewed release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Reviewed draft tag in vX.Y.Z form
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: publish-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  rebuild:
+    name: Rebuild the reviewed snapshot
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      release_id: ${{ steps.release.outputs.release_id }}
+      sha: ${{ steps.release.outputs.sha }}
+      source_date_epoch: ${{ steps.release.outputs.source_date_epoch }}
+      version: ${{ steps.release.outputs.version }}
+    env:
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - name: Require the main workflow definition
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "Publishing must be dispatched from the main workflow definition." >&2
+            exit 1
+          fi
+
+      - name: Check out repository history
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up supported Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Validate the reviewed draft and snapshot
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Release tag must match vX.Y.Z: $RELEASE_TAG" >&2
+            exit 1
+          fi
+
+          snapshot_branch="release/$RELEASE_TAG"
+          git fetch --no-tags origin main "$snapshot_branch"
+          snapshot_sha="$(git rev-parse "origin/$snapshot_branch")"
+          if ! git merge-base --is-ancestor "$snapshot_sha" origin/main; then
+            echo "$snapshot_sha is no longer reachable from origin/main." >&2
+            exit 1
+          fi
+
+          tag_json="$(
+            gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" 2>/dev/null || true
+          )"
+          if [[ -n "$tag_json" ]]; then
+            tag_sha="$(
+              gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq '.sha'
+            )"
+            if [[ "$tag_sha" != "$snapshot_sha" ]]; then
+              echo "$RELEASE_TAG already points to $tag_sha, not $snapshot_sha." >&2
+              exit 1
+            fi
+          fi
+
+          release_json="$(
+            gh release view "$RELEASE_TAG" \
+              --json assets,body,databaseId,isDraft,name,targetCommitish
+          )"
+          if [[ "$(jq -r '.isDraft' <<<"$release_json")" != "true" ]]; then
+            echo "$RELEASE_TAG is not a draft release." >&2
+            exit 1
+          fi
+          if [[ "$(jq -r '.targetCommitish' <<<"$release_json")" != "$snapshot_sha" ]]; then
+            echo "Draft target does not match $snapshot_branch at $snapshot_sha." >&2
+            exit 1
+          fi
+          if [[ -z "$(jq -r '.name // empty' <<<"$release_json")" ||
+            -z "$(jq -r '.body // empty' <<<"$release_json")" ]]; then
+            echo "The reviewed draft must have a title and description." >&2
+            exit 1
+          fi
+          expected_names="$(
+            printf '%s\n' \
+              "better-list-spfx-cdn-kit-${RELEASE_TAG#v}.zip" \
+              "better-list-spfx-standalone-${RELEASE_TAG#v}.zip" |
+              sort
+          )"
+          actual_names="$(jq -r '.assets[].name' <<<"$release_json" | sort)"
+          if [[ "$actual_names" != "$expected_names" ]]; then
+            echo "The reviewed draft must contain exactly the two versioned ZIP assets." >&2
+            exit 1
+          fi
+
+          git switch --detach "$snapshot_sha"
+          version="$(node -p "require('./package.json').version")"
+          if [[ "$RELEASE_TAG" != "v$version" ]]; then
+            echo "$RELEASE_TAG does not match snapshot version $version." >&2
+            exit 1
+          fi
+          npm run version:check
+          parent_version="$(
+            git show "${snapshot_sha}^:package.json" |
+              node -e "let text=''; process.stdin.on('data', c => text += c); process.stdin.on('end', () => console.log(JSON.parse(text).version));"
+          )"
+          node scripts/sync-spfx-version.mjs --assert-newer-than "$parent_version"
+
+          {
+            echo "sha=$snapshot_sha"
+            echo "version=$version"
+            echo "release_id=$(jq -r '.databaseId' <<<"$release_json")"
+            echo "source_date_epoch=$(git show -s --format=%ct "$snapshot_sha")"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies cleanly
+        run: npm ci
+
+      - name: Rerun release tooling tests
+        run: npm run test:release
+
+      - name: Rebuild self-contained package and CDN template
+        run: npm run release:build
+
+      - name: Reconstruct and verify release assets
+        run: |
+          npm run release:prepare -- \
+            --tag "$RELEASE_TAG" \
+            --commit "${{ steps.release.outputs.sha }}" \
+            --source-date-epoch "${{ steps.release.outputs.source_date_epoch }}" \
+            --output-dir release-output
+          npm run release:verify -- \
+            --tag "$RELEASE_TAG" \
+            --commit "${{ steps.release.outputs.sha }}" \
+            --output-dir release-output
+
+      - name: Preserve the rebuilt assets for the gated publish job
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: publish-${{ inputs.release_tag }}
+          path: release-output/*.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish the revalidated draft
+    needs: rebuild
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+    env:
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      RELEASE_ID: ${{ needs.rebuild.outputs.release_id }}
+      SNAPSHOT_SHA: ${{ needs.rebuild.outputs.sha }}
+    steps:
+      - name: Download the clean rebuild
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: publish-${{ inputs.release_tag }}
+          path: release-output
+
+      - name: Revalidate, pin the tag, and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          snapshot_branch="release/$RELEASE_TAG"
+          branch_sha="$(
+            gh api "repos/$GH_REPO/git/ref/heads/$snapshot_branch" --jq '.object.sha'
+          )"
+          if [[ "$branch_sha" != "$SNAPSHOT_SHA" ]]; then
+            echo "$snapshot_branch moved to $branch_sha after validation." >&2
+            exit 1
+          fi
+
+          release_json="$(gh api "repos/$GH_REPO/releases/$RELEASE_ID")"
+          if [[ "$(jq -r '.draft' <<<"$release_json")" != "true" ||
+            "$(jq -r '.tag_name' <<<"$release_json")" != "$RELEASE_TAG" ||
+            "$(jq -r '.target_commitish' <<<"$release_json")" != "$SNAPSHOT_SHA" ]]; then
+            echo "The draft identity or target changed after validation." >&2
+            exit 1
+          fi
+          if [[ -z "$(jq -r '.name // empty' <<<"$release_json")" ||
+            -z "$(jq -r '.body // empty' <<<"$release_json")" ]]; then
+            echo "The reviewed draft must still have a title and description." >&2
+            exit 1
+          fi
+
+          mapfile -t rebuilt < <(find release-output -maxdepth 1 -type f -name '*.zip' -print | sort)
+          if [[ "${#rebuilt[@]}" -ne 2 ]]; then
+            echo "Expected exactly two rebuilt ZIP assets." >&2
+            exit 1
+          fi
+          expected_names="$(printf '%s\n' "${rebuilt[@]##*/}" | sort)"
+          remote_names="$(jq -r '.assets[].name' <<<"$release_json" | sort)"
+          if [[ "$remote_names" != "$expected_names" ]]; then
+            echo "The reviewed asset set changed after validation." >&2
+            exit 1
+          fi
+
+          mkdir attached-assets
+          gh release download "$RELEASE_TAG" --dir attached-assets
+          for asset in "${rebuilt[@]}"; do
+            name="$(basename "$asset")"
+            if [[ ! -f "attached-assets/$name" ]]; then
+              echo "Reviewed draft is missing $name." >&2
+              exit 1
+            fi
+            cmp "$asset" "attached-assets/$name"
+            local_digest="sha256:$(sha256sum "$asset" | cut -d' ' -f1)"
+            remote_digest="$(
+              jq -r --arg name "$name" \
+                '.assets[] | select(.name == $name) | .digest // empty' <<<"$release_json"
+            )"
+            if [[ "$remote_digest" != "$local_digest" ]]; then
+              echo "GitHub digest mismatch for $name." >&2
+              exit 1
+            fi
+          done
+
+          tag_json="$(
+            gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" 2>/dev/null || true
+          )"
+          if [[ -z "$tag_json" ]]; then
+            gh api --method POST "repos/$GH_REPO/git/refs" \
+              -f ref="refs/tags/$RELEASE_TAG" \
+              -f sha="$SNAPSHOT_SHA" >/dev/null
+          fi
+          tag_sha="$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq '.sha')"
+          if [[ "$tag_sha" != "$SNAPSHOT_SHA" ]]; then
+            echo "$RELEASE_TAG points to $tag_sha, not the reviewed snapshot." >&2
+            exit 1
+          fi
+
+          release_json="$(gh api "repos/$GH_REPO/releases/$RELEASE_ID")"
+          if [[ "$(jq -r '.draft' <<<"$release_json")" != "true" ||
+            "$(jq -r '.target_commitish' <<<"$release_json")" != "$SNAPSHOT_SHA" ||
+            -z "$(jq -r '.name // empty' <<<"$release_json")" ||
+            -z "$(jq -r '.body // empty' <<<"$release_json")" ||
+            "$(jq -r '.assets[].name' <<<"$release_json" | sort)" != "$expected_names" ]]; then
+            echo "The draft changed while its tag was being pinned." >&2
+            exit 1
+          fi
+          for asset in "${rebuilt[@]}"; do
+            name="$(basename "$asset")"
+            local_digest="sha256:$(sha256sum "$asset" | cut -d' ' -f1)"
+            remote_digest="$(
+              jq -r --arg name "$name" \
+                '.assets[] | select(.name == $name) | .digest // empty' <<<"$release_json"
+            )"
+            if [[ "$remote_digest" != "$local_digest" ]]; then
+              echo "The reviewed bytes changed while the tag was being pinned." >&2
+              exit 1
+            fi
+          done
+
+          gh release edit "$RELEASE_TAG" \
+            --draft=false \
+            --latest \
+            --verify-tag
+
+          if [[ "$(
+            gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft'
+          )" != "false" ]]; then
+            echo "$RELEASE_TAG did not publish successfully." >&2
+            exit 1
+          fi
+
+          {
+            echo "### Release published"
+            echo
+            echo "- Version: \`${{ needs.rebuild.outputs.version }}\`"
+            echo "- Tag: \`$RELEASE_TAG\`"
+            echo "- Snapshot: \`$SNAPSHOT_SHA\`"
+            echo "- Release: $(gh release view "$RELEASE_TAG" --json url --jq '.url')"
+          } >> "$GITHUB_STEP_SUMMARY"

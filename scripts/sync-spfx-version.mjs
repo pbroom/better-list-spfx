@@ -10,22 +10,46 @@ async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, 'utf8'));
 }
 
+async function writeJson(filePath, value) {
+  await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+export function parseStableVersion(value) {
+  const match = SEMVER_PATTERN.exec(value ?? '');
+  if (!match) {
+    throw new Error(`Version must be stable SemVer (x.y.z), received: ${value}`);
+  }
+  return match.slice(1).map(Number);
+}
+
+export function compareStableVersions(left, right) {
+  const leftParts = parseStableVersion(left);
+  const rightParts = parseStableVersion(right);
+  for (let index = 0; index < leftParts.length; index += 1) {
+    if (leftParts[index] !== rightParts[index]) {
+      return leftParts[index] < rightParts[index] ? -1 : 1;
+    }
+  }
+  return 0;
+}
+
+export function nextPatchVersion(version) {
+  const [major, minor, patch] = parseStableVersion(version);
+  return `${major}.${minor}.${patch + 1}`;
+}
+
 export async function inspectVersions(rootDir = process.cwd()) {
   const packageJsonPath = path.join(rootDir, 'package.json');
   const packageLockPath = path.join(rootDir, 'package-lock.json');
   const solutionPath = path.join(rootDir, 'config', 'package-solution.json');
-  const releaseManifestPath = path.join(rootDir, '.release-please-manifest.json');
-  const [packageJson, packageLock, solutionConfig, releaseManifest] = await Promise.all([
+  const [packageJson, packageLock, solutionConfig] = await Promise.all([
     readJson(packageJsonPath),
     readJson(packageLockPath),
     readJson(solutionPath),
-    readJson(releaseManifestPath),
   ]);
 
   const version = packageJson.version;
-  if (!SEMVER_PATTERN.test(version)) {
-    throw new Error(`package.json version must be stable SemVer (x.y.z), received: ${version}`);
-  }
+  parseStableVersion(version);
 
   const spfxVersion = `${version}.0`;
   const errors = [];
@@ -36,9 +60,6 @@ export async function inspectVersions(rootDir = process.cwd()) {
     errors.push(
       `package-lock.json root package version is ${packageLock.packages?.['']?.version}; expected ${version}`,
     );
-  }
-  if (releaseManifest['.'] !== version) {
-    errors.push(`.release-please-manifest.json version is ${releaseManifest['.']}; expected ${version}`);
   }
   if (solutionConfig.solution?.version !== spfxVersion) {
     errors.push(
@@ -58,8 +79,9 @@ export async function inspectVersions(rootDir = process.cwd()) {
   return {
     errors,
     packageJson,
+    packageJsonPath,
     packageLock,
-    releaseManifest,
+    packageLockPath,
     solutionConfig,
     solutionPath,
     spfxVersion,
@@ -67,28 +89,71 @@ export async function inspectVersions(rootDir = process.cwd()) {
   };
 }
 
-export async function syncSpfxVersion(rootDir = process.cwd()) {
+export async function synchronizeVersion(version, rootDir = process.cwd()) {
+  parseStableVersion(version);
   const state = await inspectVersions(rootDir);
-  const nonSpfxErrors = state.errors.filter(
-    (error) => !error.startsWith('config/package-solution.json'),
-  );
-  if (nonSpfxErrors.length > 0) {
-    throw new Error(
-      `Release Please version files are inconsistent:\n- ${nonSpfxErrors.join('\n- ')}`,
-    );
+  const spfxVersion = `${version}.0`;
+  state.packageJson.version = version;
+  state.packageLock.version = version;
+  if (!state.packageLock.packages?.['']) {
+    throw new Error('package-lock.json is missing its root package entry');
   }
-
-  state.solutionConfig.solution.version = state.spfxVersion;
+  state.packageLock.packages[''].version = version;
+  state.solutionConfig.solution.version = spfxVersion;
   for (const feature of state.solutionConfig.solution.features ?? []) {
-    feature.version = state.spfxVersion;
+    feature.version = spfxVersion;
   }
-  await writeFile(state.solutionPath, `${JSON.stringify(state.solutionConfig, null, 2)}\n`);
+  await Promise.all([
+    writeJson(state.packageJsonPath, state.packageJson),
+    writeJson(state.packageLockPath, state.packageLock),
+    writeJson(state.solutionPath, state.solutionConfig),
+  ]);
   return inspectVersions(rootDir);
 }
 
+export async function syncSpfxVersion(rootDir = process.cwd()) {
+  const state = await inspectVersions(rootDir);
+  return synchronizeVersion(state.version, rootDir);
+}
+
+export async function setNewerVersion(version, rootDir = process.cwd()) {
+  const state = await inspectVersions(rootDir);
+  if (state.errors.length > 0) {
+    throw new Error(`Cannot set a version from inconsistent files:\n- ${state.errors.join('\n- ')}`);
+  }
+  if (compareStableVersions(version, state.version) <= 0) {
+    throw new Error(`${version} must be newer than ${state.version}`);
+  }
+  return synchronizeVersion(version, rootDir);
+}
+
+export async function bumpPatchVersion(rootDir = process.cwd()) {
+  const state = await inspectVersions(rootDir);
+  if (state.errors.length > 0) {
+    throw new Error(`Cannot bump inconsistent versions:\n- ${state.errors.join('\n- ')}`);
+  }
+  return synchronizeVersion(nextPatchVersion(state.version), rootDir);
+}
+
 async function main() {
-  const checkOnly = process.argv.includes('--check');
-  const state = checkOnly ? await inspectVersions() : await syncSpfxVersion();
+  const args = process.argv.slice(2);
+  let state;
+  if (args.length === 1 && args[0] === '--check') {
+    state = await inspectVersions();
+  } else if (args.length === 1 && args[0] === '--bump-patch') {
+    state = await bumpPatchVersion();
+  } else if (args.length === 2 && args[0] === '--set') {
+    state = await setNewerVersion(args[1]);
+  } else if (args.length === 2 && args[0] === '--assert-newer-than') {
+    state = await inspectVersions();
+    if (compareStableVersions(state.version, args[1]) <= 0) {
+      throw new Error(`${state.version} must be newer than ${args[1]}`);
+    }
+  } else {
+    throw new Error(
+      'Usage: sync-spfx-version.mjs --check | --bump-patch | --set X.Y.Z | --assert-newer-than X.Y.Z',
+    );
+  }
   if (state.errors.length > 0) {
     throw new Error(`Release versions are not synchronized:\n- ${state.errors.join('\n- ')}`);
   }
