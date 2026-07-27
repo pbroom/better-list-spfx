@@ -213,6 +213,15 @@ requires the Monaco chunk before artifacts are packaged.
 
 ## Recovery and invariants
 
+- If **Version main** fails because the previous `main` tip is unavailable,
+  rerun it from the current `main` workflow definition:
+
+  ```bash
+  gh workflow run version-main.yml --ref main
+  ```
+
+  The manual run compares the current `main` tip with its first parent, and the
+  existing trailer and concurrency guards keep the recovery idempotent.
 - Rerun **Cut release candidate** for the same dispatch snapshot to recover a
   failed draft upload. A snapshot branch that points elsewhere is never moved.
 - Published versions are immutable. Neither workflow overwrites an existing

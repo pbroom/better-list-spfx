@@ -3,6 +3,7 @@ name: Version main
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -36,7 +37,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$TRIGGER_BEFORE" =~ ^0+$ ]] ||
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+              echo "Manual version recovery must be dispatched from main." >&2
+              exit 1
+            fi
+            if ! TRIGGER_BEFORE="$(git rev-parse "${TRIGGER_SHA}^" 2>/dev/null)"; then
+              echo "Cannot resolve the parent of main tip $TRIGGER_SHA." >&2
+              exit 1
+            fi
+          fi
+          if [[ ! "$TRIGGER_BEFORE" =~ ^[0-9a-f]{40}$ ]] ||
             ! git cat-file -e "${TRIGGER_BEFORE}:package.json" 2>/dev/null; then
             echo "Cannot read package.json from the previous main tip $TRIGGER_BEFORE." >&2
             echo "Refusing to guess whether this push already advanced the version." >&2
