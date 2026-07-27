@@ -2,13 +2,16 @@ import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 import test from 'node:test';
 import {
   bumpPatchVersion,
   compareStableVersions,
   inspectVersions,
   nextPatchVersion,
+  readPackageVersion,
   setNewerVersion,
+  syncSpfxVersion,
 } from './sync-spfx-version.mjs';
 
 async function writeJson(filePath, value) {
@@ -44,6 +47,17 @@ test('compares stable semantic versions and increments the patch component', () 
   assert.equal(compareStableVersions('1.0.0', '1.0.1'), -1);
   assert.equal(nextPatchVersion('0.2.9'), '0.2.10');
   assert.throws(() => nextPatchVersion('0.2.0-beta.1'), /stable SemVer/);
+});
+
+test('reads and validates a package version from standard input', async () => {
+  assert.equal(
+    await readPackageVersion(Readable.from(['{"name":"better-list-spfx","version":"0.2.10"}'])),
+    '0.2.10',
+  );
+  await assert.rejects(
+    readPackageVersion(Readable.from(['{"version":"0.2.10-beta.1"}'])),
+    /stable SemVer/,
+  );
 });
 
 test('patch bump updates every canonical npm and SPFx version', async () => {
@@ -88,6 +102,28 @@ test('inspection reports drift and bump refuses an inconsistent starting point',
     const state = await inspectVersions(rootDir);
     assert.match(state.errors.join('\n'), /root package version is 0\.2\.8/);
     await assert.rejects(bumpPatchVersion(rootDir), /Cannot bump inconsistent versions/);
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('SPFx-only synchronization repairs solution drift but refuses canonical drift', async () => {
+  const rootDir = await createFixture();
+  try {
+    const solutionPath = path.join(rootDir, 'config', 'package-solution.json');
+    const solution = JSON.parse(await readFile(solutionPath, 'utf8'));
+    solution.solution.version = '0.2.8.0';
+    solution.solution.features[0].version = '0.2.8.0';
+    await writeJson(solutionPath, solution);
+
+    const repaired = await syncSpfxVersion(rootDir);
+    assert.deepEqual(repaired.errors, []);
+
+    const lockPath = path.join(rootDir, 'package-lock.json');
+    const lock = JSON.parse(await readFile(lockPath, 'utf8'));
+    lock.version = '0.2.8';
+    await writeJson(lockPath, lock);
+    await assert.rejects(syncSpfxVersion(rootDir), /Canonical version files are inconsistent/);
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }

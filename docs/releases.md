@@ -44,6 +44,10 @@ Commit all three changed files together:
 - `package-lock.json`
 - `config/package-solution.json`
 
+Because the automatic patch commit updates these same lines after every merge,
+rebase an intentional minor or major version pull request onto current `main`
+immediately before merging it.
+
 ## Cut a release candidate
 
 Run the workflow from the current `main` workflow definition:
@@ -52,7 +56,16 @@ Run the workflow from the current `main` workflow definition:
 gh workflow run prepare-release.yml --ref main
 ```
 
-The dispatch event records the exact `main` SHA at command time. The workflow:
+The dispatch event records the exact `main` SHA at command time. To prepare an
+older reviewed point that is still reachable from `main`, provide its full SHA:
+
+```bash
+gh workflow run prepare-release.yml \
+  --ref main \
+  -f commit_sha=0123456789abcdef0123456789abcdef01234567
+```
+
+The workflow:
 
 1. proves that SHA is reachable from `main` and carries a synchronized,
    newly-advanced version;
@@ -118,7 +131,8 @@ and their GitHub digests.
 
 Only after those checks pass does the workflow atomically create `vX.Y.Z` at
 the already-reviewed snapshot SHA, verify the tag, recheck the draft and asset
-digests, and publish the draft as the latest release.
+digests, and publish the draft. It marks the release as Latest unless a newer
+stable release is already published.
 
 The publish job uses the `release` environment. Configure a required reviewer
 for that environment when the repository should require an approval click in
@@ -126,7 +140,8 @@ addition to the explicit publish command.
 
 ## Release assets
 
-Every published release has exactly two assets:
+Every release published by this workflow has exactly two assets (`v0.2.0`
+predates this flow and retains its two legacy `.tar.gz` files):
 
 - `better-list-spfx-standalone-X.Y.Z.zip` — an upload-ready `.sppkg` with its
   client-side assets embedded, plus `INSTALL.md` and

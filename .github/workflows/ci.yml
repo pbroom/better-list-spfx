@@ -15,8 +15,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -48,9 +46,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
           base_version="$(
             git show "${BASE_SHA}:package.json" |
-              node -e "let text=''; process.stdin.on('data', c => text += c); process.stdin.on('end', () => console.log(JSON.parse(text).version));"
+              node scripts/sync-spfx-version.mjs --print-package-version
           )"
           current_version="$(node -p "require('./package.json').version")"
           if [[ "$current_version" != "$base_version" ]]; then

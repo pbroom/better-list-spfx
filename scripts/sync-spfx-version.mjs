@@ -38,6 +38,16 @@ export function nextPatchVersion(version) {
   return `${major}.${minor}.${patch + 1}`;
 }
 
+export async function readPackageVersion(stream = process.stdin) {
+  let text = '';
+  for await (const chunk of stream) {
+    text += chunk;
+  }
+  const version = JSON.parse(text).version;
+  parseStableVersion(version);
+  return version;
+}
+
 export async function inspectVersions(rootDir = process.cwd()) {
   const packageJsonPath = path.join(rootDir, 'package.json');
   const packageLockPath = path.join(rootDir, 'package-lock.json');
@@ -113,7 +123,19 @@ export async function synchronizeVersion(version, rootDir = process.cwd()) {
 
 export async function syncSpfxVersion(rootDir = process.cwd()) {
   const state = await inspectVersions(rootDir);
-  return synchronizeVersion(state.version, rootDir);
+  const nonSpfxErrors = state.errors.filter(
+    (error) => !error.startsWith('config/package-solution.json'),
+  );
+  if (nonSpfxErrors.length > 0) {
+    throw new Error(`Canonical version files are inconsistent:\n- ${nonSpfxErrors.join('\n- ')}`);
+  }
+
+  state.solutionConfig.solution.version = state.spfxVersion;
+  for (const feature of state.solutionConfig.solution.features ?? []) {
+    feature.version = state.spfxVersion;
+  }
+  await writeJson(state.solutionPath, state.solutionConfig);
+  return inspectVersions(rootDir);
 }
 
 export async function setNewerVersion(version, rootDir = process.cwd()) {
@@ -137,6 +159,11 @@ export async function bumpPatchVersion(rootDir = process.cwd()) {
 
 async function main() {
   const args = process.argv.slice(2);
+  if (args.length === 1 && args[0] === '--print-package-version') {
+    console.log(await readPackageVersion());
+    return;
+  }
+
   let state;
   if (args.length === 1 && args[0] === '--check') {
     state = await inspectVersions();
@@ -151,7 +178,7 @@ async function main() {
     }
   } else {
     throw new Error(
-      'Usage: sync-spfx-version.mjs --check | --bump-patch | --set X.Y.Z | --assert-newer-than X.Y.Z',
+      'Usage: sync-spfx-version.mjs --check | --bump-patch | --set X.Y.Z | --assert-newer-than X.Y.Z | --print-package-version',
     );
   }
   if (state.errors.length > 0) {

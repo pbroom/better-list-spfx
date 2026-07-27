@@ -3,6 +3,10 @@ name: Cut release candidate
 on:
   workflow_dispatch:
     inputs:
+      commit_sha:
+        description: Optional full main commit SHA (defaults to the dispatch main tip)
+        required: false
+        type: string
       title:
         description: Optional draft title (defaults to Better List vX.Y.Z)
         required: false
@@ -16,7 +20,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: release-candidate-${{ github.sha }}
+  group: release-candidate-${{ inputs.commit_sha || github.sha }}
   cancel-in-progress: false
 
 jobs:
@@ -33,7 +37,8 @@ jobs:
       version: ${{ steps.identity.outputs.version }}
     env:
       GH_REPO: ${{ github.repository }}
-      SNAPSHOT_SHA: ${{ github.sha }}
+      EVENT_SHA: ${{ github.sha }}
+      REQUESTED_SHA: ${{ inputs.commit_sha }}
     steps:
       - name: Require the main workflow snapshot
         shell: bash
@@ -43,10 +48,10 @@ jobs:
             exit 1
           fi
 
-      - name: Check out the requested main snapshot
+      - name: Check out main history
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ env.SNAPSHOT_SHA }}
+          ref: main
           fetch-depth: 0
           persist-credentials: false
 
@@ -61,16 +66,24 @@ jobs:
         run: |
           set -euo pipefail
           git fetch --no-tags origin main
-          if ! git merge-base --is-ancestor "$SNAPSHOT_SHA" origin/main; then
-            echo "$SNAPSHOT_SHA is not reachable from origin/main." >&2
+          requested_sha="${REQUESTED_SHA:-$EVENT_SHA}"
+          if [[ ! "$requested_sha" =~ ^[0-9a-f]{40}$ ]] ||
+            ! git cat-file -e "${requested_sha}^{commit}" 2>/dev/null; then
+            echo "commit_sha must name a full commit SHA present in main history." >&2
+            exit 1
+          fi
+          snapshot_sha="$(git rev-parse "${requested_sha}^{commit}")"
+          if ! git merge-base --is-ancestor "$snapshot_sha" origin/main; then
+            echo "$snapshot_sha is not reachable from origin/main." >&2
             exit 1
           fi
 
+          git switch --detach "$snapshot_sha"
           npm run version:check
           version="$(node -p "require('./package.json').version")"
           parent_version="$(
-            git show "${SNAPSHOT_SHA}^:package.json" |
-              node -e "let text=''; process.stdin.on('data', c => text += c); process.stdin.on('end', () => console.log(JSON.parse(text).version));"
+            git show "${snapshot_sha}^:package.json" |
+              node scripts/sync-spfx-version.mjs --print-package-version
           )"
           node scripts/sync-spfx-version.mjs --assert-newer-than "$parent_version"
 
@@ -78,8 +91,8 @@ jobs:
             echo "version=$version"
             echo "tag=v$version"
             echo "branch=release/v$version"
-            echo "sha=$SNAPSHOT_SHA"
-            echo "source_date_epoch=$(git show -s --format=%ct "$SNAPSHOT_SHA")"
+            echo "sha=$snapshot_sha"
+            echo "source_date_epoch=$(git show -s --format=%ct "$snapshot_sha")"
           } >> "$GITHUB_OUTPUT"
 
       - name: Refuse collisions and create the snapshot branch
@@ -88,6 +101,7 @@ jobs:
           RELEASE_TAG: ${{ steps.identity.outputs.tag }}
           REPLACE_EXISTING_DRAFT: ${{ inputs.replace_existing_draft }}
           SNAPSHOT_BRANCH: ${{ steps.identity.outputs.branch }}
+          SNAPSHOT_SHA: ${{ steps.identity.outputs.sha }}
         shell: bash
         run: |
           set -euo pipefail

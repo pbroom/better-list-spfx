@@ -7,6 +7,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: version-main-${{ github.sha }}
+  cancel-in-progress: false
+
 jobs:
   version:
     name: Advance the main version
@@ -32,13 +36,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [[ "$TRIGGER_BEFORE" =~ ^0+$ ]] ||
+            ! git cat-file -e "${TRIGGER_BEFORE}:package.json" 2>/dev/null; then
+            echo "Cannot read package.json from the previous main tip $TRIGGER_BEFORE." >&2
+            echo "Refusing to guess whether this push already advanced the version." >&2
+            exit 1
+          fi
           before_version="$(
             git show "${TRIGGER_BEFORE}:package.json" |
-              node -e "let text=''; process.stdin.on('data', c => text += c); process.stdin.on('end', () => console.log(JSON.parse(text).version));"
+              node scripts/sync-spfx-version.mjs --print-package-version
           )"
           trigger_version="$(
             git show "${TRIGGER_SHA}:package.json" |
-              node -e "let text=''; process.stdin.on('data', c => text += c); process.stdin.on('end', () => console.log(JSON.parse(text).version));"
+              node scripts/sync-spfx-version.mjs --print-package-version
           )"
           {
             echo "before=$before_version"
@@ -74,6 +84,8 @@ jobs:
             git switch --detach origin/main
             env -u PUSH_TOKEN npm run version:bump
             env -u PUSH_TOKEN npm run version:check
+            # Release tooling tests intentionally use only Node.js built-ins so
+            # this version-only job does not need a dependency installation.
             env -u PUSH_TOKEN npm run test:release
             version="$(env -u PUSH_TOKEN node -p "require('./package.json').version")"
             git add package.json package-lock.json config/package-solution.json
@@ -81,7 +93,7 @@ jobs:
               -m "chore(version): bump main to $version" \
               -m "Version-Bump-For: $TRIGGER_SHA"
             auth_header="$(
-              printf 'x-access-token:%s' "$PUSH_TOKEN" | base64
+              printf 'x-access-token:%s' "$PUSH_TOKEN" | base64 | tr -d '\n'
             )"
             if git \
               -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header" \

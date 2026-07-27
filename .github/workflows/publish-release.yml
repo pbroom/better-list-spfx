@@ -15,16 +15,15 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  rebuild:
-    name: Rebuild the reviewed snapshot
+  inspect:
+    name: Inspect the reviewed draft
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      # Draft releases are visible only to a token with push access.
+      contents: write
     outputs:
       release_id: ${{ steps.release.outputs.release_id }}
       sha: ${{ steps.release.outputs.sha }}
-      source_date_epoch: ${{ steps.release.outputs.source_date_epoch }}
-      version: ${{ steps.release.outputs.version }}
     env:
       GH_REPO: ${{ github.repository }}
       RELEASE_TAG: ${{ inputs.release_tag }}
@@ -43,12 +42,6 @@ jobs:
           ref: main
           fetch-depth: 0
           persist-credentials: false
-
-      - name: Set up supported Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version-file: .nvmrc
-          cache: npm
 
       - name: Validate the reviewed draft and snapshot
         id: release
@@ -112,7 +105,42 @@ jobs:
             exit 1
           fi
 
-          git switch --detach "$snapshot_sha"
+          {
+            echo "sha=$snapshot_sha"
+            echo "release_id=$(jq -r '.databaseId' <<<"$release_json")"
+          } >> "$GITHUB_OUTPUT"
+
+  rebuild:
+    name: Rebuild the reviewed snapshot
+    needs: inspect
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      source_date_epoch: ${{ steps.release.outputs.source_date_epoch }}
+      version: ${{ steps.release.outputs.version }}
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      SNAPSHOT_SHA: ${{ needs.inspect.outputs.sha }}
+    steps:
+      - name: Check out the immutable snapshot
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.inspect.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up supported Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Validate the snapshot version
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
           version="$(node -p "require('./package.json').version")"
           if [[ "$RELEASE_TAG" != "v$version" ]]; then
             echo "$RELEASE_TAG does not match snapshot version $version." >&2
@@ -120,16 +148,14 @@ jobs:
           fi
           npm run version:check
           parent_version="$(
-            git show "${snapshot_sha}^:package.json" |
-              node -e "let text=''; process.stdin.on('data', c => text += c); process.stdin.on('end', () => console.log(JSON.parse(text).version));"
+            git show "${SNAPSHOT_SHA}^:package.json" |
+              node scripts/sync-spfx-version.mjs --print-package-version
           )"
           node scripts/sync-spfx-version.mjs --assert-newer-than "$parent_version"
 
           {
-            echo "sha=$snapshot_sha"
             echo "version=$version"
-            echo "release_id=$(jq -r '.databaseId' <<<"$release_json")"
-            echo "source_date_epoch=$(git show -s --format=%ct "$snapshot_sha")"
+            echo "source_date_epoch=$(git show -s --format=%ct "$SNAPSHOT_SHA")"
           } >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies cleanly
@@ -145,12 +171,12 @@ jobs:
         run: |
           npm run release:prepare -- \
             --tag "$RELEASE_TAG" \
-            --commit "${{ steps.release.outputs.sha }}" \
+            --commit "$SNAPSHOT_SHA" \
             --source-date-epoch "${{ steps.release.outputs.source_date_epoch }}" \
             --output-dir release-output
           npm run release:verify -- \
             --tag "$RELEASE_TAG" \
-            --commit "${{ steps.release.outputs.sha }}" \
+            --commit "$SNAPSHOT_SHA" \
             --output-dir release-output
 
       - name: Preserve the rebuilt assets for the gated publish job
@@ -163,7 +189,7 @@ jobs:
 
   publish:
     name: Publish the revalidated draft
-    needs: rebuild
+    needs: [inspect, rebuild]
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -171,8 +197,8 @@ jobs:
     env:
       GH_REPO: ${{ github.repository }}
       RELEASE_TAG: ${{ inputs.release_tag }}
-      RELEASE_ID: ${{ needs.rebuild.outputs.release_id }}
-      SNAPSHOT_SHA: ${{ needs.rebuild.outputs.sha }}
+      RELEASE_ID: ${{ needs.inspect.outputs.release_id }}
+      SNAPSHOT_SHA: ${{ needs.inspect.outputs.sha }}
     steps:
       - name: Download the clean rebuild
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -276,9 +302,48 @@ jobs:
             fi
           done
 
+          version_is_newer() {
+            local left="${1#v}"
+            local right="${2#v}"
+            local left_major left_minor left_patch
+            local right_major right_minor right_patch
+            if [[ ! "$left" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ||
+              ! "$right" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+              echo "Cannot compare non-stable release tags: $1 and $2." >&2
+              return 2
+            fi
+            IFS=. read -r left_major left_minor left_patch <<<"$left"
+            IFS=. read -r right_major right_minor right_patch <<<"$right"
+            if ((left_major != right_major)); then
+              ((left_major > right_major))
+              return
+            fi
+            if ((left_minor != right_minor)); then
+              ((left_minor > right_minor))
+              return
+            fi
+            ((left_patch > right_patch))
+          }
+
+          latest_option="--latest"
+          latest_json="$(
+            gh api "repos/$GH_REPO/releases/latest" 2>/dev/null || true
+          )"
+          if [[ -n "$latest_json" ]]; then
+            latest_tag="$(jq -r '.tag_name' <<<"$latest_json")"
+            if version_is_newer "$latest_tag" "$RELEASE_TAG"; then
+              latest_option="--latest=false"
+            else
+              comparison_status=$?
+              if [[ "$comparison_status" -eq 2 ]]; then
+                exit 1
+              fi
+            fi
+          fi
+
           gh release edit "$RELEASE_TAG" \
             --draft=false \
-            --latest \
+            "$latest_option" \
             --verify-tag
 
           if [[ "$(
