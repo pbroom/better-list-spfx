@@ -1,5 +1,13 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
@@ -11,6 +19,7 @@ import {
   nextPatchVersion,
   readPackageVersion,
   setNewerVersion,
+  synchronizeVersion,
   syncSpfxVersion,
 } from './sync-spfx-version.mjs';
 
@@ -46,8 +55,59 @@ test('compares stable semantic versions and increments the patch component', () 
   assert.equal(compareStableVersions('1.0.0', '1.0.0'), 0);
   assert.equal(compareStableVersions('1.0.0', '1.0.1'), -1);
   assert.equal(nextPatchVersion('0.2.9'), '0.2.10');
+  assert.equal(
+    compareStableVersions('1.0.9007199254740993', '1.0.9007199254740992'),
+    1,
+  );
+  assert.equal(nextPatchVersion('1.0.9007199254740992'), '1.0.9007199254740993');
   assert.throws(() => nextPatchVersion('0.2.0-beta.1'), /stable SemVer/);
 });
+
+async function snapshotVersionFiles(rootDir) {
+  return Promise.all(
+    ['package.json', 'package-lock.json', path.join('config', 'package-solution.json')].map(
+      (relativePath) => readFile(path.join(rootDir, relativePath), 'utf8'),
+    ),
+  );
+}
+
+async function assertNoTransactionFiles(rootDir) {
+  const names = [
+    ...(await readdir(rootDir)),
+    ...(await readdir(path.join(rootDir, 'config'))),
+  ];
+  assert.equal(names.some((name) => name.endsWith('.next') || name.endsWith('.original')), false);
+}
+
+function failingFileOperations({ failRenameAt, failWriteAt, renameAfterMutation = false }) {
+  let renameCount = 0;
+  let writeCount = 0;
+  let renameFailureInjected = false;
+  return {
+    readFile,
+    rm,
+    async rename(from, to) {
+      renameCount += 1;
+      const shouldFail = !renameFailureInjected && renameCount === failRenameAt;
+      if (shouldFail && !renameAfterMutation) {
+        renameFailureInjected = true;
+        throw new Error(`injected rename failure ${renameCount}`);
+      }
+      await rename(from, to);
+      if (shouldFail) {
+        renameFailureInjected = true;
+        throw new Error(`injected post-rename failure ${renameCount}`);
+      }
+    },
+    async writeFile(...args) {
+      writeCount += 1;
+      if (writeCount === failWriteAt) {
+        throw new Error(`injected write failure ${writeCount}`);
+      }
+      await writeFile(...args);
+    },
+  };
+}
 
 test('reads and validates a package version from standard input', async () => {
   assert.equal(
@@ -76,6 +136,50 @@ test('patch bump updates every canonical npm and SPFx version', async () => {
     assert.deepEqual(state.errors, []);
   } finally {
     await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('staging failures preserve every original version file', async () => {
+  for (let failWriteAt = 1; failWriteAt <= 6; failWriteAt += 1) {
+    const rootDir = await createFixture();
+    try {
+      const originals = await snapshotVersionFiles(rootDir);
+      await assert.rejects(
+        synchronizeVersion(
+          '0.2.10',
+          rootDir,
+          failingFileOperations({ failWriteAt }),
+        ),
+        new RegExp(`injected write failure ${failWriteAt}`),
+      );
+      assert.deepEqual(await snapshotVersionFiles(rootDir), originals);
+      await assertNoTransactionFiles(rootDir);
+    } finally {
+      await rm(rootDir, { recursive: true, force: true });
+    }
+  }
+});
+
+test('replacement failures roll back every original version file', async () => {
+  for (const renameAfterMutation of [false, true]) {
+    for (let failRenameAt = 1; failRenameAt <= 3; failRenameAt += 1) {
+      const rootDir = await createFixture();
+      try {
+        const originals = await snapshotVersionFiles(rootDir);
+        await assert.rejects(
+          synchronizeVersion(
+            '0.2.10',
+            rootDir,
+            failingFileOperations({ failRenameAt, renameAfterMutation }),
+          ),
+          /injected .*rename failure/,
+        );
+        assert.deepEqual(await snapshotVersionFiles(rootDir), originals);
+        await assertNoTransactionFiles(rootDir);
+      } finally {
+        await rm(rootDir, { recursive: true, force: true });
+      }
+    }
   }
 });
 

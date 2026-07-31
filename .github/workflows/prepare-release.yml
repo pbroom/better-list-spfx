@@ -20,8 +20,8 @@ on:
 permissions: {}
 
 concurrency:
-  group: release-candidate-${{ inputs.commit_sha || github.sha }}
-  cancel-in-progress: false
+  group: release-mutation
+  queue: max
 
 jobs:
   snapshot:
@@ -95,66 +95,33 @@ jobs:
             echo "source_date_epoch=$(git show -s --format=%ct "$snapshot_sha")"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Refuse collisions and create the snapshot branch
+      - name: Create or confirm the snapshot branch
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.identity.outputs.tag }}
-          REPLACE_EXISTING_DRAFT: ${{ inputs.replace_existing_draft }}
           SNAPSHOT_BRANCH: ${{ steps.identity.outputs.branch }}
           SNAPSHOT_SHA: ${{ steps.identity.outputs.sha }}
         shell: bash
         run: |
           set -euo pipefail
-          if gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "Tag $RELEASE_TAG already exists; published versions cannot be rebuilt in place." >&2
-            exit 1
-          fi
-
-          release_json="$(
-            gh release view "$RELEASE_TAG" \
-              --json assets,isDraft,targetCommitish 2>/dev/null || true
-          )"
-          if [[ -n "$release_json" ]]; then
-            if [[ "$(jq -r '.isDraft' <<<"$release_json")" != "true" ]]; then
-              echo "$RELEASE_TAG is already published and cannot be replaced." >&2
-              exit 1
-            fi
-            target="$(jq -r '.targetCommitish' <<<"$release_json")"
-            if [[ "$target" != "$SNAPSHOT_SHA" && "$REPLACE_EXISTING_DRAFT" != "true" ]]; then
-              echo "Existing draft targets $target, not $SNAPSHOT_SHA." >&2
-              echo "Review it, then rerun with replace_existing_draft=true to reconcile it." >&2
-              exit 1
-            fi
-            unexpected_assets="$(
-              jq -r --arg version "${RELEASE_TAG#v}" '
-                .assets[].name |
-                select(
-                  . != "better-list-spfx-standalone-\($version).zip" and
-                  . != "better-list-spfx-cdn-kit-\($version).zip"
-                )
-              ' <<<"$release_json"
-            )"
-            if [[ -n "$unexpected_assets" && "$REPLACE_EXISTING_DRAFT" != "true" ]]; then
-              echo "Existing draft contains unexpected assets:" >&2
-              echo "$unexpected_assets" >&2
-              echo "Review it, then rerun with replace_existing_draft=true to reconcile it." >&2
-              exit 1
-            fi
-          fi
-
-          branch_json="$(
-            gh api "repos/$GH_REPO/git/ref/heads/$SNAPSHOT_BRANCH" 2>/dev/null || true
-          )"
-          if [[ -n "$branch_json" ]]; then
-            branch_sha="$(jq -r '.object.sha' <<<"$branch_json")"
-            if [[ "$branch_sha" != "$SNAPSHOT_SHA" ]]; then
-              echo "$SNAPSHOT_BRANCH already points to $branch_sha, not $SNAPSHOT_SHA." >&2
-              exit 1
-            fi
-          else
+          if gh api "repos/$GH_REPO/git/ref/heads/$SNAPSHOT_BRANCH" \
+            >snapshot-branch.json 2>snapshot-branch-error.log; then
+            :
+          elif grep -Eq '\(HTTP 404\)$' snapshot-branch-error.log; then
             gh api --method POST "repos/$GH_REPO/git/refs" \
               -f ref="refs/heads/$SNAPSHOT_BRANCH" \
               -f sha="$SNAPSHOT_SHA" >/dev/null
+          else
+            echo "Could not inspect $SNAPSHOT_BRANCH; refusing to create it." >&2
+            sed 's/^/  /' snapshot-branch-error.log >&2
+            exit 1
+          fi
+
+          branch_sha="$(
+            gh api "repos/$GH_REPO/git/ref/heads/$SNAPSHOT_BRANCH" --jq '.object.sha'
+          )"
+          if [[ "$branch_sha" != "$SNAPSHOT_SHA" ]]; then
+            echo "$SNAPSHOT_BRANCH points to $branch_sha, not $SNAPSHOT_SHA." >&2
+            exit 1
           fi
 
   build:
@@ -222,6 +189,17 @@ jobs:
       SNAPSHOT_SHA: ${{ needs.snapshot.outputs.sha }}
       VERSION: ${{ needs.snapshot.outputs.version }}
     steps:
+      - name: Check out the release orchestration
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up supported Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+
       - name: Download the validated candidate
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
@@ -234,135 +212,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -t assets < <(find release-output -maxdepth 1 -type f -name '*.zip' -print | sort)
-          if [[ "${#assets[@]}" -ne 2 ]]; then
-            echo "Expected exactly two validated ZIP assets." >&2
-            exit 1
-          fi
-          expected_names="$(printf '%s\n' "${assets[@]##*/}" | sort)"
-          release_title="${REQUESTED_TITLE:-Better List $RELEASE_TAG}"
-          release_json="$(
-            gh release view "$RELEASE_TAG" \
-              --json assets,body,databaseId,isDraft,name,targetCommitish,url 2>/dev/null || true
-          )"
-
-          if [[ -z "$release_json" ]]; then
-            gh release create "$RELEASE_TAG" \
-              --draft \
-              --generate-notes \
-              --target "$SNAPSHOT_SHA" \
-              --title "$release_title"
-            release_json="$(
-              gh release view "$RELEASE_TAG" \
-                --json assets,body,databaseId,isDraft,name,targetCommitish,url
-            )"
-          else
-            if [[ "$(jq -r '.isDraft' <<<"$release_json")" != "true" ]]; then
-              echo "$RELEASE_TAG is already published and cannot be replaced." >&2
-              exit 1
-            fi
-            target="$(jq -r '.targetCommitish' <<<"$release_json")"
-            release_id="$(jq -r '.databaseId' <<<"$release_json")"
-            unexpected_assets="$(
-              jq -r --argjson expected "$(
-                printf '%s\n' "$expected_names" | jq -R . | jq -s .
-              )" '.assets[].name | select(. as $name | $expected | index($name) | not)' \
-                <<<"$release_json"
-            )"
-            if [[ "$target" != "$SNAPSHOT_SHA" && "$REPLACE_EXISTING_DRAFT" != "true" ]]; then
-              echo "Existing draft targets $target, not $SNAPSHOT_SHA." >&2
-              exit 1
-            fi
-            if [[ -n "$unexpected_assets" && "$REPLACE_EXISTING_DRAFT" != "true" ]]; then
-              echo "Existing draft contains unexpected assets:" >&2
-              echo "$unexpected_assets" >&2
-              exit 1
-            fi
-
-            if [[ "$REPLACE_EXISTING_DRAFT" == "true" ]]; then
-              gh api --method POST "repos/$GH_REPO/releases/generate-notes" \
-                -f tag_name="$RELEASE_TAG" \
-                -f target_commitish="$SNAPSHOT_SHA" \
-                --jq '.body' > release-notes.md
-              while IFS= read -r asset_id; do
-                gh api --method DELETE "repos/$GH_REPO/releases/assets/$asset_id"
-              done < <(gh api "repos/$GH_REPO/releases/$release_id" --jq '.assets[].id')
-              gh release edit "$RELEASE_TAG" \
-                --draft \
-                --notes-file release-notes.md \
-                --target "$SNAPSHOT_SHA" \
-                --title "$release_title"
-            fi
-          fi
-
-          release_id="$(
-            gh release view "$RELEASE_TAG" --json databaseId --jq '.databaseId'
-          )"
-          remote_release="$(gh api "repos/$GH_REPO/releases/$release_id")"
-          for asset in "${assets[@]}"; do
-            asset_name="$(basename "$asset")"
-            local_digest="sha256:$(sha256sum "$asset" | cut -d' ' -f1)"
-            remote_digest="$(
-              jq -r --arg name "$asset_name" \
-                '.assets[] | select(.name == $name) | .digest // empty' <<<"$remote_release"
-            )"
-            if [[ -n "$remote_digest" && "$remote_digest" != "$local_digest" ]]; then
-              echo "Existing draft asset $asset_name differs from the validated build." >&2
-              echo "Rerun with replace_existing_draft=true only after reviewing it." >&2
-              exit 1
-            fi
-          done
-          for asset in "${assets[@]}"; do
-            asset_name="$(basename "$asset")"
-            remote_digest="$(
-              jq -r --arg name "$asset_name" \
-                '.assets[] | select(.name == $name) | .digest // empty' <<<"$remote_release"
-            )"
-            if [[ -z "$remote_digest" ]]; then
-              gh release upload "$RELEASE_TAG" "$asset"
-            fi
-          done
-
-          release_json="$(
-            gh release view "$RELEASE_TAG" \
-              --json body,databaseId,isDraft,name,targetCommitish,url
-          )"
-          if [[ "$(jq -r '.isDraft' <<<"$release_json")" != "true" ||
-            "$(jq -r '.targetCommitish' <<<"$release_json")" != "$SNAPSHOT_SHA" ]]; then
-            echo "The candidate must remain a draft pinned to $SNAPSHOT_SHA." >&2
-            exit 1
-          fi
-          if [[ -z "$(jq -r '.name // empty' <<<"$release_json")" ||
-            -z "$(jq -r '.body // empty' <<<"$release_json")" ]]; then
-            echo "Draft release must have a title and description." >&2
-            exit 1
-          fi
-
-          remote_release="$(
-            gh api "repos/$GH_REPO/releases/$(jq -r '.databaseId' <<<"$release_json")"
-          )"
-          remote_names="$(jq -r '.assets[].name' <<<"$remote_release" | sort)"
-          if [[ "$remote_names" != "$expected_names" ]]; then
-            echo "Draft release must contain exactly the two validated ZIP assets." >&2
-            exit 1
-          fi
-          for asset in "${assets[@]}"; do
-            asset_name="$(basename "$asset")"
-            local_digest="sha256:$(sha256sum "$asset" | cut -d' ' -f1)"
-            remote_digest="$(
-              jq -r --arg name "$asset_name" \
-                '.assets[] | select(.name == $name) | .digest // empty' <<<"$remote_release"
-            )"
-            if [[ "$remote_digest" != "$local_digest" ]]; then
-              echo "GitHub asset digest mismatch for $asset_name." >&2
-              exit 1
-            fi
-          done
-          if gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "Preparing a draft must not create the release tag." >&2
-            exit 1
-          fi
-
+          release_json="$(node scripts/release-lifecycle.mjs prepare)"
           draft_url="$(jq -r '.url' <<<"$release_json")"
           {
             echo "### Draft release ready for review"

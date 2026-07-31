@@ -11,8 +11,8 @@ on:
 permissions: {}
 
 concurrency:
-  group: publish-${{ inputs.release_tag }}
-  cancel-in-progress: false
+  group: release-mutation
+  queue: max
 
 jobs:
   inspect:
@@ -36,12 +36,17 @@ jobs:
             exit 1
           fi
 
-      - name: Check out repository history
+      - name: Check out the release orchestration and history
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: main
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Set up supported Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
 
       - name: Validate the reviewed draft and snapshot
         id: release
@@ -63,51 +68,13 @@ jobs:
             exit 1
           fi
 
-          tag_json="$(
-            gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" 2>/dev/null || true
-          )"
-          if [[ -n "$tag_json" ]]; then
-            tag_sha="$(
-              gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq '.sha'
-            )"
-            if [[ "$tag_sha" != "$snapshot_sha" ]]; then
-              echo "$RELEASE_TAG already points to $tag_sha, not $snapshot_sha." >&2
-              exit 1
-            fi
-          fi
-
           release_json="$(
-            gh release view "$RELEASE_TAG" \
-              --json assets,body,databaseId,isDraft,name,targetCommitish
+            node scripts/release-lifecycle.mjs inspect --sha "$snapshot_sha"
           )"
-          if [[ "$(jq -r '.isDraft' <<<"$release_json")" != "true" ]]; then
-            echo "$RELEASE_TAG is not a draft release." >&2
-            exit 1
-          fi
-          if [[ "$(jq -r '.targetCommitish' <<<"$release_json")" != "$snapshot_sha" ]]; then
-            echo "Draft target does not match $snapshot_branch at $snapshot_sha." >&2
-            exit 1
-          fi
-          if [[ -z "$(jq -r '.name // empty' <<<"$release_json")" ||
-            -z "$(jq -r '.body // empty' <<<"$release_json")" ]]; then
-            echo "The reviewed draft must have a title and description." >&2
-            exit 1
-          fi
-          expected_names="$(
-            printf '%s\n' \
-              "better-list-spfx-cdn-kit-${RELEASE_TAG#v}.zip" \
-              "better-list-spfx-standalone-${RELEASE_TAG#v}.zip" |
-              sort
-          )"
-          actual_names="$(jq -r '.assets[].name' <<<"$release_json" | sort)"
-          if [[ "$actual_names" != "$expected_names" ]]; then
-            echo "The reviewed draft must contain exactly the two versioned ZIP assets." >&2
-            exit 1
-          fi
 
           {
             echo "sha=$snapshot_sha"
-            echo "release_id=$(jq -r '.databaseId' <<<"$release_json")"
+            echo "release_id=$(jq -r '.id' <<<"$release_json")"
           } >> "$GITHUB_OUTPUT"
 
   rebuild:
@@ -200,6 +167,17 @@ jobs:
       RELEASE_ID: ${{ needs.inspect.outputs.release_id }}
       SNAPSHOT_SHA: ${{ needs.inspect.outputs.sha }}
     steps:
+      - name: Check out the release orchestration
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up supported Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+
       - name: Download the clean rebuild
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
@@ -212,146 +190,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          snapshot_branch="release/$RELEASE_TAG"
-          branch_sha="$(
-            gh api "repos/$GH_REPO/git/ref/heads/$snapshot_branch" --jq '.object.sha'
-          )"
-          if [[ "$branch_sha" != "$SNAPSHOT_SHA" ]]; then
-            echo "$snapshot_branch moved to $branch_sha after validation." >&2
-            exit 1
-          fi
-
-          release_json="$(gh api "repos/$GH_REPO/releases/$RELEASE_ID")"
-          if [[ "$(jq -r '.draft' <<<"$release_json")" != "true" ||
-            "$(jq -r '.tag_name' <<<"$release_json")" != "$RELEASE_TAG" ||
-            "$(jq -r '.target_commitish' <<<"$release_json")" != "$SNAPSHOT_SHA" ]]; then
-            echo "The draft identity or target changed after validation." >&2
-            exit 1
-          fi
-          if [[ -z "$(jq -r '.name // empty' <<<"$release_json")" ||
-            -z "$(jq -r '.body // empty' <<<"$release_json")" ]]; then
-            echo "The reviewed draft must still have a title and description." >&2
-            exit 1
-          fi
-
-          mapfile -t rebuilt < <(find release-output -maxdepth 1 -type f -name '*.zip' -print | sort)
-          if [[ "${#rebuilt[@]}" -ne 2 ]]; then
-            echo "Expected exactly two rebuilt ZIP assets." >&2
-            exit 1
-          fi
-          expected_names="$(printf '%s\n' "${rebuilt[@]##*/}" | sort)"
-          remote_names="$(jq -r '.assets[].name' <<<"$release_json" | sort)"
-          if [[ "$remote_names" != "$expected_names" ]]; then
-            echo "The reviewed asset set changed after validation." >&2
-            exit 1
-          fi
-
-          mkdir attached-assets
-          gh release download "$RELEASE_TAG" --dir attached-assets
-          for asset in "${rebuilt[@]}"; do
-            name="$(basename "$asset")"
-            if [[ ! -f "attached-assets/$name" ]]; then
-              echo "Reviewed draft is missing $name." >&2
-              exit 1
-            fi
-            cmp "$asset" "attached-assets/$name"
-            local_digest="sha256:$(sha256sum "$asset" | cut -d' ' -f1)"
-            remote_digest="$(
-              jq -r --arg name "$name" \
-                '.assets[] | select(.name == $name) | .digest // empty' <<<"$release_json"
-            )"
-            if [[ "$remote_digest" != "$local_digest" ]]; then
-              echo "GitHub digest mismatch for $name." >&2
-              exit 1
-            fi
-          done
-
-          tag_json="$(
-            gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" 2>/dev/null || true
-          )"
-          if [[ -z "$tag_json" ]]; then
-            gh api --method POST "repos/$GH_REPO/git/refs" \
-              -f ref="refs/tags/$RELEASE_TAG" \
-              -f sha="$SNAPSHOT_SHA" >/dev/null
-          fi
-          tag_sha="$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq '.sha')"
-          if [[ "$tag_sha" != "$SNAPSHOT_SHA" ]]; then
-            echo "$RELEASE_TAG points to $tag_sha, not the reviewed snapshot." >&2
-            exit 1
-          fi
-
-          release_json="$(gh api "repos/$GH_REPO/releases/$RELEASE_ID")"
-          if [[ "$(jq -r '.draft' <<<"$release_json")" != "true" ||
-            "$(jq -r '.target_commitish' <<<"$release_json")" != "$SNAPSHOT_SHA" ||
-            -z "$(jq -r '.name // empty' <<<"$release_json")" ||
-            -z "$(jq -r '.body // empty' <<<"$release_json")" ||
-            "$(jq -r '.assets[].name' <<<"$release_json" | sort)" != "$expected_names" ]]; then
-            echo "The draft changed while its tag was being pinned." >&2
-            exit 1
-          fi
-          for asset in "${rebuilt[@]}"; do
-            name="$(basename "$asset")"
-            local_digest="sha256:$(sha256sum "$asset" | cut -d' ' -f1)"
-            remote_digest="$(
-              jq -r --arg name "$name" \
-                '.assets[] | select(.name == $name) | .digest // empty' <<<"$release_json"
-            )"
-            if [[ "$remote_digest" != "$local_digest" ]]; then
-              echo "The reviewed bytes changed while the tag was being pinned." >&2
-              exit 1
-            fi
-          done
-
-          version_is_newer() {
-            local left="${1#v}"
-            local right="${2#v}"
-            local left_major left_minor left_patch
-            local right_major right_minor right_patch
-            if [[ ! "$left" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ||
-              ! "$right" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-              echo "Cannot compare non-stable release tags: $1 and $2." >&2
-              return 2
-            fi
-            IFS=. read -r left_major left_minor left_patch <<<"$left"
-            IFS=. read -r right_major right_minor right_patch <<<"$right"
-            if ((left_major != right_major)); then
-              ((left_major > right_major))
-              return
-            fi
-            if ((left_minor != right_minor)); then
-              ((left_minor > right_minor))
-              return
-            fi
-            ((left_patch > right_patch))
-          }
-
-          latest_option="--latest"
-          latest_json="$(
-            gh api "repos/$GH_REPO/releases/latest" 2>/dev/null || true
-          )"
-          if [[ -n "$latest_json" ]]; then
-            latest_tag="$(jq -r '.tag_name' <<<"$latest_json")"
-            if version_is_newer "$latest_tag" "$RELEASE_TAG"; then
-              latest_option="--latest=false"
-            else
-              comparison_status=$?
-              if [[ "$comparison_status" -eq 2 ]]; then
-                exit 1
-              fi
-            fi
-          fi
-
-          gh release edit "$RELEASE_TAG" \
-            --draft=false \
-            "$latest_option" \
-            --verify-tag
-
-          if [[ "$(
-            gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft'
-          )" != "false" ]]; then
-            echo "$RELEASE_TAG did not publish successfully." >&2
-            exit 1
-          fi
+          release_json="$(node scripts/release-lifecycle.mjs publish)"
 
           {
             echo "### Release published"
@@ -359,5 +198,5 @@ jobs:
             echo "- Version: \`${{ needs.rebuild.outputs.version }}\`"
             echo "- Tag: \`$RELEASE_TAG\`"
             echo "- Snapshot: \`$SNAPSHOT_SHA\`"
-            echo "- Release: $(gh release view "$RELEASE_TAG" --json url --jq '.url')"
+            echo "- Release: $(jq -r '.url' <<<"$release_json")"
           } >> "$GITHUB_STEP_SUMMARY"

@@ -13,23 +13,28 @@ different command.
 `npm run version:check` rejects any drift.
 
 On every `main` update (normally one pull-request merge),
-`.github/workflows/version-main.yml` does one of two things:
+`.github/workflows/version-main.yml` compares the new tip with its immediate
+first parent and does one of two things:
 
-- If the merged pull request already advanced all synchronized versions, it
-  verifies that the new version is strictly greater and leaves it unchanged.
-  Use this for an intentional minor or major jump.
+- If the tip commit advanced all synchronized versions, it verifies that the
+  new version is strictly greater and leaves it unchanged. Use this for an
+  intentional minor or major jump.
 - Otherwise, it patch-increments the latest `main`, validates the result, and
   pushes one version-only commit with a `Version-Bump-For` trailer.
 
-Version jobs use optimistic retries, so closely spaced merge pushes are
-processed individually even if their jobs overlap. A single unusual push that
-contains several commits still represents one `main` update and gets one
-increment. The trailer makes a rerun idempotent. The scoped `GITHUB_TOKEN` push
-does not start another workflow run, preventing a bump loop.
+Version jobs share a single queued writer lane, so closely spaced updates are
+processed serially instead of racing. A multi-commit update whose version
+change is earlier than its tip receives the normal version-only tip commit;
+this keeps the release boundary identical everywhere. The trailer makes a
+rerun idempotent. Optimistic push retries still protect against external pushes
+to `main`. Push events also compare against the previous `main` tip, so a
+force-push cannot use a locally newer commit to lower the repository version.
+The scoped `GITHUB_TOKEN` push does not start another workflow run, preventing
+a bump loop.
 
 Do not cut a release while **Version main** is still running. The cut workflow
-also rejects a snapshot whose version did not advance from its first parent, so
-an unversioned merge cannot be released during that short window.
+uses the same immediate-first-parent contract and rejects an unversioned tip
+during that short window.
 
 To set a reviewed version intentionally:
 
@@ -129,10 +134,16 @@ release tests and both production builds, reconstructs the archives
 deterministically, and compares them byte for byte with the reviewed downloads
 and their GitHub digests.
 
-Only after those checks pass does the workflow atomically create `vX.Y.Z` at
+Candidate preparation and publication share one queued release-mutation lane.
+This prevents a draft from being replaced while publication revalidates it and
+serializes updates to the repository-global Latest pointer.
+
+Only after those checks pass does the workflow create `vX.Y.Z` at
 the already-reviewed snapshot SHA, verify the tag, recheck the draft and asset
 digests, and publish the draft. It marks the release as Latest unless a newer
-stable release is already published.
+stable release is already published. If GitHub's Latest lookup fails for any
+reason other than a confirmed `404 Not Found`, publication stops rather than
+guessing.
 
 The publish job uses the `release` environment. Configure a required reviewer
 for that environment when the repository should require an approval click in

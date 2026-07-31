@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -10,8 +11,77 @@ async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, 'utf8'));
 }
 
+const defaultFileOperations = { readFile, rename, rm, writeFile };
+
+function jsonText(value) {
+  return `${JSON.stringify(value, null, 2)}\n`;
+}
+
 async function writeJson(filePath, value) {
-  await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`);
+  await writeFile(filePath, jsonText(value));
+}
+
+function transactionPath(filePath, token, kind) {
+  return path.join(path.dirname(filePath), `.${path.basename(filePath)}.${token}.${kind}`);
+}
+
+async function removeIfPresent(filePath, fileOperations) {
+  try {
+    await fileOperations.rm(filePath, { force: true });
+  } catch {
+    // Cleanup is best-effort and must not hide the transaction result.
+  }
+}
+
+async function writeJsonTransaction(updates, fileOperations = defaultFileOperations) {
+  const token = `${process.pid}-${randomUUID()}`;
+  const entries = await Promise.all(
+    updates.map(async ([filePath, value]) => ({
+      filePath,
+      nextPath: transactionPath(filePath, token, 'next'),
+      nextText: jsonText(value),
+      originalPath: transactionPath(filePath, token, 'original'),
+      originalText: await fileOperations.readFile(filePath, 'utf8'),
+    })),
+  );
+  const temporaryPaths = entries.flatMap(({ nextPath, originalPath }) => [nextPath, originalPath]);
+
+  try {
+    for (const entry of entries) {
+      await fileOperations.writeFile(entry.nextPath, entry.nextText, { flag: 'wx' });
+      await fileOperations.writeFile(entry.originalPath, entry.originalText, { flag: 'wx' });
+    }
+  } catch (error) {
+    await Promise.all(temporaryPaths.map((filePath) => removeIfPresent(filePath, fileOperations)));
+    throw error;
+  }
+
+  const attempted = [];
+  try {
+    for (const entry of entries) {
+      attempted.push(entry);
+      await fileOperations.rename(entry.nextPath, entry.filePath);
+    }
+  } catch (error) {
+    const rollbackErrors = [];
+    for (const entry of attempted.reverse()) {
+      try {
+        await fileOperations.rename(entry.originalPath, entry.filePath);
+      } catch (rollbackError) {
+        rollbackErrors.push(`${entry.filePath}: ${rollbackError.message}`);
+      }
+    }
+    await Promise.all(temporaryPaths.map((filePath) => removeIfPresent(filePath, fileOperations)));
+    if (rollbackErrors.length > 0) {
+      throw new AggregateError(
+        [error, ...rollbackErrors.map((message) => new Error(message))],
+        `Version transaction failed and rollback was incomplete: ${rollbackErrors.join('; ')}`,
+      );
+    }
+    throw error;
+  }
+
+  await Promise.all(temporaryPaths.map((filePath) => removeIfPresent(filePath, fileOperations)));
 }
 
 export function parseStableVersion(value) {
@@ -19,7 +89,7 @@ export function parseStableVersion(value) {
   if (!match) {
     throw new Error(`Version must be stable SemVer (x.y.z), received: ${value}`);
   }
-  return match.slice(1).map(Number);
+  return match.slice(1);
 }
 
 export function compareStableVersions(left, right) {
@@ -27,7 +97,7 @@ export function compareStableVersions(left, right) {
   const rightParts = parseStableVersion(right);
   for (let index = 0; index < leftParts.length; index += 1) {
     if (leftParts[index] !== rightParts[index]) {
-      return leftParts[index] < rightParts[index] ? -1 : 1;
+      return BigInt(leftParts[index]) < BigInt(rightParts[index]) ? -1 : 1;
     }
   }
   return 0;
@@ -35,7 +105,7 @@ export function compareStableVersions(left, right) {
 
 export function nextPatchVersion(version) {
   const [major, minor, patch] = parseStableVersion(version);
-  return `${major}.${minor}.${patch + 1}`;
+  return `${major}.${minor}.${BigInt(patch) + 1n}`;
 }
 
 export async function readPackageVersion(stream = process.stdin) {
@@ -99,7 +169,11 @@ export async function inspectVersions(rootDir = process.cwd()) {
   };
 }
 
-export async function synchronizeVersion(version, rootDir = process.cwd()) {
+export async function synchronizeVersion(
+  version,
+  rootDir = process.cwd(),
+  fileOperations = defaultFileOperations,
+) {
   parseStableVersion(version);
   const state = await inspectVersions(rootDir);
   const spfxVersion = `${version}.0`;
@@ -113,11 +187,14 @@ export async function synchronizeVersion(version, rootDir = process.cwd()) {
   for (const feature of state.solutionConfig.solution.features ?? []) {
     feature.version = spfxVersion;
   }
-  await Promise.all([
-    writeJson(state.packageJsonPath, state.packageJson),
-    writeJson(state.packageLockPath, state.packageLock),
-    writeJson(state.solutionPath, state.solutionConfig),
-  ]);
+  await writeJsonTransaction(
+    [
+      [state.packageJsonPath, state.packageJson],
+      [state.packageLockPath, state.packageLock],
+      [state.solutionPath, state.solutionConfig],
+    ],
+    fileOperations,
+  );
   return inspectVersions(rootDir);
 }
 

@@ -9,8 +9,8 @@ permissions:
   contents: write
 
 concurrency:
-  group: version-main-${{ github.sha }}
-  cancel-in-progress: false
+  group: version-main
+  queue: max
 
 jobs:
   version:
@@ -32,7 +32,7 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      - name: Respect an intentional version change in the merged work
+      - name: Require version advancement at the main tip
         id: trigger-version
         shell: bash
         run: |
@@ -42,25 +42,43 @@ jobs:
               echo "Manual version recovery must be dispatched from main." >&2
               exit 1
             fi
-            if ! TRIGGER_BEFORE="$(git rev-parse "${TRIGGER_SHA}^" 2>/dev/null)"; then
-              echo "Cannot resolve the parent of main tip $TRIGGER_SHA." >&2
-              exit 1
-            fi
           fi
-          if [[ ! "$TRIGGER_BEFORE" =~ ^[0-9a-f]{40}$ ]] ||
-            ! git cat-file -e "${TRIGGER_BEFORE}:package.json" 2>/dev/null; then
-            echo "Cannot read package.json from the previous main tip $TRIGGER_BEFORE." >&2
-            echo "Refusing to guess whether this push already advanced the version." >&2
+          if ! trigger_parent="$(git rev-parse "${TRIGGER_SHA}^" 2>/dev/null)"; then
+            echo "Cannot resolve the first parent of main tip $TRIGGER_SHA." >&2
+            exit 1
+          fi
+          if ! git cat-file -e "${trigger_parent}:package.json" 2>/dev/null; then
+            echo "Cannot read package.json from the first parent $trigger_parent." >&2
+            echo "Refusing to guess whether the main tip advanced the version." >&2
             exit 1
           fi
           before_version="$(
-            git show "${TRIGGER_BEFORE}:package.json" |
+            git show "${trigger_parent}:package.json" |
               node scripts/sync-spfx-version.mjs --print-package-version
           )"
           trigger_version="$(
             git show "${TRIGGER_SHA}:package.json" |
               node scripts/sync-spfx-version.mjs --print-package-version
           )"
+
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            if [[ ! "$TRIGGER_BEFORE" =~ ^[0-9a-f]{40}$ ]] ||
+              ! git cat-file -e "${TRIGGER_BEFORE}:package.json" 2>/dev/null; then
+              echo "Cannot read package.json from the previous main tip $TRIGGER_BEFORE." >&2
+              echo "Refusing to guess whether this push preserved monotonic versioning." >&2
+              exit 1
+            fi
+            previous_main_version="$(
+              git show "${TRIGGER_BEFORE}:package.json" |
+                node scripts/sync-spfx-version.mjs --print-package-version
+            )"
+            if [[ "$trigger_version" != "$previous_main_version" ]]; then
+              git switch --detach "$TRIGGER_SHA"
+              node scripts/sync-spfx-version.mjs --check
+              node scripts/sync-spfx-version.mjs --assert-newer-than "$previous_main_version"
+            fi
+          fi
+
           {
             echo "before=$before_version"
             echo "after=$trigger_version"
