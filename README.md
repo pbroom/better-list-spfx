@@ -12,20 +12,25 @@ configured package under `sharepoint/solution/`.
 
 ## Releases
 
-Merge normal work to `main` with Conventional Commit titles; do not bump
-versions in feature pull requests. Release Please maintains a release pull
-request with the semantic version, changelog, npm lockfile, and synchronized
-four-part SPFx versions. Merging that release pull request creates the immutable
-`vX.Y.Z` tag and GitHub Release.
+Every merge leaves `main` at a new, releasable version. The **Version main**
+workflow patch-increments ordinary merges; a pull request may deliberately set a
+newer minor or major version instead. The npm and four-part SPFx versions are
+kept synchronized.
 
-The tag workflow rebuilds with the supported Node/npm toolchain and attaches:
+Run **Cut release candidate** from `main` at any time to pin that exact commit to
+`release/vX.Y.Z`, rerun the production release checks, and create a draft GitHub
+Release. The draft has generated notes and exactly two validated assets:
 
 - `better-list-spfx-standalone-X.Y.Z.zip` with a self-contained `.sppkg`
 - `better-list-spfx-cdn-kit-X.Y.Z.zip` with flat CDN assets, a non-deployable
   package template, and a script that binds the final HTTPS CDN URL
 
-See [docs/releases.md](docs/releases.md) for the commit rules, release
-operations, prerequisites, recovery procedure, and both installation paths.
+After reviewing the draft, run **Publish reviewed release** for its `vX.Y.Z`
+tag. That workflow rebuilds the snapshot, requires byte-for-byte asset matches,
+and only then publishes the draft and creates the tag.
+
+See [docs/releases.md](docs/releases.md) for commands, safeguards, repository
+prerequisites, recovery, and both installation paths.
 
 ## Debug On SharePoint
 

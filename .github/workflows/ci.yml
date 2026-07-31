@@ -39,6 +39,23 @@ jobs:
       - name: Verify synchronized release versions
         run: npm run version:check
 
+      - name: Reject version downgrades in pull requests
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          base_version="$(
+            git show "${BASE_SHA}:package.json" |
+              node scripts/sync-spfx-version.mjs --print-package-version
+          )"
+          current_version="$(node -p "require('./package.json').version")"
+          if [[ "$current_version" != "$base_version" ]]; then
+            node scripts/sync-spfx-version.mjs --assert-newer-than "$base_version"
+          fi
+
       - name: Test release artifact tooling
         run: npm run test:release
 

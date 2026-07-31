@@ -168,7 +168,6 @@ async function createFixture({
       lockfileVersion: 3,
       packages: { '': { name: 'better-list-spfx', version: VERSION } },
     }),
-    writeJson(path.join(rootDir, '.release-please-manifest.json'), { '.': VERSION }),
     writeJson(path.join(rootDir, 'config', 'package-solution.json'), {
       solution: {
         id: PRODUCT_ID,

@@ -20,7 +20,8 @@
     "start": "heft start --clean",
     "ship": "heft test --clean --production && node scripts/verify-monaco-css.mjs && node scripts/copy-eb-garamond-assets.mjs --app . && heft package-solution --production && node scripts/verify-eb-garamond-build.mjs --app .",
     "version:check": "node scripts/sync-spfx-version.mjs --check",
-    "version:sync": "node scripts/sync-spfx-version.mjs",
+    "version:bump": "node scripts/sync-spfx-version.mjs --bump-patch",
+    "version:set": "node scripts/sync-spfx-version.mjs --set",
     "eject-webpack": "heft eject-webpack"
   },
   "dependencies": {

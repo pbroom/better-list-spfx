@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -10,22 +11,125 @@ async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, 'utf8'));
 }
 
+const defaultFileOperations = { readFile, rename, rm, writeFile };
+
+function jsonText(value) {
+  return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+async function writeJson(filePath, value) {
+  await writeFile(filePath, jsonText(value));
+}
+
+function transactionPath(filePath, token, kind) {
+  return path.join(path.dirname(filePath), `.${path.basename(filePath)}.${token}.${kind}`);
+}
+
+async function removeIfPresent(filePath, fileOperations) {
+  try {
+    await fileOperations.rm(filePath, { force: true });
+  } catch {
+    // Cleanup is best-effort and must not hide the transaction result.
+  }
+}
+
+async function writeJsonTransaction(updates, fileOperations = defaultFileOperations) {
+  const token = `${process.pid}-${randomUUID()}`;
+  const entries = await Promise.all(
+    updates.map(async ([filePath, value]) => ({
+      filePath,
+      nextPath: transactionPath(filePath, token, 'next'),
+      nextText: jsonText(value),
+      originalPath: transactionPath(filePath, token, 'original'),
+      originalText: await fileOperations.readFile(filePath, 'utf8'),
+    })),
+  );
+  const temporaryPaths = entries.flatMap(({ nextPath, originalPath }) => [nextPath, originalPath]);
+
+  try {
+    for (const entry of entries) {
+      await fileOperations.writeFile(entry.nextPath, entry.nextText, { flag: 'wx' });
+      await fileOperations.writeFile(entry.originalPath, entry.originalText, { flag: 'wx' });
+    }
+  } catch (error) {
+    await Promise.all(temporaryPaths.map((filePath) => removeIfPresent(filePath, fileOperations)));
+    throw error;
+  }
+
+  const attempted = [];
+  try {
+    for (const entry of entries) {
+      attempted.push(entry);
+      await fileOperations.rename(entry.nextPath, entry.filePath);
+    }
+  } catch (error) {
+    const rollbackErrors = [];
+    for (const entry of attempted.reverse()) {
+      try {
+        await fileOperations.rename(entry.originalPath, entry.filePath);
+      } catch (rollbackError) {
+        rollbackErrors.push(`${entry.filePath}: ${rollbackError.message}`);
+      }
+    }
+    await Promise.all(temporaryPaths.map((filePath) => removeIfPresent(filePath, fileOperations)));
+    if (rollbackErrors.length > 0) {
+      throw new AggregateError(
+        [error, ...rollbackErrors.map((message) => new Error(message))],
+        `Version transaction failed and rollback was incomplete: ${rollbackErrors.join('; ')}`,
+      );
+    }
+    throw error;
+  }
+
+  await Promise.all(temporaryPaths.map((filePath) => removeIfPresent(filePath, fileOperations)));
+}
+
+export function parseStableVersion(value) {
+  const match = SEMVER_PATTERN.exec(value ?? '');
+  if (!match) {
+    throw new Error(`Version must be stable SemVer (x.y.z), received: ${value}`);
+  }
+  return match.slice(1);
+}
+
+export function compareStableVersions(left, right) {
+  const leftParts = parseStableVersion(left);
+  const rightParts = parseStableVersion(right);
+  for (let index = 0; index < leftParts.length; index += 1) {
+    if (leftParts[index] !== rightParts[index]) {
+      return BigInt(leftParts[index]) < BigInt(rightParts[index]) ? -1 : 1;
+    }
+  }
+  return 0;
+}
+
+export function nextPatchVersion(version) {
+  const [major, minor, patch] = parseStableVersion(version);
+  return `${major}.${minor}.${BigInt(patch) + 1n}`;
+}
+
+export async function readPackageVersion(stream = process.stdin) {
+  let text = '';
+  for await (const chunk of stream) {
+    text += chunk;
+  }
+  const version = JSON.parse(text).version;
+  parseStableVersion(version);
+  return version;
+}
+
 export async function inspectVersions(rootDir = process.cwd()) {
   const packageJsonPath = path.join(rootDir, 'package.json');
   const packageLockPath = path.join(rootDir, 'package-lock.json');
   const solutionPath = path.join(rootDir, 'config', 'package-solution.json');
-  const releaseManifestPath = path.join(rootDir, '.release-please-manifest.json');
-  const [packageJson, packageLock, solutionConfig, releaseManifest] = await Promise.all([
+  const [packageJson, packageLock, solutionConfig] = await Promise.all([
     readJson(packageJsonPath),
     readJson(packageLockPath),
     readJson(solutionPath),
-    readJson(releaseManifestPath),
   ]);
 
   const version = packageJson.version;
-  if (!SEMVER_PATTERN.test(version)) {
-    throw new Error(`package.json version must be stable SemVer (x.y.z), received: ${version}`);
-  }
+  parseStableVersion(version);
 
   const spfxVersion = `${version}.0`;
   const errors = [];
@@ -36,9 +140,6 @@ export async function inspectVersions(rootDir = process.cwd()) {
     errors.push(
       `package-lock.json root package version is ${packageLock.packages?.['']?.version}; expected ${version}`,
     );
-  }
-  if (releaseManifest['.'] !== version) {
-    errors.push(`.release-please-manifest.json version is ${releaseManifest['.']}; expected ${version}`);
   }
   if (solutionConfig.solution?.version !== spfxVersion) {
     errors.push(
@@ -58,13 +159,43 @@ export async function inspectVersions(rootDir = process.cwd()) {
   return {
     errors,
     packageJson,
+    packageJsonPath,
     packageLock,
-    releaseManifest,
+    packageLockPath,
     solutionConfig,
     solutionPath,
     spfxVersion,
     version,
   };
+}
+
+export async function synchronizeVersion(
+  version,
+  rootDir = process.cwd(),
+  fileOperations = defaultFileOperations,
+) {
+  parseStableVersion(version);
+  const state = await inspectVersions(rootDir);
+  const spfxVersion = `${version}.0`;
+  state.packageJson.version = version;
+  state.packageLock.version = version;
+  if (!state.packageLock.packages?.['']) {
+    throw new Error('package-lock.json is missing its root package entry');
+  }
+  state.packageLock.packages[''].version = version;
+  state.solutionConfig.solution.version = spfxVersion;
+  for (const feature of state.solutionConfig.solution.features ?? []) {
+    feature.version = spfxVersion;
+  }
+  await writeJsonTransaction(
+    [
+      [state.packageJsonPath, state.packageJson],
+      [state.packageLockPath, state.packageLock],
+      [state.solutionPath, state.solutionConfig],
+    ],
+    fileOperations,
+  );
+  return inspectVersions(rootDir);
 }
 
 export async function syncSpfxVersion(rootDir = process.cwd()) {
@@ -73,22 +204,60 @@ export async function syncSpfxVersion(rootDir = process.cwd()) {
     (error) => !error.startsWith('config/package-solution.json'),
   );
   if (nonSpfxErrors.length > 0) {
-    throw new Error(
-      `Release Please version files are inconsistent:\n- ${nonSpfxErrors.join('\n- ')}`,
-    );
+    throw new Error(`Canonical version files are inconsistent:\n- ${nonSpfxErrors.join('\n- ')}`);
   }
 
   state.solutionConfig.solution.version = state.spfxVersion;
   for (const feature of state.solutionConfig.solution.features ?? []) {
     feature.version = state.spfxVersion;
   }
-  await writeFile(state.solutionPath, `${JSON.stringify(state.solutionConfig, null, 2)}\n`);
+  await writeJson(state.solutionPath, state.solutionConfig);
   return inspectVersions(rootDir);
 }
 
+export async function setNewerVersion(version, rootDir = process.cwd()) {
+  const state = await inspectVersions(rootDir);
+  if (state.errors.length > 0) {
+    throw new Error(`Cannot set a version from inconsistent files:\n- ${state.errors.join('\n- ')}`);
+  }
+  if (compareStableVersions(version, state.version) <= 0) {
+    throw new Error(`${version} must be newer than ${state.version}`);
+  }
+  return synchronizeVersion(version, rootDir);
+}
+
+export async function bumpPatchVersion(rootDir = process.cwd()) {
+  const state = await inspectVersions(rootDir);
+  if (state.errors.length > 0) {
+    throw new Error(`Cannot bump inconsistent versions:\n- ${state.errors.join('\n- ')}`);
+  }
+  return synchronizeVersion(nextPatchVersion(state.version), rootDir);
+}
+
 async function main() {
-  const checkOnly = process.argv.includes('--check');
-  const state = checkOnly ? await inspectVersions() : await syncSpfxVersion();
+  const args = process.argv.slice(2);
+  if (args.length === 1 && args[0] === '--print-package-version') {
+    console.log(await readPackageVersion());
+    return;
+  }
+
+  let state;
+  if (args.length === 1 && args[0] === '--check') {
+    state = await inspectVersions();
+  } else if (args.length === 1 && args[0] === '--bump-patch') {
+    state = await bumpPatchVersion();
+  } else if (args.length === 2 && args[0] === '--set') {
+    state = await setNewerVersion(args[1]);
+  } else if (args.length === 2 && args[0] === '--assert-newer-than') {
+    state = await inspectVersions();
+    if (compareStableVersions(state.version, args[1]) <= 0) {
+      throw new Error(`${state.version} must be newer than ${args[1]}`);
+    }
+  } else {
+    throw new Error(
+      'Usage: sync-spfx-version.mjs --check | --bump-patch | --set X.Y.Z | --assert-newer-than X.Y.Z | --print-package-version',
+    );
+  }
   if (state.errors.length > 0) {
     throw new Error(`Release versions are not synchronized:\n- ${state.errors.join('\n- ')}`);
   }

@@ -1,0 +1,224 @@
+name: Cut release candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: Optional full main commit SHA (defaults to the dispatch main tip)
+        required: false
+        type: string
+      title:
+        description: Optional draft title (defaults to Better List vX.Y.Z)
+        required: false
+        type: string
+      replace_existing_draft:
+        description: Replace a conflicting draft and all of its assets
+        required: true
+        default: false
+        type: boolean
+
+permissions: {}
+
+concurrency:
+  group: release-mutation
+  queue: max
+
+jobs:
+  snapshot:
+    name: Pin the main snapshot
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      branch: ${{ steps.identity.outputs.branch }}
+      sha: ${{ steps.identity.outputs.sha }}
+      source_date_epoch: ${{ steps.identity.outputs.source_date_epoch }}
+      tag: ${{ steps.identity.outputs.tag }}
+      version: ${{ steps.identity.outputs.version }}
+    env:
+      GH_REPO: ${{ github.repository }}
+      EVENT_SHA: ${{ github.sha }}
+      REQUESTED_SHA: ${{ inputs.commit_sha }}
+    steps:
+      - name: Require the main workflow snapshot
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "Release candidates must be dispatched from the main workflow definition." >&2
+            exit 1
+          fi
+
+      - name: Check out main history
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up supported Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Validate the release identity
+        id: identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          requested_sha="${REQUESTED_SHA:-$EVENT_SHA}"
+          if [[ ! "$requested_sha" =~ ^[0-9a-f]{40}$ ]] ||
+            ! git cat-file -e "${requested_sha}^{commit}" 2>/dev/null; then
+            echo "commit_sha must name a full commit SHA present in main history." >&2
+            exit 1
+          fi
+          snapshot_sha="$(git rev-parse "${requested_sha}^{commit}")"
+          if ! git merge-base --is-ancestor "$snapshot_sha" origin/main; then
+            echo "$snapshot_sha is not reachable from origin/main." >&2
+            exit 1
+          fi
+
+          git switch --detach "$snapshot_sha"
+          npm run version:check
+          version="$(node -p "require('./package.json').version")"
+          parent_version="$(
+            git show "${snapshot_sha}^:package.json" |
+              node scripts/sync-spfx-version.mjs --print-package-version
+          )"
+          node scripts/sync-spfx-version.mjs --assert-newer-than "$parent_version"
+
+          {
+            echo "version=$version"
+            echo "tag=v$version"
+            echo "branch=release/v$version"
+            echo "sha=$snapshot_sha"
+            echo "source_date_epoch=$(git show -s --format=%ct "$snapshot_sha")"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create or confirm the snapshot branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SNAPSHOT_BRANCH: ${{ steps.identity.outputs.branch }}
+          SNAPSHOT_SHA: ${{ steps.identity.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh api "repos/$GH_REPO/git/ref/heads/$SNAPSHOT_BRANCH" \
+            >snapshot-branch.json 2>snapshot-branch-error.log; then
+            :
+          elif grep -Eq '\(HTTP 404\)$' snapshot-branch-error.log; then
+            gh api --method POST "repos/$GH_REPO/git/refs" \
+              -f ref="refs/heads/$SNAPSHOT_BRANCH" \
+              -f sha="$SNAPSHOT_SHA" >/dev/null
+          else
+            echo "Could not inspect $SNAPSHOT_BRANCH; refusing to create it." >&2
+            sed 's/^/  /' snapshot-branch-error.log >&2
+            exit 1
+          fi
+
+          branch_sha="$(
+            gh api "repos/$GH_REPO/git/ref/heads/$SNAPSHOT_BRANCH" --jq '.object.sha'
+          )"
+          if [[ "$branch_sha" != "$SNAPSHOT_SHA" ]]; then
+            echo "$SNAPSHOT_BRANCH points to $branch_sha, not $SNAPSHOT_SHA." >&2
+            exit 1
+          fi
+
+  build:
+    name: Build and verify the candidate
+    needs: snapshot
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the immutable snapshot
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.snapshot.outputs.sha }}
+          persist-credentials: false
+
+      - name: Set up supported Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies cleanly
+        run: npm ci
+
+      - name: Verify release versions
+        run: npm run version:check
+
+      - name: Run release tooling tests
+        run: npm run test:release
+
+      - name: Build self-contained package and CDN template
+        run: npm run release:build
+
+      - name: Construct and verify release assets
+        run: |
+          npm run release:prepare -- \
+            --tag "${{ needs.snapshot.outputs.tag }}" \
+            --commit "${{ needs.snapshot.outputs.sha }}" \
+            --source-date-epoch "${{ needs.snapshot.outputs.source_date_epoch }}" \
+            --output-dir release-output
+          npm run release:verify -- \
+            --tag "${{ needs.snapshot.outputs.tag }}" \
+            --commit "${{ needs.snapshot.outputs.sha }}" \
+            --output-dir release-output
+
+      - name: Preserve the validated candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: better-list-${{ needs.snapshot.outputs.tag }}
+          path: release-output/*.zip
+          if-no-files-found: error
+          retention-days: 30
+
+  draft:
+    name: Save the reviewable draft
+    needs: [snapshot, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ needs.snapshot.outputs.tag }}
+      REPLACE_EXISTING_DRAFT: ${{ inputs.replace_existing_draft }}
+      REQUESTED_TITLE: ${{ inputs.title }}
+      SNAPSHOT_SHA: ${{ needs.snapshot.outputs.sha }}
+      VERSION: ${{ needs.snapshot.outputs.version }}
+    steps:
+      - name: Check out the release orchestration
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up supported Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Download the validated candidate
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: better-list-${{ needs.snapshot.outputs.tag }}
+          path: release-output
+
+      - name: Create or safely converge the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_json="$(node scripts/release-lifecycle.mjs prepare)"
+          draft_url="$(jq -r '.url' <<<"$release_json")"
+          {
+            echo "### Draft release ready for review"
+            echo
+            echo "- Version: \`$VERSION\`"
+            echo "- Snapshot: \`$SNAPSHOT_SHA\`"
+            echo "- Branch: \`${{ needs.snapshot.outputs.branch }}\`"
+            echo "- Draft: $draft_url"
+          } >> "$GITHUB_STEP_SUMMARY"
