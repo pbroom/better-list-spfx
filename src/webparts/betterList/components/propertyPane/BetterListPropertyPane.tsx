@@ -341,7 +341,9 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
   }, [props.pickerDataSource, props.value.sourceListId, props.value.sourceListTitle, props.value.sourceWebUrl]);
 
   const patchValue = (patch: Partial<IBetterListAuthoringState>): void => {
-    props.onChange({ ...props.value, ...patch });
+    const nextValue = { ...latestValueRef.current, ...patch };
+    latestValueRef.current = nextValue;
+    onChangeRef.current(nextValue);
   };
 
   const activeTabId = props.value.tabs.some((tab) => tab.id === props.activeTabId)

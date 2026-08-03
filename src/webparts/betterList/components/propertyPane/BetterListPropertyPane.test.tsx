@@ -185,6 +185,57 @@ describe('BetterListPropertyPane', () => {
     ReactDom.unmountComponentAtNode(container);
   });
 
+  it('preserves an earlier authoring edit when a second control commits before the pane rerenders', async () => {
+    const container = document.createElement('div');
+    const onChange = jest.fn();
+    const value = createValue();
+
+    try {
+      await act(async () => {
+        ReactDom.render(
+          <BetterListPropertyPane
+            pickerDataSource={{
+              loadFields: async () => [],
+              loadLists: async () => [{ id: 'services', title: 'Services' }],
+              resolveListUrl: async () => ({ id: 'services', title: 'Services' })
+            }}
+            value={value}
+            onChange={onChange}
+          />,
+          container
+        );
+        await Promise.resolve();
+      });
+
+      const columns = container.querySelector<HTMLButtonElement>('button[aria-label="Columns"]');
+      const maxItems = container.querySelector<HTMLInputElement>('input[aria-label="Max items per page"]');
+      expect(columns).not.toBeNull();
+      expect(maxItems).not.toBeNull();
+
+      await act(async () => {
+        Simulate.click(columns as HTMLButtonElement);
+        await Promise.resolve();
+      });
+      const fourColumns = Array.from(document.body.querySelectorAll<HTMLElement>('[role="option"]')).find(
+        (candidate) => candidate.textContent?.trim() === '4'
+      );
+      expect(fourColumns).toBeDefined();
+      await act(async () => {
+        Simulate.click(fourColumns as HTMLElement);
+        (maxItems as HTMLInputElement).value = '6';
+        Simulate.change(maxItems as HTMLInputElement);
+      });
+
+      expect(onChange).toHaveBeenLastCalledWith({
+        ...value,
+        itemColumns: 4,
+        maxItemsPerPage: 6
+      });
+    } finally {
+      ReactDom.unmountComponentAtNode(container);
+    }
+  });
+
   it('authors the global item column count', async () => {
     const container = document.createElement('div');
     const onChange = jest.fn();
@@ -317,12 +368,22 @@ describe('BetterListPropertyPane', () => {
       Simulate.change(searchSwitch as HTMLInputElement);
     });
 
-    expect(onChange).toHaveBeenLastCalledWith({ ...value, showSearch: false });
+    const sortedValue = {
+      ...value,
+      defaultSort: 'recentlyUpdated' as const,
+      defaultSortColumn: '',
+      fieldMappings: { ...value.fieldMappings, metadata: [] }
+    };
+    expect(onChange).toHaveBeenLastCalledWith({ ...sortedValue, showSearch: false });
     await act(async () => {
       (sortingSwitch as HTMLInputElement).checked = true;
       Simulate.change(sortingSwitch as HTMLInputElement);
     });
-    expect(onChange).toHaveBeenLastCalledWith({ ...value, showSortingOptions: true });
+    expect(onChange).toHaveBeenLastCalledWith({
+      ...sortedValue,
+      showSearch: false,
+      showSortingOptions: true
+    });
     ReactDom.unmountComponentAtNode(container);
   });
 
