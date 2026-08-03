@@ -9,6 +9,12 @@ import {
 } from '../../../../vendor/source-editor/SourceEditorField';
 import { SourceWorkspaceField } from '../../../../vendor/source-editor/SourceWorkspaceField';
 import { SourceEditorDiagnostic } from '../../../../vendor/source-editor/sourceEditorCore';
+import {
+  betterListTemplateMaxBytes,
+  defaultBetterListHtmlTemplate,
+  parseBetterListTemplate,
+  validateBetterListTemplateStructure
+} from '../../../../shared';
 import { installTestResizeObserver } from '../../../../test/installTestResizeObserver';
 
 describe('SourceEditorField', () => {
@@ -203,6 +209,161 @@ describe('SourceEditorField', () => {
       await settleEditorFallback();
     });
     expect(getTextareas(container)[0].value).toBe('<script>draft</script>');
+  });
+
+  it('preserves page, state, and template integrity through the combined editor lifecycle', async () => {
+    const hostSentinel = document.createElement('div');
+    hostSentinel.textContent = 'SharePoint host content';
+    const hostStyle = document.createElement('style');
+    hostStyle.id = 'fui-FluentProvider1';
+    hostStyle.textContent = '.sharepoint-host { color: rgb(1, 2, 3); }';
+    document.body.appendChild(hostSentinel);
+    document.head.appendChild(hostStyle);
+
+    const RegressionHarness: React.FunctionComponent = () => {
+      const [customCss, setCustomCss] = React.useState('.initial {}');
+      const [htmlTemplate, setHtmlTemplate] = React.useState(defaultBetterListHtmlTemplate);
+      const parsedTemplate = parseBetterListTemplate(htmlTemplate);
+      const shellClass = parsedTemplate.template?.fragments.shell.attributes.class || '';
+
+      return (
+        <>
+          <div
+            data-committed-css={customCss}
+            data-committed-template={htmlTemplate}
+            data-shell-class={shellClass}
+            data-template-valid={String(Boolean(parsedTemplate.template))}
+          />
+          <SourceWorkspaceField
+            label="Styles & template"
+            documents={[
+              {
+                config: { monacoAdapter: unavailableMonaco },
+                id: 'scss',
+                label: 'CSS/SCSS',
+                language: 'scss',
+                value: customCss,
+                onChange: setCustomCss
+              },
+              {
+                commitMode: 'valid',
+                config: { monacoAdapter: unavailableMonaco },
+                id: 'html',
+                label: 'HTML template',
+                language: 'html',
+                maxBytes: betterListTemplateMaxBytes,
+                validate: validateBetterListTemplateStructure,
+                value: htmlTemplate,
+                onChange: setHtmlTemplate
+              }
+            ]}
+          />
+        </>
+      );
+    };
+
+    const firstValidTemplate = defaultBetterListHtmlTemplate.replace(
+      '<section>',
+      '<section class="diagnostic-shell">'
+    );
+    const repairedTemplate = defaultBetterListHtmlTemplate.replace(
+      '<section>',
+      '<section class="repaired-shell">'
+    );
+
+    try {
+      await act(async () => {
+        ReactDom.render(<RegressionHarness />, container);
+        await settleEditorFallback();
+      });
+
+      changeTextarea(
+        container.querySelector<HTMLTextAreaElement>('textarea[aria-label="CSS/SCSS"]') as HTMLTextAreaElement,
+        '.first-edit {}'
+      );
+      const inlineHtmlTab = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find(
+        (tab) => tab.textContent?.includes('HTML template')
+      );
+      act(() => Simulate.click(inlineHtmlTab as HTMLButtonElement));
+      changeTextarea(
+        container.querySelector<HTMLTextAreaElement>('textarea[aria-label="HTML template"]') as HTMLTextAreaElement,
+        firstValidTemplate
+      );
+
+      const committedState = container.querySelector<HTMLElement>('[data-template-valid]');
+      expect(committedState?.dataset.committedCss).toBe('.first-edit {}');
+      expect(committedState?.dataset.templateValid).toBe('true');
+      expect(committedState?.dataset.shellClass).toBe('diagnostic-shell');
+
+      const popOut = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+        (button) => button.textContent === 'Pop out'
+      );
+      await act(async () => {
+        Simulate.click(popOut as HTMLButtonElement);
+        await settleEditorFallback();
+      });
+      const dialog = document.body.querySelector<HTMLElement>(
+        '[role="dialog"][aria-label="Styles & template source workspace"]'
+      );
+      expect(dialog).not.toBeNull();
+
+      changeTextarea(
+        dialog?.querySelector<HTMLTextAreaElement>('textarea[aria-label="HTML template"]') as HTMLTextAreaElement,
+        '<script>invalid draft</script>'
+      );
+      expect(container.querySelector<HTMLElement>('[data-template-valid]')?.dataset.shellClass).toBe('diagnostic-shell');
+
+      act(() =>
+        Simulate.click(
+          dialog?.querySelector<HTMLButtonElement>('[aria-label="Close source workspace"]') as HTMLButtonElement
+        )
+      );
+      expect(document.body.querySelector('[role="dialog"][aria-label="Styles & template source workspace"]')).toBeNull();
+
+      await act(async () => {
+        Simulate.click(popOut as HTMLButtonElement);
+        await settleEditorFallback();
+      });
+      const reopenedDialog = document.body.querySelector<HTMLElement>(
+        '[role="dialog"][aria-label="Styles & template source workspace"]'
+      );
+      expect(reopenedDialog?.querySelector<HTMLTextAreaElement>('textarea[aria-label="HTML template"]')?.value).toBe(
+        '<script>invalid draft</script>'
+      );
+
+      const splitTab = reopenedDialog?.querySelector<HTMLButtonElement>('[role="tab"][aria-label="Split"]');
+      act(() => Simulate.click(splitTab as HTMLButtonElement));
+      changeTextarea(
+        reopenedDialog?.querySelector<HTMLTextAreaElement>('textarea[aria-label="CSS/SCSS"]') as HTMLTextAreaElement,
+        '.second-edit {}'
+      );
+      changeTextarea(
+        reopenedDialog?.querySelector<HTMLTextAreaElement>('textarea[aria-label="HTML template"]') as HTMLTextAreaElement,
+        repairedTemplate
+      );
+
+      const repairedState = container.querySelector<HTMLElement>('[data-template-valid]');
+      expect(repairedState?.dataset.committedCss).toBe('.second-edit {}');
+      expect(repairedState?.dataset.shellClass).toBe('repaired-shell');
+      expect(hostSentinel.isConnected).toBe(true);
+      expect(hostSentinel.textContent).toBe('SharePoint host content');
+      expect(document.getElementById('fui-FluentProvider1')).toBe(hostStyle);
+      expect(hostStyle.sheet?.cssRules).toHaveLength(1);
+
+      act(() => {
+        ReactDom.unmountComponentAtNode(container);
+      });
+      expect(document.body.querySelector('[role="dialog"][aria-label="Styles & template source workspace"]')).toBeNull();
+      expect(document.body.querySelector('.bt-source-workspace--floating')).toBeNull();
+      expect(hostSentinel.isConnected).toBe(true);
+      expect(document.getElementById('fui-FluentProvider1')).toBe(hostStyle);
+    } finally {
+      act(() => {
+        ReactDom.unmountComponentAtNode(container);
+      });
+      hostSentinel.remove();
+      hostStyle.remove();
+    }
   });
 
   it('lets Escape cancel a target rename without closing the floating workspace', async () => {
