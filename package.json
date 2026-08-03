@@ -8,7 +8,7 @@
   },
   "main": "lib/index.js",
   "scripts": {
-    "build": "heft test --clean --production && node scripts/verify-monaco-css.mjs && heft package-solution --production",
+    "build": "node scripts/verify-shared-foundation-monaco-contract.mjs && heft test --clean --production && node scripts/verify-monaco-css.mjs && heft package-solution --production",
     "clean": "heft clean",
     "generate:group-icons": "node scripts/generate-group-icon-catalogs.mjs",
     "release:build": "node scripts/build-release-variants.mjs",
@@ -18,10 +18,11 @@
     "test:release": "node --test scripts/*.test.mjs",
     "serve": "heft start --clean",
     "start": "heft start --clean",
-    "ship": "heft test --clean --production && node scripts/verify-monaco-css.mjs && node scripts/copy-eb-garamond-assets.mjs --app . && heft package-solution --production && node scripts/verify-eb-garamond-build.mjs --app .",
+    "ship": "node scripts/verify-shared-foundation-monaco-contract.mjs && heft test --clean --production && node scripts/verify-monaco-css.mjs && node scripts/copy-eb-garamond-assets.mjs --app . && heft package-solution --production && node scripts/verify-eb-garamond-build.mjs --app .",
     "version:check": "node scripts/sync-spfx-version.mjs --check",
     "version:bump": "node scripts/sync-spfx-version.mjs --bump-patch",
     "version:set": "node scripts/sync-spfx-version.mjs --set",
+    "verify:monaco-contract": "node scripts/verify-shared-foundation-monaco-contract.mjs",
     "eject-webpack": "heft eject-webpack"
   },
   "dependencies": {

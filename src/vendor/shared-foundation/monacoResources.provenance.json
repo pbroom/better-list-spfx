@@ -1,0 +1,9 @@
+{
+  "upstreamRepository": "pbroom/spfx-shared-foundation",
+  "upstreamCommit": "ae736c6004b3fb3f12d87c73ea04cae16e2652e6",
+  "upstreamPackage": "@spfx-shared-foundation/monaco-resources",
+  "upstreamPackageVersion": "0.1.0",
+  "upstreamSourcePath": "packages/monaco-resources/src/index.ts",
+  "upstreamSourceSha256": "6175a2d4a862db6226d2d91cf64ec58af7ddc8a5aa8b0c8613fc76390996d5ee",
+  "monacoVersion": "0.55.1"
+}

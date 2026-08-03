@@ -51,7 +51,10 @@ import {
   resolveBetterListTabConfigurations,
   validateBetterListTemplateStructure
 } from '../../../../shared';
-import { ISourceEditorTarget } from '../../../../vendor/source-editor/SourceEditorField';
+import {
+  ISourceEditorTarget,
+  SourceEditorMonacoAdapter
+} from '../../../../vendor/source-editor/SourceEditorField';
 import { SourceWorkspaceField } from '../../../../vendor/source-editor/SourceWorkspaceField';
 import { GroupIconColorField } from '../GroupIconColorField';
 import { DefaultSortingMenu } from './DefaultSortingMenu';
@@ -71,6 +74,10 @@ import {
   TabBuilder
 } from './TabBuilder';
 import type { ISharePointImageAssetProvider } from '../../services';
+import {
+  createBetterListMonacoResourceAdapter,
+  BetterListMonacoResourceConfiguration
+} from '../../services/BetterListMonacoResources';
 
 const titleCommitDelayMs = 500;
 
@@ -122,6 +129,8 @@ export interface IBetterListPropertyPaneProps {
   value: IBetterListAuthoringState;
   pickerDataSource: IBetterListPickerDataSource;
   imageAssetProvider?: ISharePointImageAssetProvider;
+  /** Optional validated Shared Foundation configuration. Omission keeps the bundled Monaco runtime. */
+  monacoResource?: BetterListMonacoResourceConfiguration;
   themeColors?: readonly IBetterListThemeColor[];
   loadGroupOptions?: (
     tabId: string,
@@ -190,6 +199,10 @@ const cssTargets: readonly ISourceEditorTarget[] = [
 ];
 
 export const BetterListPropertyPane: React.FunctionComponent<IBetterListPropertyPaneProps> = (props) => {
+  const monacoAdapter = React.useMemo<SourceEditorMonacoAdapter | undefined>(
+    () => props.monacoResource ? createBetterListMonacoResourceAdapter(props.monacoResource) : undefined,
+    [props.monacoResource]
+  );
   const [lists, setLists] = React.useState<readonly ISharePointListOption[]>([]);
   const [fields, setFields] = React.useState<readonly ISharePointFieldOption[]>([]);
   const [loadingLists, setLoadingLists] = React.useState(false);
@@ -1045,6 +1058,7 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
             label="Styles & template"
             documents={[
               {
+                config: monacoAdapter ? { monacoAdapter } : undefined,
                 id: 'scss',
                 label: 'CSS/SCSS',
                 language: 'scss',
@@ -1054,6 +1068,7 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
               },
               {
                 commitMode: 'valid',
+                config: monacoAdapter ? { monacoAdapter } : undefined,
                 height: 360,
                 id: 'html',
                 label: 'HTML template',

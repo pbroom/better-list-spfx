@@ -220,7 +220,23 @@ missing or inconsistent. It never overwrites an existing package or checksum.
 Monaco is bundled into the SPFx production output and its companion root-level
 assets are included in the CDN kit. It does not load
 `monaco-editor/min/vs` from a separate public CDN. The production ship check
-requires the Monaco chunk before artifacts are packaged.
+requires the Monaco chunk before artifacts are packaged. This bundled Monaco
+0.55.1 path remains Better List's production default and fallback.
+
+Better List also carries a hash-pinned snapshot of the private Shared
+Foundation Monaco resource contract. That contract is an inactive, opt-in
+integration seam: it validates an authenticated production manifest, resolves
+only the exact immutable release URL, and preserves the current editor's SCSS
+and HTML load order. Shared Foundation's committed fixture is explicitly
+non-production and cannot be selected as a runtime.
+
+Do not activate the external seam until an approved Better List production
+build and browser-network capture define the complete runtime closure,
+including modules, global CSS, workers, supporting assets, checksums,
+authentication, CORS, and CSP behavior. This repository does not publish or
+deploy that external closure. If an opted-in external load fails after it has
+started, the editor retains its existing editable textarea fallback instead of
+mixing partial external modules with bundled Monaco state.
 
 ## Recovery and invariants
 
