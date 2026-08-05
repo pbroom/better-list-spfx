@@ -94,3 +94,9 @@ Only structural HTML is accepted. Scripts, styles, forms, interactive or media
 elements, SVG/MathML, inline styles, event handlers, IDs, URL attributes,
 `tabindex`, and runtime-reserved attributes are rejected. Invalid drafts are
 not saved, and invalid persisted values fall back to the built-in template.
+
+The SCSS and HTML source workspace continues to use the bundled Monaco 0.55.1
+runtime in production. A hash-pinned Shared Foundation resource contract is
+available only as an opt-in adapter seam; no external runtime is configured or
+required. See [docs/releases.md](docs/releases.md#monaco-editor-runtime) for the
+external-runtime evidence and approval gate.

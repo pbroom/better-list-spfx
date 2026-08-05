@@ -51,7 +51,10 @@ import {
   resolveBetterListTabConfigurations,
   validateBetterListTemplateStructure
 } from '../../../../shared';
-import { ISourceEditorTarget } from '../../../../vendor/source-editor/SourceEditorField';
+import {
+  ISourceEditorTarget
+} from '../../../../vendor/source-editor/SourceEditorField';
+import type { SourceEditorMonacoAdapter } from '../../../../vendor/source-editor/SourceEditorField';
 import { SourceWorkspaceField } from '../../../../vendor/source-editor/SourceWorkspaceField';
 import { GroupIconColorField } from '../GroupIconColorField';
 import { DefaultSortingMenu } from './DefaultSortingMenu';
@@ -122,6 +125,12 @@ export interface IBetterListPropertyPaneProps {
   value: IBetterListAuthoringState;
   pickerDataSource: IBetterListPickerDataSource;
   imageAssetProvider?: ISharePointImageAssetProvider;
+  /**
+   * Optional, already-created external Monaco adapter. Its owner must pass the
+   * production build and browser-network evidence gate before constructing it.
+   * Omission keeps the bundled Monaco runtime.
+   */
+  monacoAdapter?: SourceEditorMonacoAdapter;
   themeColors?: readonly IBetterListThemeColor[];
   loadGroupOptions?: (
     tabId: string,
@@ -190,6 +199,7 @@ const cssTargets: readonly ISourceEditorTarget[] = [
 ];
 
 export const BetterListPropertyPane: React.FunctionComponent<IBetterListPropertyPaneProps> = (props) => {
+  const monacoAdapter = props.monacoAdapter;
   const [lists, setLists] = React.useState<readonly ISharePointListOption[]>([]);
   const [fields, setFields] = React.useState<readonly ISharePointFieldOption[]>([]);
   const [loadingLists, setLoadingLists] = React.useState(false);
@@ -1045,6 +1055,7 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
             label="Styles & template"
             documents={[
               {
+                config: monacoAdapter ? { monacoAdapter } : undefined,
                 id: 'scss',
                 label: 'CSS/SCSS',
                 language: 'scss',
@@ -1054,6 +1065,7 @@ export const BetterListPropertyPane: React.FunctionComponent<IBetterListProperty
               },
               {
                 commitMode: 'valid',
+                config: monacoAdapter ? { monacoAdapter } : undefined,
                 height: 360,
                 id: 'html',
                 label: 'HTML template',

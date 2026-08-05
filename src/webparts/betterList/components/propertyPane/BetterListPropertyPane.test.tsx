@@ -9,6 +9,7 @@ import {
   parseBetterListGroupIconsConfiguration
 } from '../../../../shared';
 import { installTestResizeObserver } from '../../../../test/installTestResizeObserver';
+import type { SourceEditorMonacoAdapter } from '../../../../vendor/source-editor/SourceEditorField';
 import {
   BetterListPropertyPane,
   IBetterListAuthoringState,
@@ -108,6 +109,41 @@ describe('BetterListPropertyPane', () => {
     expect(html).toContain('>HTML template</span>');
     expect(html).not.toContain('aria-label="Split"');
   });
+
+  /* eslint-disable @rushstack/pair-react-dom-render-unmount -- The mounted pane is cleaned up at the end of this focused integration test. */
+  it('forwards one already-created opt-in Monaco adapter to both existing source documents', async () => {
+    const container = document.createElement('div');
+    const load = jest.fn(async (_language: 'scss' | 'html') => {
+      throw new Error('Stop before creating a test editor');
+    });
+    const monacoAdapter: SourceEditorMonacoAdapter = { load };
+
+    try {
+      await act(async () => {
+        ReactDom.render(
+          <BetterListPropertyPane
+            monacoAdapter={monacoAdapter}
+            pickerDataSource={{
+              loadFields: async () => [],
+              loadLists: async () => [{ id: 'services', title: 'Services' }],
+              resolveListUrl: async () => ({ id: 'services', title: 'Services' })
+            }}
+            value={createValue()}
+            onChange={() => undefined}
+          />,
+          container
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(load.mock.calls.map(([language]) => language).sort()).toEqual(['html', 'scss']);
+      expect(container.textContent).toContain('Monaco failed to load: Stop before creating a test editor');
+    } finally {
+      ReactDom.unmountComponentAtNode(container);
+    }
+  });
+  /* eslint-enable @rushstack/pair-react-dom-render-unmount */
 
   it('authors an optional title without changing the source-list selection', async () => {
     const container = document.createElement('div');
