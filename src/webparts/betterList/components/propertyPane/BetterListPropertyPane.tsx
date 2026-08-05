@@ -52,9 +52,9 @@ import {
   validateBetterListTemplateStructure
 } from '../../../../shared';
 import {
-  ISourceEditorTarget,
-  SourceEditorMonacoAdapter
+  ISourceEditorTarget
 } from '../../../../vendor/source-editor/SourceEditorField';
+import type { SourceEditorMonacoAdapter } from '../../../../vendor/source-editor/SourceEditorField';
 import { SourceWorkspaceField } from '../../../../vendor/source-editor/SourceWorkspaceField';
 import { GroupIconColorField } from '../GroupIconColorField';
 import { DefaultSortingMenu } from './DefaultSortingMenu';
@@ -74,10 +74,6 @@ import {
   TabBuilder
 } from './TabBuilder';
 import type { ISharePointImageAssetProvider } from '../../services';
-import {
-  createBetterListMonacoResourceAdapter,
-  BetterListMonacoResourceConfiguration
-} from '../../services/BetterListMonacoResources';
 
 const titleCommitDelayMs = 500;
 
@@ -129,8 +125,12 @@ export interface IBetterListPropertyPaneProps {
   value: IBetterListAuthoringState;
   pickerDataSource: IBetterListPickerDataSource;
   imageAssetProvider?: ISharePointImageAssetProvider;
-  /** Optional validated Shared Foundation configuration. Omission keeps the bundled Monaco runtime. */
-  monacoResource?: BetterListMonacoResourceConfiguration;
+  /**
+   * Optional, already-created external Monaco adapter. Its owner must pass the
+   * production build and browser-network evidence gate before constructing it.
+   * Omission keeps the bundled Monaco runtime.
+   */
+  monacoAdapter?: SourceEditorMonacoAdapter;
   themeColors?: readonly IBetterListThemeColor[];
   loadGroupOptions?: (
     tabId: string,
@@ -199,10 +199,7 @@ const cssTargets: readonly ISourceEditorTarget[] = [
 ];
 
 export const BetterListPropertyPane: React.FunctionComponent<IBetterListPropertyPaneProps> = (props) => {
-  const monacoAdapter = React.useMemo<SourceEditorMonacoAdapter | undefined>(
-    () => props.monacoResource ? createBetterListMonacoResourceAdapter(props.monacoResource) : undefined,
-    [props.monacoResource]
-  );
+  const monacoAdapter = props.monacoAdapter;
   const [lists, setLists] = React.useState<readonly ISharePointListOption[]>([]);
   const [fields, setFields] = React.useState<readonly ISharePointFieldOption[]>([]);
   const [loadingLists, setLoadingLists] = React.useState(false);

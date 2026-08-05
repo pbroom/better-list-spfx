@@ -9,8 +9,7 @@ import {
   parseBetterListGroupIconsConfiguration
 } from '../../../../shared';
 import { installTestResizeObserver } from '../../../../test/installTestResizeObserver';
-import * as BetterListMonacoResources from '../../services/BetterListMonacoResources';
-import type { BetterListMonacoResourceConfiguration } from '../../services/BetterListMonacoResources';
+import type { SourceEditorMonacoAdapter } from '../../../../vendor/source-editor/SourceEditorField';
 import {
   BetterListPropertyPane,
   IBetterListAuthoringState,
@@ -112,21 +111,18 @@ describe('BetterListPropertyPane', () => {
   });
 
   /* eslint-disable @rushstack/pair-react-dom-render-unmount -- The mounted pane is cleaned up at the end of this focused integration test. */
-  it('forwards one opt-in Monaco adapter to both existing source documents', async () => {
+  it('forwards one already-created opt-in Monaco adapter to both existing source documents', async () => {
     const container = document.createElement('div');
     const load = jest.fn(async (_language: 'scss' | 'html') => {
       throw new Error('Stop before creating a test editor');
     });
-    const createAdapter = jest
-      .spyOn(BetterListMonacoResources, 'createBetterListMonacoResourceAdapter')
-      .mockReturnValue({ load });
-    const monacoResource = {} as BetterListMonacoResourceConfiguration;
+    const monacoAdapter: SourceEditorMonacoAdapter = { load };
 
     try {
       await act(async () => {
         ReactDom.render(
           <BetterListPropertyPane
-            monacoResource={monacoResource}
+            monacoAdapter={monacoAdapter}
             pickerDataSource={{
               loadFields: async () => [],
               loadLists: async () => [{ id: 'services', title: 'Services' }],
@@ -141,13 +137,10 @@ describe('BetterListPropertyPane', () => {
         await Promise.resolve();
       });
 
-      expect(createAdapter).toHaveBeenCalledTimes(1);
-      expect(createAdapter).toHaveBeenCalledWith(monacoResource);
       expect(load.mock.calls.map(([language]) => language).sort()).toEqual(['html', 'scss']);
       expect(container.textContent).toContain('Monaco failed to load: Stop before creating a test editor');
     } finally {
       ReactDom.unmountComponentAtNode(container);
-      createAdapter.mockRestore();
     }
   });
   /* eslint-enable @rushstack/pair-react-dom-render-unmount */

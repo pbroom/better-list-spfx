@@ -1,14 +1,6 @@
 import type * as Monaco from 'monaco-editor/esm/vs/editor/editor.api';
 
-import {
-  createBetterListMonacoLoader,
-  parseMonacoResourceManifest,
-  resolveMonacoResource
-} from '../../../vendor/shared-foundation/monacoResources';
-import type {
-  BetterListMonacoRuntimeAdapter,
-  MonacoResourceManifestV1
-} from '../../../vendor/shared-foundation/monacoResources';
+import type { BetterListMonacoRuntimeAdapter } from '../../../vendor/shared-foundation/monacoResources';
 import type { SourceEditorMonacoAdapter } from '../../../vendor/source-editor/SourceEditorField';
 
 export interface BetterListMonacoResourceConfiguration {
@@ -23,37 +15,20 @@ export interface BetterListMonacoResourceConfiguration {
 }
 
 /**
- * Creates the optional Shared Foundation adapter used by Better List's existing
- * source workspace. The bundled Monaco adapter remains the default whenever no
- * adapter is supplied to the property pane.
+ * Dynamically creates the optional Shared Foundation adapter after an approved
+ * external-runtime owner has passed its production-build and browser-network
+ * evidence gate. The bundled Monaco adapter remains the default.
  *
- * Validation happens before any external runtime code executes. Once a valid
- * external adapter starts loading, failures are allowed to reach the editor's
- * existing textarea fallback instead of mixing partial external state with the
- * bundled Monaco runtime.
+ * Keep this function out of the normal property-pane path. Dynamic loading
+ * avoids carrying inactive external runtime bridge code in the standard Better
+ * List bundle.
  */
-export function createBetterListMonacoResourceAdapter(
+export async function loadBetterListMonacoResourceAdapter(
   configuration: BetterListMonacoResourceConfiguration
-): SourceEditorMonacoAdapter {
-  const manifest = parseMonacoResourceManifest(configuration.manifest);
-  assertConfiguredManifestUrl(configuration.cdnBaseUrl, configuration.manifestUrl, manifest);
-  const loader = createBetterListMonacoLoader(
-    configuration.cdnBaseUrl,
-    manifest,
-    configuration.runtimeAdapter
+): Promise<SourceEditorMonacoAdapter> {
+  const { createBetterListMonacoResourceAdapter } = await import(
+    /* webpackChunkName: 'better-list-shared-foundation-monaco' */
+    './BetterListMonacoResourceAdapterFactory'
   );
-  return Object.freeze({
-    load: (language: 'scss' | 'html') => loader.load(language)
-  });
-}
-
-function assertConfiguredManifestUrl(
-  cdnBaseUrl: string,
-  configuredManifestUrl: string,
-  manifest: MonacoResourceManifestV1
-): void {
-  const resource = resolveMonacoResource(cdnBaseUrl, manifest);
-  if (resource.manifestUrl !== configuredManifestUrl) {
-    throw new Error('Configured Monaco manifest URL does not match the immutable Shared Foundation release.');
-  }
+  return createBetterListMonacoResourceAdapter(configuration);
 }
